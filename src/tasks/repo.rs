@@ -190,15 +190,28 @@ struct EventRow {
     at: NaiveDateTime,
     actor_kind: String,
     actor_id: Option<String>,
+    /// Absent when the actor is a person, or a session nobody has named.
+    actor_name: Option<String>,
     kind: String,
     detail: Option<String>,
 }
 
 /// What has happened to a task, oldest first.
+///
+/// ⚠ **The actor is resolved at READ time and the detail was rendered at WRITE
+/// time**, so a session that has since renamed itself reads as its current name
+/// in the `actor` column and as its old one inside `nobody → memview`. That is
+/// deliberate and it is not a contradiction: the actor answers *who did this*,
+/// which is a live conversation you may want to hand the next thing to, and the
+/// detail answers *what the line said then*, which must not be rewritten by a
+/// later rename. Resolving the actor at write time instead would print a
+/// 36-character id in every line for a session that had not yet named itself —
+/// the shape this replaced, and unreadable on a phone.
 pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
     let rows: Vec<EventRow> = sqlx::query_as(
-        "SELECT at, actor_kind, actor_id, kind, detail FROM task_events \
-         WHERE task_id = ? ORDER BY at, id",
+        "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, e.kind, e.detail \
+         FROM task_events e LEFT JOIN sessions s ON s.id = e.actor_id \
+         WHERE e.task_id = ? ORDER BY e.at, e.id",
     )
     .bind(id)
     .fetch_all(pool)
@@ -210,7 +223,14 @@ pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
             at: utc(row.at),
             kind: row.kind,
             detail: row.detail,
-            actor: row.actor_id.unwrap_or_else(|| row.actor_kind.clone()),
+            // Name, then id, then the bare kind. Each fallback is a real state:
+            // a session that never named itself, and — for a person — no
+            // `sessions` row to join to at all.
+            actor: row
+                .actor_name
+                .filter(|name| !name.is_empty())
+                .or(row.actor_id)
+                .unwrap_or(row.actor_kind),
         })
         .collect())
 }

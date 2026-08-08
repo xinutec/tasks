@@ -145,14 +145,53 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         .filter_map(|e| e.detail.as_deref())
         .collect();
     assert_eq!(moves, vec!["nobody → memview", "memview → pippijn"]);
-    // Who did it comes from the credential, so the two moves have two actors.
+    // Who did it comes from the credential, so the two moves have two actors —
+    // and the session is named, not printed as its id.
     let actors: Vec<&str> = detail
         .events
         .iter()
         .filter(|e| e.kind == "assigned")
         .map(|e| e.actor.as_str())
         .collect();
-    assert_eq!(actors, vec!["pippijn", "sess-1"]);
+    assert_eq!(actors, vec!["pippijn", "memview"]);
+}
+
+#[tokio::test]
+async fn history_names_the_session_that_acted_rather_than_its_id() {
+    // The same session read as `memview` in one column and as a 36-character id
+    // in the next, on the same line, until the actor was resolved too.
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", Some("memview"))
+        .await
+        .expect("recording");
+    let task = repo::create(
+        &pool,
+        filed("memview", "Acted on"),
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("filing");
+
+    let detail = repo::get(&pool, task.id)
+        .await
+        .expect("reading")
+        .expect("a task");
+    assert_eq!(detail.events[0].actor, "memview");
+
+    // A session nobody has named still says something, and the something is its
+    // id rather than a blank.
+    let anon = repo::create(
+        &pool,
+        filed("memview", "By a stranger"),
+        &Actor::Session("sess-9".into()),
+    )
+    .await
+    .expect("filing");
+    let detail = repo::get(&pool, anon.id)
+        .await
+        .expect("reading")
+        .expect("a task");
+    assert_eq!(detail.events[0].actor, "sess-9");
 }
 
 #[tokio::test]
