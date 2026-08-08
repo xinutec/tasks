@@ -6,7 +6,7 @@ pub mod telemetry;
 
 use axum::Router;
 use axum::routing::{get, patch, post};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
@@ -35,8 +35,24 @@ pub fn router(state: AppState) -> Router {
     // Serve the built Angular bundle (single origin), SPA-fallback to
     // index.html so deep links load the shell. API-only when STATIC_DIR is
     // unset (dev: `ng serve` proxies).
+    //
+    // ⚠ **A missing FILE must 404, not fall back to the page.** The obvious
+    // wiring — `ServeDir::fallback(ServeFile::new(index))` — answers a missing
+    // script or font with `200 text/html`, and a browser handed HTML where it
+    // asked for a woff2 renders broken icons and reports nothing at all. Both
+    // memview's console and this app shipped it; measured here against the live
+    // deployment, `/media/nope.woff2` came back `200 text/html`.
+    //
+    // The test is a dot in the last path segment: `/t/1` is a route and
+    // `/main-ABC123.js` is a file. It is a heuristic, and the alternative —
+    // enumerating the bundle's own asset names — would have to be rebuilt
+    // whenever `ng build` changes a hash.
     let app = if let Some(dir) = state.cfg.static_dir.clone() {
-        let serve = ServeDir::new(&dir).fallback(ServeFile::new(format!("{dir}/index.html")));
+        let index = format!("{dir}/index.html");
+        let serve = ServeDir::new(&dir).fallback(get(move |uri: axum::http::Uri| {
+            let index = index.clone();
+            async move { spa(&index, uri.path()) }
+        }));
         app.fallback_service(serve)
     } else {
         app
@@ -57,4 +73,31 @@ pub fn router(state: AppState) -> Router {
     app.layer(trace)
         .route("/healthz", get(|| async { "ok" }))
         .with_state(state)
+}
+
+/// The SPA shell, or a 404 for something that was meant to be a file.
+///
+/// Public so `tests/serving.rs` can exercise the rule directly: it is the one
+/// piece of routing whose mistake is invisible — the wrong answer is a 200, and
+/// the symptom appears in a browser as missing icons rather than as an error
+/// anywhere.
+pub fn spa(index: &str, path: &str) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+
+    if path
+        .rsplit('/')
+        .next()
+        .is_some_and(|last| last.contains('.'))
+    {
+        return (axum::http::StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    match std::fs::read_to_string(index) {
+        Ok(page) => axum::response::Html(page).into_response(),
+        Err(error) => {
+            // A deployment with STATIC_DIR set and no index is misconfigured,
+            // and saying so beats serving an empty page that looks like the app.
+            tracing::error!("the app's index could not be read: {error}");
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "no index").into_response()
+        }
+    }
 }
