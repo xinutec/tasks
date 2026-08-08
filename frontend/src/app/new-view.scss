@@ -1,0 +1,35 @@
+h1 {
+  font: var(--mat-sys-headline-small);
+  margin: 0.3em 0 0.6em;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+.pair {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  mat-form-field {
+    // Both fit side by side on anything wider than a phone and stack on one.
+    // `min-width` rather than a breakpoint: what decides is whether they fit.
+    flex: 1 1 12rem;
+  }
+}
+
+button[type='submit'] {
+  align-self: flex-start;
+  min-height: 48px;
+}
+
+.failed {
+  color: var(--mat-sys-error);
+}

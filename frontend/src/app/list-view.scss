@@ -1,0 +1,135 @@
+.lede {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  h1 {
+    font: var(--mat-sys-headline-small);
+    margin: 0.2em 0;
+  }
+
+  .doing {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-primary);
+  }
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+
+  .row {
+    display: flex;
+    gap: 4px;
+    // The filter rows are the one place a phone genuinely runs out of width:
+    // a repo list grows without limit and its members are unbreakable names.
+    // Scrolling sideways is the honest answer — wrapping would push the list
+    // itself below the fold.
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  button {
+    flex: 0 0 auto;
+    &.on {
+      background: var(--mat-sys-secondary-container);
+      color: var(--mat-sys-on-secondary-container);
+    }
+  }
+
+  .count {
+    margin-left: 6px;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.group {
+  h2 {
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface-variant);
+    margin: 1.2em 0 0.4em;
+  }
+}
+
+.tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  // 48px everywhere a thumb lands (fleet convention). A task row is the most
+  // tapped thing in the app.
+  min-height: 48px;
+  padding: 10px 4px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  .status {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    color: var(--mat-sys-outline);
+    &.doing {
+      color: var(--mat-sys-primary);
+    }
+    &.done {
+      color: var(--mat-sys-outline-variant);
+    }
+  }
+
+  .subject {
+    flex: 1;
+    // Subjects are prose and wrap; the wrapping is what keeps a long one from
+    // pushing the meta column off the right edge.
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+
+  .meta {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: var(--mat-sys-label-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .id {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .holder {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--mat-sys-surface-container-high);
+    // A session name can be long — a raw id is 36 characters — so the chip is
+    // capped and told to ellipsise. 12ch rather than 9: at 9 the padding ate
+    // enough that `memview` itself came out as `memv…`, which fails the one
+    // thing the chip is for.
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .has-body {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    opacity: 0.6;
+  }
+}
+
+.empty,
+.failed {
+  color: var(--mat-sys-on-surface-variant);
+  padding: 24px 0;
+}

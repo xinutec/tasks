@@ -1,0 +1,73 @@
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else if (failed(); as why) {
+  <p class="failed">{{ why }}</p>
+} @else {
+  <header class="lede">
+    <h1>{{ shown().length }} open</h1>
+    @if (doing() > 0) {
+      <span class="doing">{{ doing() }} in progress</span>
+    }
+  </header>
+
+  <nav class="filters" aria-label="Filters">
+    <div class="row" role="group" aria-label="Whose">
+      @for (bucket of buckets; track bucket) {
+        <button
+          mat-button
+          [class.on]="who() === bucket"
+          (click)="pickWho(bucket)"
+          [attr.aria-pressed]="who() === bucket"
+        >
+          {{ whoLabel[bucket] }}
+        </button>
+      }
+    </div>
+    @if (repos().length > 1) {
+      <div class="row" role="group" aria-label="Repository">
+        @for (count of repos(); track count.repo) {
+          <button
+            mat-button
+            [class.on]="repo() === (count.repo ?? null)"
+            (click)="pickRepo(count.repo ?? null)"
+            [attr.aria-pressed]="repo() === (count.repo ?? null)"
+          >
+            {{ count.repo ?? 'no repo' }}
+            <span class="count">{{ count.open }}</span>
+          </button>
+        }
+      </div>
+    }
+  </nav>
+
+  @if (shown().length === 0) {
+    <p class="empty">Nothing here. That is allowed.</p>
+  }
+
+  @for (group of groups(); track group.repo) {
+    <section class="group">
+      @if (groups().length > 1 || group.repo !== 'no repo') {
+        <h2>{{ group.repo }}</h2>
+      }
+      <ul class="tasks">
+        @for (task of group.tasks; track task.id) {
+          <li>
+            <a class="task" [routerLink]="['/t', task.id]">
+              <mat-icon class="status" [class]="task.status">{{ statusIcon[task.status] }}</mat-icon>
+              <span class="subject">{{ task.subject }}</span>
+              <span class="meta">
+                <span class="id">#{{ task.id }}</span>
+                @if (task.assignee.kind !== 'nobody') {
+                  <span class="holder">{{ holder(task) }}</span>
+                }
+                @if (task.detailed) {
+                  <mat-icon class="has-body" aria-label="has notes">notes</mat-icon>
+                }
+              </span>
+            </a>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+}

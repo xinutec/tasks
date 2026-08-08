@@ -1,0 +1,78 @@
+<h1>File a task</h1>
+
+<form (ngSubmit)="file()">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Subject</mat-label>
+    <input
+      matInput
+      name="subject"
+      [ngModel]="subject()"
+      (ngModelChange)="subject.set($event)"
+      [maxlength]="maxSubject"
+      required
+      autocomplete="off"
+    />
+    <!-- Said here rather than in a README: this is the moment somebody is about
+         to write an essay into a field that is re-sent on every turn. -->
+    <mat-hint>One line. It is what every prompt sees, so keep it a hook.</mat-hint>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Notes</mat-label>
+    <textarea
+      matInput
+      name="body"
+      [ngModel]="body()"
+      (ngModelChange)="body.set($event)"
+      rows="8"
+    ></textarea>
+    <mat-hint>Markdown. Never injected — read when the task is opened.</mat-hint>
+  </mat-form-field>
+
+  <div class="pair">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Repository</mat-label>
+      <input
+        matInput
+        name="repo"
+        [ngModel]="repo()"
+        (ngModelChange)="repo.set($event)"
+        list="repos"
+        autocomplete="off"
+        placeholder="none"
+      />
+      <!-- A datalist rather than a select: the repositories with work are a
+           suggestion, and a task in a checkout nobody has filed against yet
+           must still be fileable. -->
+      <datalist id="repos">
+        @for (count of repos(); track count.repo) {
+          @if (count.repo) {
+            <option [value]="count.repo"></option>
+          }
+        }
+      </datalist>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>For</mat-label>
+      <mat-select name="to" [ngModel]="to()" (ngModelChange)="to.set($event)">
+        <mat-option value="nobody">the pile</mat-option>
+        @if (me(); as who) {
+          <mat-option value="me">{{ who }}</mat-option>
+        }
+        @for (session of sessionOptions(); track session.id) {
+          <mat-option [value]="session.id">{{ session.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @if (failed(); as why) {
+    <p class="failed">{{ why }}</p>
+  }
+
+  <button mat-flat-button type="submit" [disabled]="saving() || !subject().trim()">
+    <mat-icon>add</mat-icon>
+    File it
+  </button>
+</form>

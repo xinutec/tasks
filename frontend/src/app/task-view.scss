@@ -1,0 +1,111 @@
+.head {
+  h1 {
+    font: var(--mat-sys-headline-small);
+    margin: 0.3em 0 0.2em;
+    overflow-wrap: break-word;
+  }
+
+  .where {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 12px;
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .id {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .repo,
+  .status {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  .status.doing {
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+  }
+}
+
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+
+  .statuses {
+    display: flex;
+    gap: 2px;
+  }
+
+  button.on {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  .move {
+    // A session name is unbreakable and can be long; the button says who holds
+    // the task, and a name too long for a phone is truncated rather than
+    // allowed to push the row past the edge.
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.history {
+  margin-top: 2rem;
+
+  h2 {
+    font: var(--mat-sys-title-small);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 0;
+    font: var(--mat-sys-body-small);
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .when {
+    font-variant-numeric: tabular-nums;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .actor {
+    font-weight: 500;
+    // Session ids are 36 characters of hex and dashes — longer than a phone —
+    // and a session with no name shows its id here.
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail {
+    color: var(--mat-sys-on-surface-variant);
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+}
+
+.empty,
+.failed {
+  color: var(--mat-sys-on-surface-variant);
+}

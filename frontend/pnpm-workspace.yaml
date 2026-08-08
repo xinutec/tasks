@@ -1,0 +1,35 @@
+# pnpm runs a dependency's install script only if it is listed here; npm runs
+# them all silently. Keeping that default means the list stays as short as the
+# build needs — these four fetch or compile a platform binary and do not work
+# without it.
+#
+# @xinutec/ui-harness ships TypeScript and builds itself in `prepare`, so pnpm
+# must be allowed to run it. The key is the resolved codeload URL rather than the
+# package name, because pnpm keys a git dependency by its full spec — so this
+# line has to move whenever the harness commit does.
+#
+# A local install will NOT tell you this entry is missing. The machine-wide store
+# already holds the built harness from a sibling repo, so nothing needs running
+# and the install passes; CI, with a cold store, fails on
+# ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED. Test a change to this file with
+# `pnpm install --store-dir <empty dir>`, never a plain install.
+allowBuilds:
+  esbuild: true
+  '@parcel/watcher': true
+  lmdb: true
+  msgpackr-extract: true
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/f50e63f040bf7356949e41c420b42e7b5fa5edaf': true
+
+# Carried across from package.json's npm-format `overrides`, which pnpm does not
+# read. Here and nowhere else: two lists of one constraint drift.
+#
+# esbuild is also a declared devDependency; this entry is what keeps the
+# toolchain's transitive copies on that same version rather than resolving a
+# second one beside it.
+#
+# The @babel/core floor is inherited from the fleet's Angular scaffold rather
+# than reasoned from this app, and may be vestigial. Settling that means
+# resolving without it and diffing the version set.
+overrides:
+  esbuild: ^0.28.1
+  '@babel/core': ^7.29.6

@@ -1,0 +1,89 @@
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else if (task(); as t) {
+  <article>
+    <header class="head">
+      <h1>{{ t.subject }}</h1>
+      <p class="where">
+        <span class="id">#{{ t.id }}</span>
+        @if (t.repo) {
+          <span class="repo">{{ t.repo }}</span>
+        }
+        <span class="status" [class]="t.status">{{ statusLabel[t.status] }}</span>
+      </p>
+    </header>
+
+    <div class="acts">
+      <div class="statuses" role="group" aria-label="Status">
+        @for (status of statuses; track status) {
+          <button
+            mat-button
+            [class.on]="t.status === status"
+            [disabled]="saving()"
+            (click)="setStatus(status)"
+          >
+            <mat-icon>{{ statusIcon[status] }}</mat-icon>
+            {{ statusLabel[status] }}
+          </button>
+        }
+      </div>
+
+      <!-- The move. One control, and every destination in one menu: who holds
+           a task is a single question with a small closed set of answers, and
+           splitting it into "assign" and "unassign" would make handing it back
+           a different verb from handing it over. -->
+      <button mat-stroked-button [matMenuTriggerFor]="move" [disabled]="saving()" class="move">
+        <mat-icon>swap_horiz</mat-icon>
+        {{ holder(t.assignee) }}
+      </button>
+      <mat-menu #move="matMenu">
+        @if (me(); as who) {
+          <button mat-menu-item (click)="moveToMe()">
+            <mat-icon>person</mat-icon>
+            <span>{{ who }}</span>
+          </button>
+        }
+        <button mat-menu-item (click)="moveTo({ kind: 'nobody' })">
+          <mat-icon>inbox</mat-icon>
+          <span>the pile</span>
+        </button>
+        @for (session of sessionOptions(); track session.id) {
+          <button mat-menu-item (click)="moveTo({ kind: 'session', id: session.id })">
+            <mat-icon>smart_toy</mat-icon>
+            <span>{{ session.label }}</span>
+          </button>
+        }
+      </mat-menu>
+    </div>
+
+    @if (saving()) {
+      <mat-progress-bar mode="indeterminate" />
+    }
+
+    @if (t.body_html) {
+      <div class="md-content" [innerHTML]="t.body_html"></div>
+    } @else {
+      <p class="empty">No notes. The subject is the whole of it.</p>
+    }
+
+    @if (t.events.length > 0) {
+      <section class="history">
+        <h2>History</h2>
+        <ul>
+          @for (event of t.events; track event.at + event.kind) {
+            <li>
+              <span class="when">{{ event.at | date: 'd MMM HH:mm' }}</span>
+              <span class="actor">{{ event.actor }}</span>
+              <span class="what">{{ event.kind }}</span>
+              @if (event.detail) {
+                <span class="detail">{{ event.detail }}</span>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  </article>
+} @else if (failed(); as why) {
+  <p class="failed">{{ why }}</p>
+}

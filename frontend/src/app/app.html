@@ -1,0 +1,43 @@
+@if (auth.needsSignIn()) {
+  <div class="signin">
+    <h1>tasks</h1>
+    <p>The work we hand between each other.</p>
+    <a mat-flat-button [href]="loginHref()">Sign in with Nextcloud</a>
+  </div>
+} @else if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else {
+  <mat-toolbar class="bar">
+    <a routerLink="/" class="brand">tasks</a>
+    <span class="spacer"></span>
+    <!-- The one control that is always wanted, on the bar rather than behind a
+         menu: filing a task is what this app is for, and a thing you do twenty
+         times a day should not be two taps. -->
+    <a mat-icon-button routerLink="/new" aria-label="File a task">
+      <mat-icon>add</mat-icon>
+    </a>
+    <button mat-icon-button [matMenuTriggerFor]="nav" aria-label="Menu">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #nav="matMenu">
+      <a mat-menu-item routerLink="/" [queryParams]="{ done: 1 }">
+        <mat-icon>history</mat-icon>
+        <span>Finished work</span>
+      </a>
+      @if (me(); as user) {
+        @if (user.kind === 'person') {
+          <button mat-menu-item (click)="signOut()">
+            <mat-icon>logout</mat-icon>
+            <span>Sign out</span>
+          </button>
+        }
+      }
+    </mat-menu>
+  </mat-toolbar>
+
+  <main class="content">
+    <router-outlet />
+  </main>
+
+  <footer class="build" [title]="'built ' + builtAt">build {{ build.sha }} · {{ builtAt }}</footer>
+}
