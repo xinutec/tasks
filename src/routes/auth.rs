@@ -71,7 +71,9 @@ pub async fn callback(
     let state = q.state.unwrap_or_default();
     let pending = app
         .consume_oauth_state(&state)
-        .ok_or(AppError::Unauthorized)?;
+        .ok_or(AppError::Unauthorized(
+            "this sign-in did not start here, or took too long — try again",
+        ))?;
     let code = q
         .code
         .ok_or_else(|| anyhow!("missing authorization code"))?;

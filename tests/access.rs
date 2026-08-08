@@ -82,9 +82,49 @@ async fn a_token_without_a_session_id_gets_nothing() {
     // without the other cannot be filed against anybody, and a write filed
     // against nobody is exactly what the history must never contain.
     let app = app(Some(TOKEN));
+    let (status, body) = send(
+        &app,
+        get("/api/me")
+            .header("Authorization", format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // And it says which half is missing. Refusing a *correct* token with "not
+    // authenticated" sent somebody to re-check the one thing that was right,
+    // which is how `task list` came to look like a broken token.
+    assert!(body.contains("X-Session-Id"), "{body}");
+    assert!(!body.contains("not authenticated"), "{body}");
+}
+
+#[tokio::test]
+async fn no_credential_still_just_says_no() {
+    // The other half of the pair above: nothing was offered, so there is no
+    // remedy to name and the generic answer is the honest one.
+    let app = app(Some(TOKEN));
+    let (status, body) = send(&app, get("/api/me").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(body.contains("not authenticated"), "{body}");
+}
+
+#[tokio::test]
+async fn a_nameless_token_does_not_fall_through_to_a_cookie() {
+    // It must not borrow a signed-in browser's identity to get in: that is the
+    // same misattribution `a_session_credential_beats_a_cookie_that_rode_along`
+    // guards from the other side.
+    let app = app(Some(TOKEN));
+    let cookie = create_session(
+        SECRET,
+        &UserSession {
+            user_id: "pippijn".into(),
+            display_name: "Pippijn".into(),
+        },
+    );
     let (status, _) = send(
         &app,
         get("/api/me")
+            .header("Cookie", format!("session={cookie}"))
             .header("Authorization", format!("Bearer {TOKEN}"))
             .body(Body::empty())
             .unwrap(),

@@ -56,27 +56,52 @@ fn local_owner() -> UserSession {
     }
 }
 
-fn agent(app: &AppState, parts: &Parts) -> Option<Viewer> {
-    let expected = app.cfg.agent_token.as_deref()?;
+/// What a caller's `Authorization` header amounted to.
+enum Offered {
+    /// No bearer token, or not ours. The cookie gets its turn.
+    Nothing,
+    /// Our token, on behalf of a named conversation.
+    On(String),
+    /// Our token, and nothing saying which conversation it speaks for.
+    ///
+    /// Still refused — a change filed against nobody is the one thing the
+    /// history must not contain — but refused *by name*, because the token
+    /// being right is exactly what makes a bare "not authenticated" send
+    /// somebody to re-check their token.
+    Nameless,
+}
+
+/// The remedy, not the diagnosis: this reaches a person as the CLI's error line.
+const NAMELESS: &str = "the agent token is accepted, but nothing says which conversation \
+                        it is for — send X-Session-Id, or use a `task` CLI new enough to \
+                        read $CLAUDE_CODE_SESSION_ID";
+
+fn agent(app: &AppState, parts: &Parts) -> Offered {
+    let Some(expected) = app.cfg.agent_token.as_deref() else {
+        return Offered::Nothing;
+    };
     let offered = parts
         .headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))?;
+        .and_then(|v| v.strip_prefix("Bearer "));
+    let Some(offered) = offered else {
+        return Offered::Nothing;
+    };
     // Constant-time, and length-checked first: `ct_eq` on differing lengths is
     // not defined to be constant-time, and the length of a secret is itself
     // worth not leaking.
     if offered.len() != expected.len() || !bool::from(offered.as_bytes().ct_eq(expected.as_bytes()))
     {
-        return None;
+        return Offered::Nothing;
     }
-    let session = parts
+    parts
         .headers
         .get(SESSION_HEADER)
         .and_then(|v| v.to_str().ok())
         .map(str::trim)
-        .filter(|s| !s.is_empty())?;
-    Some(Viewer::Session(session.to_string()))
+        .filter(|s| !s.is_empty())
+        .map_or(Offered::Nameless, |s| Offered::On(s.to_string()))
 }
 
 fn resolve(app: &AppState, parts: &Parts) -> Result<Viewer, AppError> {
@@ -84,8 +109,13 @@ fn resolve(app: &AppState, parts: &Parts) -> Result<Viewer, AppError> {
     // filed against the session even from a browser that also holds a cookie —
     // otherwise a session driven from a signed-in machine would write history
     // under Pippijn's name.
-    if let Some(viewer) = agent(app, parts) {
-        return Ok(viewer);
+    match agent(app, parts) {
+        Offered::On(session) => return Ok(Viewer::Session(session)),
+        // Not a fall-through to the cookie: whoever holds this token is a
+        // script, and letting it land on a signed-in browser's cookie is the
+        // misattribution the check above exists to prevent.
+        Offered::Nameless => return Err(AppError::Unauthorized(NAMELESS)),
+        Offered::Nothing => {}
     }
     let Some(auth) = &app.cfg.auth else {
         return Ok(Viewer::Owner(local_owner()));
@@ -96,7 +126,7 @@ fn resolve(app: &AppState, parts: &Parts) -> Result<Viewer, AppError> {
     {
         return Ok(Viewer::Owner(user));
     }
-    Err(AppError::Unauthorized)
+    Err(AppError::Unauthorized("not authenticated"))
 }
 
 /// Extractor: the person or a session; 401 otherwise.

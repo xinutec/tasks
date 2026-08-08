@@ -7,8 +7,14 @@ use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    #[error("not authenticated")]
-    Unauthorized,
+    /// No usable credential — or one that stopped short of saying who it is.
+    ///
+    /// ⚠ The message is carried rather than fixed because "not authenticated"
+    /// is actively misleading in one of the two cases: a caller whose agent
+    /// token is *correct* but who sent no `X-Session-Id` gets sent to check the
+    /// one thing that was right.
+    #[error("{0}")]
+    Unauthorized(&'static str),
 
     #[error("not authorized")]
     Forbidden,
@@ -42,7 +48,7 @@ impl From<reqwest::Error> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, msg) = match &self {
-            AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
+            AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, self.to_string()),
             AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
             AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),

@@ -6,10 +6,17 @@
 //! cannot see — which is the exact failure this service exists to prevent.
 //! Anything that becomes visible in the UI gets a line here.
 //!
-//! **Who am I?** A session is identified by the CLI's own session id, which it
-//! learns from the prompt hook and passes as `TASKS_SESSION` (or `--session`).
-//! Without one, every command still reads, and none of them writes: filing work
-//! as nobody-in-particular is worse than refusing.
+//! **Who am I?** A session is identified by the CLI's own session id, and it
+//! does not have to be told: Claude Code puts it in `$CLAUDE_CODE_SESSION_ID`
+//! in every shell it runs, so `task list` works with nothing set up.
+//! `--session` and `$TASKS_SESSION` override it, in that order, for a script
+//! acting on some other conversation's behalf.
+//!
+//! ⚠ **There is no anonymous mode, for reads either.** The service refuses a
+//! request that does not say which conversation it is (`access.rs`), because
+//! the actor is derived from the credential and a change filed against nobody
+//! is the one thing the history must not contain. This CLI stops before the
+//! round trip and says which of the two halves — token, identity — is missing.
 //!
 //! ```text
 //! task list [--repo R] [--mine] [--done]   what is open
@@ -40,7 +47,8 @@ struct Cli {
     /// Base URL of the service. Defaults to $TASKS_URL, then the VPN name.
     #[arg(long, global = true)]
     url: Option<String>,
-    /// This conversation's CLI session id. Defaults to $TASKS_SESSION.
+    /// This conversation's CLI session id. Defaults to $TASKS_SESSION, then to
+    /// $CLAUDE_CODE_SESSION_ID, which Claude Code already sets.
     #[arg(long, global = true)]
     session: Option<String>,
     #[command(subcommand)]
@@ -130,6 +138,23 @@ fn token() -> Option<String> {
         .filter(|t| !t.is_empty())
 }
 
+/// Which conversation this is, when it was not passed on the command line.
+///
+/// `$CLAUDE_CODE_SESSION_ID` is set in every shell Claude Code runs, which is
+/// why there is nothing to configure: a session cannot forget to say who it is,
+/// and — more to the point — cannot mistype *another* conversation's id into its
+/// own history. `$TASKS_SESSION` still wins, for a script standing in for one.
+fn session_id() -> Option<String> {
+    ["TASKS_SESSION", "CLAUDE_CODE_SESSION_ID"]
+        .into_iter()
+        .find_map(|name| {
+            std::env::var(name)
+                .ok()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
+}
+
 struct Client {
     http: reqwest::Client,
     base: String,
@@ -185,17 +210,37 @@ impl Client {
         Ok(body)
     }
 
+    /// Refuse before the round trip when this CLI holds half a credential.
+    ///
+    /// ⚠ Only that one shape. A token with nobody behind it cannot be answered
+    /// by *any* deployment — the service needs both halves to file a change
+    /// against somebody, for reads as well, so sending it is a guaranteed 401
+    /// whose message would be about the service rather than about this machine.
+    /// Holding **neither** is left to the service, which is the only thing that
+    /// knows whether it is guarded: a dev server with no `AGENT_TOKEN` answers
+    /// everybody as the owner, and refusing here would break that loop.
+    fn identified(&self) -> Result<()> {
+        if self.token.is_some() && self.session.is_none() {
+            bail!(
+                "a token but no session id: this conversation is not saying who it is. \
+                 Claude Code normally sets $CLAUDE_CODE_SESSION_ID; outside it, \
+                 pass --session or set $TASKS_SESSION."
+            );
+        }
+        Ok(())
+    }
+
     fn writing(&self) -> Result<()> {
         if self.token.is_none() {
             bail!(
                 "no token: set TASKS_TOKEN or write ~/.config/tasks/token. \
-                 Reading works without one only when the service is unguarded."
+                 Writing is never anonymous, so there is no unguarded case here."
             );
         }
         if self.session.is_none() {
             bail!(
                 "no session id: pass --session or set TASKS_SESSION. \
-                 The prompt hook prints this session's id."
+                 Claude Code normally sets $CLAUDE_CODE_SESSION_ID."
             );
         }
         Ok(())
@@ -297,11 +342,9 @@ async fn main() -> Result<()> {
             .trim_end_matches('/')
             .to_string(),
         token: token(),
-        session: cli
-            .session
-            .or_else(|| std::env::var("TASKS_SESSION").ok())
-            .filter(|s| !s.trim().is_empty()),
+        session: cli.session.or_else(session_id),
     };
+    client.identified()?;
 
     match cli.command {
         Command::List { repo, mine, done } => {
@@ -316,7 +359,7 @@ async fn main() -> Result<()> {
                 let session = client
                     .session
                     .clone()
-                    .context("--mine needs a session id (--session or $TASKS_SESSION)")?;
+                    .context("--mine needs a session id (--session, or $TASKS_SESSION)")?;
                 query.push(("session".into(), session));
             }
             let req = client
