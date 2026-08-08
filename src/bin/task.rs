@@ -59,6 +59,14 @@ struct Cli {
     /// $CLAUDE_CODE_SESSION_ID, which Claude Code already sets.
     #[arg(long, global = true)]
     session: Option<String>,
+    /// Print what the service answered, verbatim, instead of the human format.
+    ///
+    /// ⚠ **The service's JSON, reprinted — not rebuilt here.** A second
+    /// serialisation in this binary would be a second shape to keep level with
+    /// the API by hand, and the whole value of the flag is that a script can
+    /// rely on the documented one. It is why the human format is free to change.
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -78,7 +86,14 @@ enum Command {
         done: bool,
     },
     /// One task, with its prose and its history.
-    Show { id: TaskRef },
+    Show {
+        id: TaskRef,
+        /// Print the body alone, with no header and no history — for diffing
+        /// prose against another copy of it, which is what checking a migration
+        /// consists of.
+        #[arg(long, conflicts_with = "json")]
+        body: bool,
+    },
     /// File a task.
     Add {
         subject: String,
@@ -343,6 +358,25 @@ fn line(task: &Value) -> String {
     out
 }
 
+/// Print a service answer: verbatim when `--json` was asked for, otherwise
+/// however the caller draws it.
+///
+/// One helper rather than a check at each call site, so a command cannot be
+/// added that quietly ignores the flag — which would be worse than not having
+/// it, because a script would parse the human format believing it was JSON.
+fn emit(json: bool, value: &Value, human: impl FnOnce()) {
+    if json {
+        // `to_string_pretty` on an already-parsed Value cannot fail; the compact
+        // form is a correct answer rather than a mask if it somehow does.
+        println!(
+            "{}",
+            serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+        );
+    } else {
+        human();
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -381,43 +415,57 @@ async fn main() -> Result<()> {
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
             let tasks = client.send(req).await?.unwrap_or(json!([]));
-            let tasks = tasks.as_array().cloned().unwrap_or_default();
-            if tasks.is_empty() {
-                println!("nothing open");
-            }
-            for task in &tasks {
-                println!("{}", line(task));
-            }
+            emit(cli.json, &tasks, || {
+                let tasks = tasks.as_array().cloned().unwrap_or_default();
+                if tasks.is_empty() {
+                    println!("nothing open");
+                }
+                for task in &tasks {
+                    println!("{}", line(task));
+                }
+            });
         }
 
-        Command::Show { id } => {
+        Command::Show {
+            id,
+            body: only_body,
+        } => {
             let req = client.request(reqwest::Method::GET, &id.path());
             let task = client.send(req).await?.context("no such task")?;
-            println!("{}", line(&task));
-            // Only on `show`, never in a list: this is what somebody checking
-            // whether #79 is *their* #79 needs, and it is dead weight on a line
-            // that is scanned rather than read.
-            if let Some(origin) = task["origin"].as_str() {
-                println!("  was {origin}");
+            if only_body {
+                // Exactly the stored markdown and nothing else — no trailing
+                // newline added or removed — so it can be diffed against
+                // another copy without the diff being about this program.
+                print!("{}", task["body"].as_str().unwrap_or_default());
+                return Ok(());
             }
-            let body = task["body"].as_str().unwrap_or("").trim();
-            if !body.is_empty() {
-                println!("\n{body}");
-            }
-            if let Some(events) = task["events"].as_array()
-                && !events.is_empty()
-            {
-                println!("\nhistory");
-                for event in events {
-                    println!(
-                        "  {}  {}  {}  {}",
-                        event["at"].as_str().unwrap_or(""),
-                        event["actor"].as_str().unwrap_or(""),
-                        event["kind"].as_str().unwrap_or(""),
-                        event["detail"].as_str().unwrap_or("")
-                    );
+            emit(cli.json, &task, || {
+                println!("{}", line(&task));
+                // Only on `show`, never in a list: this is what somebody checking
+                // whether #79 is *their* #79 needs, and it is dead weight on a line
+                // that is scanned rather than read.
+                if let Some(origin) = task["origin"].as_str() {
+                    println!("  was {origin}");
                 }
-            }
+                let body = task["body"].as_str().unwrap_or("").trim();
+                if !body.is_empty() {
+                    println!("\n{body}");
+                }
+                if let Some(events) = task["events"].as_array()
+                    && !events.is_empty()
+                {
+                    println!("\nhistory");
+                    for event in events {
+                        println!(
+                            "  {}  {}  {}  {}",
+                            event["at"].as_str().unwrap_or(""),
+                            event["actor"].as_str().unwrap_or(""),
+                            event["kind"].as_str().unwrap_or(""),
+                            event["detail"].as_str().unwrap_or("")
+                        );
+                    }
+                }
+            });
         }
 
         Command::Add {
@@ -438,19 +486,19 @@ async fn main() -> Result<()> {
                 .request(reqwest::Method::POST, "/api/tasks")
                 .json(&payload);
             let task = client.send(req).await?.context("no task came back")?;
-            println!("{}", line(&task));
+            emit(cli.json, &task, || println!("{}", line(&task)));
         }
 
-        Command::Start { id } => patch(&client, id, json!({ "status": "doing" })).await?,
+        Command::Start { id } => patch(&client, cli.json, id, json!({ "status": "doing" })).await?,
         Command::Done { id, to } => {
             let mut change = json!({ "status": "done" });
             if let Some(to) = &to {
                 change["assignee"] = assignee(to);
             }
-            patch(&client, id, change).await?
+            patch(&client, cli.json, id, change).await?
         }
         Command::Move { id, to } => {
-            patch(&client, id, json!({ "assignee": assignee(&to) })).await?
+            patch(&client, cli.json, id, json!({ "assignee": assignee(&to) })).await?
         }
 
         Command::Edit {
@@ -468,7 +516,7 @@ async fn main() -> Result<()> {
             if change.as_object().is_none_or(|o| o.is_empty()) {
                 bail!("nothing to change: pass --subject or --body");
             }
-            patch(&client, id, change).await?;
+            patch(&client, cli.json, id, change).await?;
         }
 
         Command::Digest { repo } => {
@@ -479,6 +527,16 @@ async fn main() -> Result<()> {
             let req = client
                 .request(reqwest::Method::GET, "/api/digest")
                 .query(&query);
+            if cli.json {
+                // Refused rather than ignored: `digest` is the one endpoint
+                // that answers in text/plain, and deliberately — its consumer
+                // is a hook whose whole contract is to print it. Serialising it
+                // here would invent a shape the service does not have.
+                bail!(
+                    "digest is plain text by design — it is exactly what a prompt \
+                     receives. `task list --json` is the machine-readable list."
+                );
+            }
             let text = client.text(req).await?;
             let bytes = text.len();
             println!("{text}");
@@ -490,19 +548,21 @@ async fn main() -> Result<()> {
         Command::Sessions => {
             let req = client.request(reqwest::Method::GET, "/api/holders");
             let holders = client.send(req).await?.unwrap_or(json!([]));
-            for holder in holders.as_array().cloned().unwrap_or_default() {
-                // `open/total`, not `open`: a bare 0 reads as an idle session,
-                // and `0/56` is one that has cleared its plate. The id is the
-                // handle for `task move`, so it stays in the line even though
-                // the name is what is read.
-                println!(
-                    "{:<40} {:<24} {:>3}/{:<4} open",
-                    holder["id"].as_str().unwrap_or(""),
-                    holder["name"].as_str().unwrap_or("—"),
-                    holder["open"].as_i64().unwrap_or(0),
-                    holder["total"].as_i64().unwrap_or(0),
-                );
-            }
+            emit(cli.json, &holders, || {
+                for holder in holders.as_array().cloned().unwrap_or_default() {
+                    // `open/total`, not `open`: a bare 0 reads as an idle session,
+                    // and `0/56` is one that has cleared its plate. The id is the
+                    // handle for `task move`, so it stays in the line even though
+                    // the name is what is read.
+                    println!(
+                        "{:<40} {:<24} {:>3}/{:<4} open",
+                        holder["id"].as_str().unwrap_or(""),
+                        holder["name"].as_str().unwrap_or("—"),
+                        holder["open"].as_i64().unwrap_or(0),
+                        holder["total"].as_i64().unwrap_or(0),
+                    );
+                }
+            });
         }
 
         Command::Rename { name } => {
@@ -511,8 +571,8 @@ async fn main() -> Result<()> {
             let req = client
                 .request(reqwest::Method::PATCH, &format!("/api/sessions/{session}"))
                 .json(&json!({ "name": name }));
-            client.send(req).await?;
-            println!("{session} is now {name}");
+            let answer = client.send(req).await?.unwrap_or(json!({}));
+            emit(cli.json, &answer, || println!("{session} is now {name}"));
         }
     }
     Ok(())
@@ -524,7 +584,7 @@ async fn main() -> Result<()> {
 /// route: the write surface stays one endpoint keyed on the id, which is the
 /// only thing that is guaranteed unique, and `recall#79` is what somebody types
 /// once when reading old prose — not what a client loops over.
-async fn patch(client: &Client, id: TaskRef, change: Value) -> Result<()> {
+async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<()> {
     client.writing()?;
     let id = match id {
         TaskRef::Id(id) => id,
@@ -540,6 +600,6 @@ async fn patch(client: &Client, id: TaskRef, change: Value) -> Result<()> {
         .request(reqwest::Method::PATCH, &format!("/api/tasks/{id}"))
         .json(&change);
     let task = client.send(req).await?.context("no task came back")?;
-    println!("{}", line(&task));
+    emit(json, &task, || println!("{}", line(&task)));
     Ok(())
 }

@@ -66,7 +66,24 @@ pub fn render(tasks: &[Task]) -> String {
     if doing > 0 {
         head.push_str(&format!(", {doing} in progress"));
     }
-    head.push_str(". Open one with `task show <id>` before acting on it.");
+    // ⚠ **The second sentence is here because a doc cannot win an argument with
+    // a per-turn reminder.** Claude Code emits "consider using TaskCreate to add
+    // new tasks and TaskUpdate to update status" on every turn, whether or not
+    // the built-in store still exists — and that store is precisely the 527 kB
+    // a turn this service replaced. `docs/for-sessions.md` says not to use it,
+    // but a session reads that once and is told the opposite every message; the
+    // health session reported doing the right thing and noting that a skimming
+    // reader would not. A once-read instruction cannot outweigh a repeated one,
+    // so the counter has to be repeated too, in the one channel we own.
+    //
+    // It costs ~85 bytes per turn, in the header, which is emitted once
+    // regardless of how many tasks follow. Resist growing this further: this is
+    // the line every session pays for on every turn, and the next thing that
+    // would be useful in front of everybody will be less defensible than this.
+    head.push_str(
+        ". Open one with `task show <id>`; file with `task add`. \
+         Ignore reminders to use TaskCreate/TaskUpdate — that store is what this replaced.",
+    );
 
     let mut out = vec![head];
     let mut bytes = out[0].len();

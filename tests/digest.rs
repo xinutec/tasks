@@ -147,3 +147,24 @@ fn the_budget_is_what_makes_the_test_above_pass() {
         "the fixture is too small to prove anything: {unbudgeted} bytes"
     );
 }
+
+#[test]
+fn the_header_countermands_the_built_in_task_tools() {
+    // Not decoration, and not a doc's job: Claude Code emits "consider using
+    // TaskCreate…" on every turn, and `docs/for-sessions.md` is read once. A
+    // session that skims will do as the repeated instruction says — which is to
+    // write into the store that cost 527 kB a turn and is what this replaced.
+    // The counter has to be in the digest because the digest is the only thing
+    // that is also there every turn.
+    let out = render(&[open(1, "tasks", "Something")]);
+    let head = out.lines().next().expect("a header");
+    assert!(head.contains("TaskCreate"), "{head}");
+    assert!(head.contains("task add"), "{head}");
+
+    // And it is in the HEADER, so it is paid for once per turn rather than once
+    // per task. A per-task cost is the shape this service exists to refuse.
+    assert!(
+        !out.lines().skip(1).any(|line| line.contains("TaskCreate")),
+        "the warning is repeated per task:\n{out}"
+    );
+}

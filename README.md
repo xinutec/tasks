@@ -75,12 +75,15 @@ of every prompt.
 | `/` | the open list, grouped by repository, filtered by holder |
 | `/t/:id` | one task: its prose, its status, who holds it, its history |
 | `/new` | file one |
+| `/who` | who holds what: `open/total` per session, for the person, and the pile |
 
 ## The CLI
 
 ```sh
 task list [--repo R] [--mine] [--done]   # what is open
-task show <id>                            # one task, its prose and its history
+task show <id> [--body]                   # one task, its prose and its history
+task sessions                             # who holds what, as open/total
+<any read command> --json                 # what the service answered, verbatim
 task add "<subject>" [--repo R] [--body -] [--to me|<session>|nobody]
 task start <id> / task done <id> [--to W] # move it along
 task move <id> me|<session>|nobody        # hand it over
@@ -127,6 +130,15 @@ a *list* can say who did something — the history records every actor, and no l
 renders a history — so a task closed while held by `nobody` read as "done by
 nobody" everywhere it was seen again. An explicit assignee in the same change
 wins (`task done <id> --to me`), and reopening leaves the holder alone.
+
+**`--json` on any read command prints what the service answered, verbatim**, and
+`task show <id> --body` prints the stored markdown alone. Both exist so a claim
+about the data can be *checked* rather than parsed out of a human format with a
+regex — which is what the migration check in `docs/for-sessions.md` had to do
+until the health session pointed out that `wc -l` on both sides proves only the
+count. The JSON is reprinted rather than rebuilt here, so there is one documented
+shape rather than two kept level by hand. `task digest` refuses `--json`: it
+answers in text/plain deliberately, being exactly what a prompt receives.
 
 `task digest` prints the byte count on stderr. That number is the per-turn cost of
 the whole system, and it is the one worth watching.

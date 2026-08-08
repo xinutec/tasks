@@ -12,6 +12,12 @@ the top of your context beginning *"N open task(s)"*.
 created with full bodies. On one session that reached 527 kB a turn, 93% of it a
 `description` field the prompt never renders. That is what this replaced.
 
+⚠ **You will be told otherwise every turn.** A system reminder suggests
+`TaskCreate`/`TaskUpdate` on every message, whether or not the old store still
+exists. It is wrong here, and the digest at the top of your context now says so
+on every turn too — because an instruction read once cannot outweigh one
+repeated every message. `task add` is how you file work.
+
 ## 1. Find your tasks
 
 ```sh
@@ -64,9 +70,21 @@ before deleting anything — one line per `<n>.json`, subjects verbatim, and eve
 `description` now the task's body:
 
 ```sh
-ls ~/.claude/tasks/$CLAUDE_CODE_SESSION_ID/*.json | wc -l   # what you had
-task list --mine --done | wc -l                             # what is here
+# Every subject, both sides, sorted — a real diff rather than a count.
+task list --mine --done --json | jq -r '.[].subject' | sort > /tmp/now
+jq -r .subject ~/.claude/tasks/$CLAUDE_CODE_SESSION_ID/*.json | sort > /tmp/was
+diff /tmp/was /tmp/now && echo "verbatim"
 ```
+
+And a body, if you want to check one:
+
+```sh
+task show <id> --body | diff - <(jq -r .description ~/.claude/tasks/$CLAUDE_CODE_SESSION_ID/<n>.json)
+```
+
+`--json` prints what the service answered, verbatim, on any read command; the
+bodies gained a footer where the import kept an `activeForm` or a `blockedBy`,
+so expect that one addition and nothing else.
 
 If something is missing, **stop and say so** — the old files are still there,
 and that is the only reason recovery is possible.
