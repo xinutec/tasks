@@ -1,0 +1,75 @@
+[package]
+name = "tasks"
+version = "0.1.0"
+edition = "2024"
+# Adding `src/bin/task.rs` makes a bare `cargo run` ambiguous, which is how
+# memview's dev script silently stopped starting a server. The service is the
+# default; the CLI is asked for by name.
+default-run = "tasks"
+
+# Lints the toolchain leaves at `allow` that this crate wants denied, so `-D
+# warnings` in the gate makes each a hard failure rather than something to
+# remember at review time. Copied from `life`, minus the numeric rules — there
+# is no arithmetic in this app worth guarding.
+[lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[lints.clippy]
+# The app logs through `tracing`; a stray dbg!/println! writes past it and is
+# invisible in production. The CLI is the exception and says so at its own top.
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tower-http = { version = "0.7", features = ["fs", "trace"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls-ring",
+    "mysql",
+    "chrono",
+    "derive",
+    "macros",
+    "migrate",
+] }
+reqwest = { version = "0.13", default-features = false, features = [
+    "json",
+    # `form` for the Nextcloud token exchange, `query` for the CLI's filters —
+    # both are their own features in 0.13, and without `query` the builder
+    # simply has no `.query()` method.
+    "form",
+    "query",
+    "rustls",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+comrak = "0"
+chrono = { version = "0.4", default-features = false, features = [
+    "clock",
+    "serde",
+] }
+hmac = "0.13"
+sha2 = "0.11"
+hex = "0.4"
+subtle = "2"
+base64 = "0.22"
+rand = "0.9"
+anyhow = "1"
+thiserror = "2"
+# The CLI's argument table. Hand-rolling one for eight subcommands is the kind
+# of thing that ends up with `--body` silently eating the next flag; `--help`
+# is also the CLI's documentation, and a derived one cannot drift from the code.
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+time = "0.3"
+url = "2"
+
+[dev-dependencies]
+# Drives the router in-process for the access tests: the owner/agent split is a
+# security property and should not rest on reading the code.
+tower = { version = "0.5", features = ["util"] }
