@@ -29,7 +29,7 @@ export const STATUS_ICON: Record<Status, string> = {
  * name, leaving a blank chip — which reads as unassigned, and is a lie about a
  * task somebody is holding.
  */
-function said(value: string | null | undefined): string | undefined {
+export function said(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed === '' || trimmed === null ? undefined : trimmed;
 }

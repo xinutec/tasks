@@ -1,0 +1,94 @@
+.lede {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  h1 {
+    font: var(--mat-sys-headline-small);
+    margin: 0.2em 0;
+  }
+
+  .all {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.holders {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+    // A session holding nothing is still worth a row — it says who exists —
+    // but it should not compete with the ones that do.
+    &.quiet .name,
+    &.quiet .open {
+      color: var(--mat-sys-on-surface-variant);
+    }
+  }
+
+  mat-icon {
+    flex: 0 0 auto;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.who {
+  // ⚠ `min-width: 0` and nothing else. A flex item will not shrink below its
+  // content without it, so a 36-character uuid would push the count off a phone
+  // instead of being clipped. `overflow-wrap: anywhere` is NOT the answer here:
+  // it makes the column as narrow as one character when the parent measures.
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+
+  .name {
+    font: var(--mat-sys-body-large);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .handle {
+    font: var(--mat-sys-label-small);
+    color: var(--mat-sys-on-surface-variant);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.count {
+  flex: 0 0 auto;
+  // Tabular figures so the column of counts lines up rather than jittering by
+  // the width of a 1.
+  font-variant-numeric: tabular-nums;
+
+  .open {
+    font: var(--mat-sys-title-medium);
+  }
+
+  .of {
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.empty,
+.key {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.key {
+  margin-top: 12px;
+}

@@ -82,7 +82,7 @@ of every prompt.
 task list [--repo R] [--mine] [--done]   # what is open
 task show <id>                            # one task, its prose and its history
 task add "<subject>" [--repo R] [--body -] [--to me|<session>|nobody]
-task start <id> / task done <id>          # move it along
+task start <id> / task done <id> [--to W] # move it along
 task move <id> me|<session>|nobody        # hand it over
 task edit <id> [--subject S] [--body -]   # change the words
 task digest [--repo R]                    # exactly what a prompt receives
@@ -113,6 +113,20 @@ other tool, pinned to this repo's committed HEAD. ⚠ **A commit here is not an
 installed CLI**: `~/.config/home-manager/switch.sh` re-locks and activates, and
 until it runs every session is holding the previous build. The gate has a row for
 the package, so the flake cannot rot unnoticed between switches.
+
+**Naming a task.** Every command that takes one accepts `79`, `#79` as the digest
+prints it, or `recall#79` — what a session called it before the migration. A
+built-in number was unique only inside one session, so 46% of the 598 imported
+tasks had to be renumbered; the old pair is the handle that never changes, and
+old prose contains no other. `GET /api/tasks/by/{session}/{number}` is the
+endpoint, two path segments rather than an escaped `#`, which is the fragment
+delimiter and would truncate the request.
+
+**Finishing a task makes the finisher its holder.** `assignee` is the only place
+a *list* can say who did something — the history records every actor, and no list
+renders a history — so a task closed while held by `nobody` read as "done by
+nobody" everywhere it was seen again. An explicit assignee in the same change
+wins (`task done <id> --to me`), and reopening leaves the holder alone.
 
 `task digest` prints the byte count on stderr. That number is the per-turn cost of
 the whole system, and it is the one worth watching.

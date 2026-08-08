@@ -37,11 +37,16 @@ task show 79
 #   was health#79            ← it really is the one you remember
 ```
 
-If a number moved, find it by what it was:
+**If a number moved, use the old name — it still works.** Every command that
+takes a task accepts `79`, `#79`, or `recall#79`:
 
 ```sh
-task list --done | grep -i 'part of the subject you remember'
+task show recall#79       # the one recall called #79, wherever it lives now
+task done health#12
 ```
+
+That pair is the permanent handle. The service's own id can be renumbered; what
+a session called it cannot.
 
 ## 2. Check the list looks like yours
 
@@ -78,6 +83,10 @@ the only part that reaches a prompt — and it reaches one on every turn for as
 long as the task is open. Everything else goes in the body, which is read only
 when somebody opens the task. The service refuses a subject that is really a
 body, and says so.
+
+**`task done` puts your name on it.** Finishing a task makes you its holder, so
+every list afterwards says who did it — pass `--to me` (or anyone) in the same
+breath if it should go somewhere else instead.
 
 ⚠ **Delete nothing to "tidy up".** A finished task is kept here on purpose:
 under the old file scheme it was deleted because git recorded the finishing

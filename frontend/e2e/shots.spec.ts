@@ -34,6 +34,10 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('menuitem', { name: SESSIONS[1].id }).waitFor();
   await page.screenshot({ path: 'ui-snapshots/move.png' });
 
+  await page.goto('/who');
+  await page.getByRole('heading', { name: 'Who has what' }).waitFor();
+  await page.screenshot({ path: 'ui-snapshots/who.png', fullPage: true });
+
   await page.goto('/new');
   await page.getByRole('heading', { name: 'File a task' }).waitFor();
   await page.screenshot({ path: 'ui-snapshots/new.png', fullPage: true });

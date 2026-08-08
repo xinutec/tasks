@@ -61,6 +61,93 @@ pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()>
     Ok(())
 }
 
+/// One party's share of the work: what they are holding, and what they have held.
+///
+/// ⚠ **`total` counts finished work, which is the only reason this type exists
+/// apart from [`Session`].** `open` alone says who is busy; it says nothing
+/// about who has done anything, because a task leaves `open` the moment it is
+/// finished. A session with `0/56` has cleared its plate, and a bare `0` reads
+/// as an idle one.
+#[derive(Debug, Clone, Serialize)]
+pub struct Holder {
+    /// `session`, `person` or `nobody` — the same vocabulary as an assignee.
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What to call them. A session that has not named itself has none, and the
+    /// client shows the id; the pile and the person always have one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub open: i64,
+    /// Open plus finished. Never derived on a client: two numbers that must
+    /// agree should be counted by one query.
+    pub total: i64,
+}
+
+/// Who holds what: every session, Pippijn, and the pile.
+///
+/// Three queries rather than one union, because the three groups are counted
+/// from different columns — `assignee_session`, `assignee_person`, and the
+/// absence of both. Ordered by what is open, most first, since the question
+/// this answers is "who is loaded"; ties go to the larger history.
+pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
+    let sessions: Vec<(String, Option<String>, i64, i64)> = sqlx::query_as(
+        "SELECT s.id, s.name, \
+                CAST(COALESCE(SUM(t.status <> 'done'), 0) AS SIGNED) AS open, \
+                COUNT(t.id) AS total \
+         FROM sessions s \
+         LEFT JOIN tasks t ON t.assignee_session = s.id \
+         GROUP BY s.id, s.name",
+    )
+    .fetch_all(pool)
+    .await
+    .context("counting what each session holds")?;
+
+    let mut out: Vec<Holder> = sessions
+        .into_iter()
+        .map(|(id, name, open, total)| Holder {
+            kind: "session".into(),
+            id: Some(id),
+            name,
+            open,
+            total,
+        })
+        .collect();
+    out.sort_by_key(|h| (-h.open, -h.total));
+
+    let (open, total): (i64, i64) = sqlx::query_as(
+        "SELECT CAST(COALESCE(SUM(status <> 'done'), 0) AS SIGNED), COUNT(*) \
+         FROM tasks WHERE assignee_kind = 'person'",
+    )
+    .fetch_one(pool)
+    .await
+    .context("counting what the person holds")?;
+    out.push(Holder {
+        kind: "person".into(),
+        id: Some("pippijn".into()),
+        name: Some("Pippijn".into()),
+        open,
+        total,
+    });
+
+    let (open, total): (i64, i64) = sqlx::query_as(
+        "SELECT CAST(COALESCE(SUM(status <> 'done'), 0) AS SIGNED), COUNT(*) \
+         FROM tasks WHERE assignee_kind = 'nobody'",
+    )
+    .fetch_one(pool)
+    .await
+    .context("counting the pile")?;
+    out.push(Holder {
+        kind: "nobody".into(),
+        id: None,
+        name: Some("nobody".into()),
+        open,
+        total,
+    });
+
+    Ok(out)
+}
+
 /// Every session known, most recently seen first.
 pub async fn list(pool: &MySqlPool) -> Result<Vec<Session>> {
     let rows: Vec<Row> = sqlx::query_as(

@@ -63,6 +63,24 @@ export interface Session {
   open: number;
 }
 
+/**
+ * One party's share of the work, as `/api/holders` answers.
+ *
+ * ⚠ **`total` counts finished work, and that is why this is not `Session`.**
+ * `open` alone says who is busy and nothing about who has done anything, because
+ * a task leaves `open` the moment it is finished — so a session that has cleared
+ * its plate reads as an idle one. Both numbers come from the backend rather than
+ * being derived here: two figures that must agree should be counted once.
+ */
+export interface Holder {
+  /** The same closed vocabulary as an assignee's. */
+  kind: 'session' | 'person' | 'nobody';
+  id?: string | null;
+  name?: string | null;
+  open: number;
+  total: number;
+}
+
 export interface RepoCount {
   /** `null` is the pile of tasks belonging to no checkout. Always present on
    *  the wire — the backend does not skip it, because a missing key and a task

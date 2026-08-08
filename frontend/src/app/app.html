@@ -24,6 +24,10 @@
         <mat-icon>history</mat-icon>
         <span>Finished work</span>
       </a>
+      <a mat-menu-item routerLink="/who">
+        <mat-icon>groups</mat-icon>
+        <span>Who has what</span>
+      </a>
       @if (me(); as user) {
         @if (user.kind === 'person') {
           <button mat-menu-item (click)="signOut()">

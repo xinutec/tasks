@@ -471,7 +471,35 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         .await?;
     }
 
-    if let Some(assignee) = &change.assignee {
+    // Finishing a task makes the finisher its holder.
+    //
+    // ⚠ **Not decoration: `assignee` is the only place a LIST can say who did
+    // something.** The history knows — every change records its actor — but no
+    // list renders a history, so a task closed while held by `nobody` reads as
+    // "done by nobody" everywhere it is ever seen again. That was true of #461,
+    // finished by the session that wrote this.
+    //
+    // An explicit assignee in the same change wins: a caller saying where a task
+    // should go is more specific than this rule inferring it from who is asking.
+    // Only on the way IN to `done` — reopening leaves the holder alone, because
+    // the last person to touch it is a better guess than nobody.
+    let finisher = (change.status == Some(Status::Done)
+        && before.status != Status::Done
+        && change.assignee.is_none())
+    .then(|| match actor {
+        Actor::Person(id) => Assignee {
+            kind: AssigneeKind::Person,
+            id: Some(id.clone()),
+            name: None,
+        },
+        Actor::Session(id) => Assignee {
+            kind: AssigneeKind::Session,
+            id: Some(id.clone()),
+            name: None,
+        },
+    });
+
+    if let Some(assignee) = change.assignee.as_ref().or(finisher.as_ref()) {
         check_assignee(assignee)?;
         let (kind, person, session) = assignee_columns(assignee);
         // Compared as (kind, id), which is what the three columns encode: for
@@ -506,6 +534,32 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 
     tx.commit().await.context("committing a task change")?;
     list_one(pool, id).await
+}
+
+/// Find a task by what it was called before it lived here — `recall`, `79`.
+///
+/// ⚠ **This is not an alias for convenience.** A built-in number was unique only
+/// inside one session, so 46% of the 598 imported tasks could not keep theirs;
+/// `recall#79` is the handle that older prose, older memories and the sessions
+/// themselves still contain, and without this it was a fact printed by
+/// `task show` rather than a way to reach anything.
+///
+/// At most one row can match — the numbers were unique within a session — but
+/// `LIMIT 1` says so rather than trusting it, since nothing in the schema
+/// enforces it for rows written after the import.
+pub async fn by_origin(pool: &MySqlPool, session: &str, number: u64) -> Result<Option<TaskDetail>> {
+    let found: Option<(u64,)> = sqlx::query_as(
+        "SELECT id FROM tasks WHERE origin_session = ? AND origin_number = ? ORDER BY id LIMIT 1",
+    )
+    .bind(session.trim())
+    .bind(number)
+    .fetch_optional(pool)
+    .await
+    .context("looking a task up by where it came from")?;
+    let Some((id,)) = found else {
+        return Ok(None);
+    };
+    get(pool, id).await
 }
 
 /// One task without its prose or history — the read every write does first,

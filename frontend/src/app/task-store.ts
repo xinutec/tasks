@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 
 import { reason } from './errors';
-import { Me, RepoCount, Session, Task } from './models';
+import { Holder, Me, RepoCount, Session, Task } from './models';
 import { TasksApi } from './tasks-api';
 
 /**
@@ -30,6 +30,7 @@ export class TaskStore {
   readonly tasks = signal<Task[]>([]);
   readonly repos = signal<RepoCount[]>([]);
   readonly sessions = signal<Session[]>([]);
+  readonly holders = signal<Holder[]>([]);
   readonly me = signal<Me | null>(null);
 
   /** True until the first answer, of either kind. Only the first: a refresh
@@ -62,6 +63,10 @@ export class TaskStore {
         this.failed.set(reason(err));
         this.loading.set(false);
       },
+    });
+    this.api.holders().subscribe({
+      next: (holders) => this.holders.set(holders),
+      error: () => this.holders.set([]),
     });
     this.api.repos().subscribe({
       next: (repos) => this.repos.set(repos),

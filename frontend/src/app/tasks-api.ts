@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Change, Me, NewTask, RepoCount, Session, Task, TaskDetail } from './models';
+import { Change, Holder, Me, NewTask, RepoCount, Session, Task, TaskDetail } from './models';
 
 /** Thin client over the tasks backend. Same-origin in prod; via the dev proxy
  *  (proxy.conf.json) in `ng serve`. The session cookie rides along. */
@@ -40,6 +40,11 @@ export class TasksApi {
 
   sessions(): Observable<Session[]> {
     return this.http.get<Session[]>('/api/sessions');
+  }
+
+  /** Who holds what: every session, Pippijn, and the pile. */
+  holders(): Observable<Holder[]> {
+    return this.http.get<Holder[]>('/api/holders');
   }
 
   repos(): Observable<RepoCount[]> {

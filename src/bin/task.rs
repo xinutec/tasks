@@ -18,11 +18,17 @@
 //! is the one thing the history must not contain. This CLI stops before the
 //! round trip and says which of the two halves — token, identity — is missing.
 //!
+//! **Naming a task.** Every command that takes one accepts `79`, `#79` as the
+//! digest prints it, or `recall#79` — what a session called it before the
+//! migration. That last spelling is not a nicety: a built-in number was unique
+//! only within one session, 46% of them had to be renumbered, and old prose
+//! contains no other handle.
+//!
 //! ```text
 //! task list [--repo R] [--mine] [--done]   what is open
 //! task show <id>                            one task, its prose and its history
 //! task add <subject> [--repo R] [--body -] [--to me|<session>|nobody]
-//! task start <id> / task done <id>          move it along
+//! task start <id> / task done <id> [--to W] move it along
 //! task move <id> me|<session>|nobody        hand it over
 //! task edit <id> [--subject S] [--body -]   change the words
 //! task digest [--repo R]                    exactly what a prompt receives
@@ -34,6 +40,8 @@ use std::io::Read;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
+
+use tasks::tasks::reference::TaskRef;
 
 /// Where the service lives. The VPN name, because that is the only place it is.
 const DEFAULT_URL: &str = "https://tasks.xinutec.org";
@@ -70,7 +78,7 @@ enum Command {
         done: bool,
     },
     /// One task, with its prose and its history.
-    Show { id: u64 },
+    Show { id: TaskRef },
     /// File a task.
     Add {
         subject: String,
@@ -85,14 +93,21 @@ enum Command {
         to: Option<To>,
     },
     /// Mark a task as being worked on.
-    Start { id: u64 },
+    Start { id: TaskRef },
     /// Mark a task finished.
-    Done { id: u64 },
+    Done {
+        id: TaskRef,
+        /// Where it goes instead. Finishing a task makes the finisher its
+        /// holder, so that every later list says who did it; this is how to
+        /// close one and hand it on in the same breath.
+        #[arg(long)]
+        to: Option<To>,
+    },
     /// Hand a task over: `me`, `nobody`, or a session id.
-    Move { id: u64, to: To },
+    Move { id: TaskRef, to: To },
     /// Change a task's words.
     Edit {
-        id: u64,
+        id: TaskRef,
         #[arg(long)]
         subject: Option<String>,
         /// `-` reads stdin.
@@ -104,7 +119,7 @@ enum Command {
         #[arg(long)]
         repo: Option<String>,
     },
-    /// Every session known, and how much each is holding.
+    /// Who holds what: every session, Pippijn, and the pile — open/total each.
     Sessions,
     /// Tell the service what this session now calls itself.
     Rename { name: String },
@@ -376,7 +391,7 @@ async fn main() -> Result<()> {
         }
 
         Command::Show { id } => {
-            let req = client.request(reqwest::Method::GET, &format!("/api/tasks/{id}"));
+            let req = client.request(reqwest::Method::GET, &id.path());
             let task = client.send(req).await?.context("no such task")?;
             println!("{}", line(&task));
             // Only on `show`, never in a list: this is what somebody checking
@@ -427,7 +442,13 @@ async fn main() -> Result<()> {
         }
 
         Command::Start { id } => patch(&client, id, json!({ "status": "doing" })).await?,
-        Command::Done { id } => patch(&client, id, json!({ "status": "done" })).await?,
+        Command::Done { id, to } => {
+            let mut change = json!({ "status": "done" });
+            if let Some(to) = &to {
+                change["assignee"] = assignee(to);
+            }
+            patch(&client, id, change).await?
+        }
         Command::Move { id, to } => {
             patch(&client, id, json!({ "assignee": assignee(&to) })).await?
         }
@@ -467,14 +488,19 @@ async fn main() -> Result<()> {
         }
 
         Command::Sessions => {
-            let req = client.request(reqwest::Method::GET, "/api/sessions");
-            let sessions = client.send(req).await?.unwrap_or(json!([]));
-            for session in sessions.as_array().cloned().unwrap_or_default() {
+            let req = client.request(reqwest::Method::GET, "/api/holders");
+            let holders = client.send(req).await?.unwrap_or(json!([]));
+            for holder in holders.as_array().cloned().unwrap_or_default() {
+                // `open/total`, not `open`: a bare 0 reads as an idle session,
+                // and `0/56` is one that has cleared its plate. The id is the
+                // handle for `task move`, so it stays in the line even though
+                // the name is what is read.
                 println!(
-                    "{:<40} {:<24} {} open",
-                    session["id"].as_str().unwrap_or(""),
-                    session["name"].as_str().unwrap_or("—"),
-                    session["open"].as_i64().unwrap_or(0)
+                    "{:<40} {:<24} {:>3}/{:<4} open",
+                    holder["id"].as_str().unwrap_or(""),
+                    holder["name"].as_str().unwrap_or("—"),
+                    holder["open"].as_i64().unwrap_or(0),
+                    holder["total"].as_i64().unwrap_or(0),
                 );
             }
         }
@@ -492,8 +518,24 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn patch(client: &Client, id: u64, change: Value) -> Result<()> {
+/// Change a task, named either way.
+///
+/// An old name costs one extra round trip to resolve rather than a `by/…` PATCH
+/// route: the write surface stays one endpoint keyed on the id, which is the
+/// only thing that is guaranteed unique, and `recall#79` is what somebody types
+/// once when reading old prose — not what a client loops over.
+async fn patch(client: &Client, id: TaskRef, change: Value) -> Result<()> {
     client.writing()?;
+    let id = match id {
+        TaskRef::Id(id) => id,
+        origin => {
+            let req = client.request(reqwest::Method::GET, &origin.path());
+            let task = client.send(req).await?.context("no such task")?;
+            task["id"]
+                .as_u64()
+                .context("the service answered without an id")?
+        }
+    };
     let req = client
         .request(reqwest::Method::PATCH, &format!("/api/tasks/{id}"))
         .json(&change);

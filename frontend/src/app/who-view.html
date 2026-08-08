@@ -1,0 +1,34 @@
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else {
+  <header class="lede">
+    <h1>Who has what</h1>
+    <span class="all">{{ total() }} filed in all</span>
+  </header>
+
+  @if (rows().length === 0) {
+    <p class="empty">Nobody has anything. That is allowed.</p>
+  }
+
+  <ul class="holders">
+    @for (row of rows(); track row.kind + (row.id ?? '')) {
+      <li [class.quiet]="row.open === 0">
+        <mat-icon aria-hidden="true">
+          {{ row.kind === 'person' ? 'person' : row.kind === 'nobody' ? 'inbox' : 'smart_toy' }}
+        </mat-icon>
+        <span class="who">
+          <span class="name">{{ row.label }}</span>
+          @if (row.handle) {
+            <span class="handle">{{ row.handle }}</span>
+          }
+        </span>
+        <span class="count">
+          <span class="open">{{ row.open }}</span
+          ><span class="of">/{{ row.total }}</span>
+        </span>
+      </li>
+    }
+  </ul>
+
+  <p class="key">open / everything ever held — a finished task keeps its holder.</p>
+}

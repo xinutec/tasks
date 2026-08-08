@@ -402,3 +402,225 @@ async fn a_repo_filter_never_returns_the_tasks_that_belong_to_no_repo() {
         .expect("listing");
     assert_eq!(everything.len(), 2);
 }
+
+#[tokio::test]
+async fn finishing_a_task_records_who_finished_it() {
+    // `assignee` is the only place a LIST can say who did something — the
+    // history knows, and no list renders a history. A task closed while held by
+    // nobody therefore read as "done by nobody" everywhere it was seen again.
+    let pool = common::fresh_db().await;
+    // The route touches the session before every write; a session row has to
+    // exist for a task to point at one.
+    sessions::touch(&pool, "sess-1", Some("tasks"))
+        .await
+        .expect("recording a session");
+    let task = repo::create(&pool, filed("tasks", "Nobody is holding this"), &pippijn())
+        .await
+        .expect("filing");
+    assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
+
+    let done = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("finishing");
+
+    assert_eq!(done.assignee.kind, AssigneeKind::Session);
+    assert_eq!(done.assignee.id.as_deref(), Some("sess-1"));
+}
+
+#[tokio::test]
+async fn saying_where_a_finished_task_goes_beats_inferring_it() {
+    // A caller naming an assignee is more specific than the rule above reading
+    // one off the credential — handing work back while closing it must not be
+    // silently rewritten into keeping it.
+    let pool = common::fresh_db().await;
+    let task = repo::create(&pool, filed("tasks", "Yours now"), &pippijn())
+        .await
+        .expect("filing");
+
+    let done = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            assignee: Some(to_person()),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("finishing");
+
+    assert_eq!(done.assignee.kind, AssigneeKind::Person);
+    assert_eq!(done.assignee.id.as_deref(), Some("pippijn"));
+}
+
+#[tokio::test]
+async fn reopening_a_task_leaves_its_holder_alone() {
+    let pool = common::fresh_db().await;
+    // The route touches the session before every write; a session row has to
+    // exist for a task to point at one.
+    sessions::touch(&pool, "sess-1", Some("tasks"))
+        .await
+        .expect("recording a session");
+    let task = repo::create(&pool, filed("tasks", "Not finished after all"), &pippijn())
+        .await
+        .expect("filing");
+    repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("finishing");
+
+    let reopened = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Open),
+            ..Default::default()
+        },
+        &pippijn(),
+    )
+    .await
+    .expect("reopening");
+
+    // Whoever last had it is a better guess than nobody, and reopening is not
+    // a claim on the work.
+    assert_eq!(reopened.assignee.id.as_deref(), Some("sess-1"));
+}
+
+#[tokio::test]
+async fn a_migrated_task_is_reachable_by_what_it_used_to_be_called() {
+    // 46% of the 598 imported tasks could not keep their number, because a
+    // built-in number was unique only inside one session. `recall#79` is the
+    // handle old prose still contains, so it has to resolve to something.
+    let pool = common::fresh_db().await;
+    let task = repo::create(
+        &pool,
+        filed("recall", "Came from somewhere else"),
+        &pippijn(),
+    )
+    .await
+    .expect("filing");
+    sqlx::query("UPDATE tasks SET origin_session = 'recall', origin_number = 79 WHERE id = ?")
+        .bind(task.id)
+        .execute(&pool)
+        .await
+        .expect("recording where it came from");
+
+    let found = repo::by_origin(&pool, "recall", 79)
+        .await
+        .expect("looking it up")
+        .expect("a task");
+    assert_eq!(found.task.id, task.id);
+    assert_eq!(found.task.origin.as_deref(), Some("recall#79"));
+
+    // A number that belonged to a different session is a different task, which
+    // is the whole reason the pair is the key rather than the number.
+    assert!(
+        repo::by_origin(&pool, "health", 79)
+            .await
+            .expect("looking it up")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn who_holds_what_counts_the_finished_work_too() {
+    // `open` alone says who is busy and nothing about who has done anything: a
+    // task leaves every open list the moment it is finished. `0/2` and `0/0`
+    // are a session that has cleared its plate and one that never had one.
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", Some("recall"))
+        .await
+        .expect("recording a session");
+    sessions::touch(&pool, "sess-2", Some("idle"))
+        .await
+        .expect("recording a session");
+
+    for subject in ["One", "Two", "Three"] {
+        let task = repo::create(&pool, filed("recall", subject), &pippijn())
+            .await
+            .expect("filing");
+        repo::update(
+            &pool,
+            task.id,
+            Change {
+                assignee: Some(to_session("sess-1")),
+                ..Default::default()
+            },
+            &pippijn(),
+        )
+        .await
+        .expect("handing over");
+        if subject != "Three" {
+            repo::update(
+                &pool,
+                task.id,
+                Change {
+                    status: Some(Status::Done),
+                    // Explicit, so the finisher rule does not move it away from
+                    // the session whose tally this test is about.
+                    assignee: Some(to_session("sess-1")),
+                    ..Default::default()
+                },
+                &pippijn(),
+            )
+            .await
+            .expect("finishing");
+        }
+    }
+    // One for the person, one left in the pile.
+    let mine = repo::create(&pool, filed("recall", "Mine"), &pippijn())
+        .await
+        .expect("filing");
+    repo::update(
+        &pool,
+        mine.id,
+        Change {
+            assignee: Some(to_person()),
+            ..Default::default()
+        },
+        &pippijn(),
+    )
+    .await
+    .expect("taking it");
+    repo::create(&pool, filed("recall", "Unclaimed"), &pippijn())
+        .await
+        .expect("filing");
+
+    let holders = sessions::holders(&pool).await.expect("counting");
+    let find = |kind: &str, id: Option<&str>| {
+        holders
+            .iter()
+            .find(|h| h.kind == kind && h.id.as_deref() == id)
+            .unwrap_or_else(|| panic!("no {kind} row for {id:?}"))
+    };
+
+    let busy = find("session", Some("sess-1"));
+    assert_eq!((busy.open, busy.total), (1, 3));
+    let idle = find("session", Some("sess-2"));
+    assert_eq!((idle.open, idle.total), (0, 0));
+    let person = find("person", Some("pippijn"));
+    assert_eq!((person.open, person.total), (1, 1));
+    let pile = find("nobody", None);
+    assert_eq!((pile.open, pile.total), (1, 1));
+
+    // Whoever is holding most comes first; the person and the pile are
+    // landmarks rather than entries in that ranking, so they are always last.
+    assert_eq!(holders[holders.len() - 2].kind, "person");
+    assert_eq!(holders[holders.len() - 1].kind, "nobody");
+}

@@ -44,6 +44,18 @@ export const REPOS = [
   { repo: null, open: 2 },
 ];
 
+/** Who holds what. Carries the two hazards this screen has: an unnamed session,
+ *  drawn as 36 unbreakable characters beside a count that must not be pushed
+ *  off the edge; and a session that has cleared its plate (`0/56`), which is
+ *  the row the second number exists for. */
+export const HOLDERS = [
+  { kind: 'session', id: SESSIONS[0].id, name: 'memview', open: 12, total: 34 },
+  { kind: 'session', id: SESSIONS[1].id, open: 3, total: 3 },
+  { kind: 'session', id: '296dae53-3f84-4bd1-afbb-9ddcddedbdbb', name: 'health', open: 0, total: 56 },
+  { kind: 'person', id: 'pippijn', name: 'Pippijn', open: 4, total: 19 },
+  { kind: 'nobody', name: 'nobody', open: 7, total: 61 },
+];
+
 /** Real subjects from the corpus, plus one at the full 200-character cap. */
 export const TASKS = [
   {
@@ -139,4 +151,5 @@ export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DETAIL }));
   await page.route('**/api/repos', (r) => r.fulfill({ json: REPOS }));
   await page.route('**/api/sessions', (r) => r.fulfill({ json: SESSIONS }));
+  await page.route('**/api/holders', (r) => r.fulfill({ json: HOLDERS }));
 }
