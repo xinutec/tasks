@@ -1,0 +1,146 @@
+//! The index a prompt receives.
+//!
+//! This is the one file in the repository whose assertions are about *cost*.
+//! Every other test asks whether the app is correct; these ask whether it is
+//! still cheap, because the failure that produced this whole project was not a
+//! wrong answer — it was a correct answer that cost 86 kB to deliver 3.9 kB, on
+//! every turn, and nothing anywhere said so.
+
+use chrono::{TimeZone, Utc};
+use tasks::digest::{MAX_BYTES, render};
+use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};
+
+fn task(id: u64, repo: Option<&str>, subject: &str, status: Status, assignee: Assignee) -> Task {
+    let at = Utc.with_ymd_and_hms(2026, 8, 8, 12, 0, 0).unwrap();
+    Task {
+        id,
+        repo: repo.map(str::to_string),
+        subject: subject.to_string(),
+        status,
+        assignee,
+        detailed: false,
+        created_at: at,
+        updated_at: at,
+        closed_at: None,
+    }
+}
+
+fn open(id: u64, repo: &str, subject: &str) -> Task {
+    task(id, Some(repo), subject, Status::Open, Assignee::nobody())
+}
+
+fn person(id: &str) -> Assignee {
+    Assignee {
+        kind: AssigneeKind::Person,
+        id: Some(id.to_string()),
+        name: Some(id.to_string()),
+    }
+}
+
+#[test]
+fn nothing_open_says_nothing_at_all() {
+    // Silence is the contract: a hook prints this verbatim, and a line saying
+    // "0 open tasks" would be a per-turn cost for the absence of work.
+    assert_eq!(render(&[]), "");
+}
+
+#[test]
+fn one_line_per_task_and_the_line_is_the_subject() {
+    let out = render(&[
+        open(
+            1,
+            "memview",
+            "Stop walking every transcript on the request path",
+        ),
+        open(2, "memview", "The picture button is ugly on the left"),
+    ]);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 3, "one header and two tasks: {out}");
+    assert_eq!(
+        lines[1],
+        "- [ ] **#1** Stop walking every transcript on the request path"
+    );
+    assert!(lines[0].starts_with("2 open task(s)"), "{}", lines[0]);
+}
+
+#[test]
+fn one_repo_is_not_named_and_several_are() {
+    let single = render(&[open(1, "memview", "a")]);
+    assert!(!single.contains("memview ("), "{single}");
+
+    let both = render(&[open(1, "memview", "a"), open(2, "tasks", "b")]);
+    assert!(both.contains("across 2 repos"), "{both}");
+    assert!(both.contains("memview (1 open)"), "{both}");
+    assert!(both.contains("tasks (1 open)"), "{both}");
+}
+
+#[test]
+fn work_in_hand_is_counted_and_marked() {
+    let mut doing = open(2, "memview", "being worked on");
+    doing.status = Status::Doing;
+    let out = render(&[open(1, "memview", "waiting"), doing]);
+    assert!(out.contains("1 in progress"), "{out}");
+    assert!(out.contains("- [>] **#2** being worked on"), "{out}");
+}
+
+#[test]
+fn a_holder_is_named_and_nobody_is_not() {
+    let mut held = open(2, "memview", "yours");
+    held.assignee = person("pippijn");
+    let out = render(&[open(1, "memview", "in the pile"), held]);
+    assert!(out.contains("- [ ] **#1** in the pile\n"), "{out}");
+    assert!(out.contains("- [ ] **#2** yours (pippijn)"), "{out}");
+    assert!(!out.contains("(nobody)"), "{out}");
+}
+
+/// The property the whole service exists to hold.
+#[test]
+fn the_digest_stays_inside_its_budget_however_many_tasks_there_are() {
+    let many: Vec<Task> = (1..=4000)
+        .map(|id| {
+            open(
+                id,
+                "memview",
+                "a subject of a length that a real one might plausibly reach",
+            )
+        })
+        .collect();
+    let out = render(&many);
+    assert!(
+        out.len() <= MAX_BYTES + 400,
+        "digest is {} bytes for 4000 tasks",
+        out.len()
+    );
+    // And it says so rather than truncating quietly: a list that silently stops
+    // reads as a list that has ended.
+    assert!(out.contains("not shown"), "no notice of the omission");
+    assert!(
+        out.contains("over its"),
+        "the notice does not say why: {}",
+        out.lines().last().unwrap_or_default()
+    );
+}
+
+/// Ablation for the test above: without the budget the same input is enormous.
+/// Kept because a cost assertion that cannot fail is the failure mode this
+/// project has hit twice.
+#[test]
+fn the_budget_is_what_makes_the_test_above_pass() {
+    let many: Vec<Task> = (1..=4000)
+        .map(|id| {
+            open(
+                id,
+                "memview",
+                "a subject of a length that a real one might plausibly reach",
+            )
+        })
+        .collect();
+    let unbudgeted: usize = many
+        .iter()
+        .map(|t| t.subject.len() + t.id.to_string().len() + 12)
+        .sum();
+    assert!(
+        unbudgeted > MAX_BYTES * 8,
+        "the fixture is too small to prove anything: {unbudgeted} bytes"
+    );
+}

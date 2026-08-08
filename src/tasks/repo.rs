@@ -281,6 +281,33 @@ fn check_assignee(assignee: &Assignee) -> Result<()> {
     }
 }
 
+/// What to call an assignee in the history, resolved against the session table.
+///
+/// ⚠ **Written history needs the same name on both sides of an arrow.** A
+/// caller supplies an assignee as a kind and an id and nothing else, while the
+/// task being changed was read back through the join and carries a name — so
+/// rendering both with [`Assignee::label`] produced `nobody → sess-1` followed
+/// by `memview → pippijn`, two names for one conversation in two consecutive
+/// lines of the same task's history. The detail is rendered at write time on
+/// purpose (the actor may be gone by the time anybody reads it), which means the
+/// resolution has to happen at write time too.
+async fn label_of(tx: &mut Transaction<'_, MySql>, assignee: &Assignee) -> Result<String> {
+    let (AssigneeKind::Session, Some(id)) = (assignee.kind, assignee.id.as_deref()) else {
+        return Ok(assignee.label());
+    };
+    let name: Option<(Option<String>,)> = sqlx::query_as("SELECT name FROM sessions WHERE id = ?")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+        .context("resolving a session name")?;
+    // A session nobody has named yet reads as its id, which is truer than
+    // silence and is what the list shows too.
+    Ok(name
+        .and_then(|(name,)| name)
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| id.to_string()))
+}
+
 async fn record(
     tx: &mut Transaction<'_, MySql>,
     task_id: u64,
@@ -327,14 +354,8 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     let id = done.last_insert_id();
     record(&mut tx, id, actor, "created", Some(subject.clone())).await?;
     if kind != AssigneeKind::Nobody {
-        record(
-            &mut tx,
-            id,
-            actor,
-            "assigned",
-            Some(format!("→ {}", assignee.label())),
-        )
-        .await?;
+        let to = label_of(&mut tx, &assignee).await?;
+        record(&mut tx, id, actor, "assigned", Some(format!("→ {to}"))).await?;
     }
     tx.commit().await.context("committing a new task")?;
 
@@ -420,16 +441,13 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             .execute(&mut *tx)
             .await
             .context("moving a task")?;
+            let to = label_of(&mut tx, assignee).await?;
             record(
                 &mut tx,
                 id,
                 actor,
                 "assigned",
-                Some(format!(
-                    "{} → {}",
-                    before.assignee.label(),
-                    assignee.label()
-                )),
+                Some(format!("{} → {to}", before.assignee.label())),
             )
             .await?;
         }

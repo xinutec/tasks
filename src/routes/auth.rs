@@ -26,9 +26,15 @@ fn session_cookie(value: String) -> Cookie<'static> {
 }
 
 /// Only allow same-site internal paths as a post-login redirect target.
+///
+/// ⚠ **The backslash matters.** Browsers fold `\` to `/` inside a URL, so
+/// `/\evil.example` is `//evil.example` in disguise — a protocol-relative URL,
+/// and an open redirect out of a signed-in flow. `life`'s version of this
+/// function rejects both; memview's checks only `//` and is the weaker of the
+/// two. This is life's.
 pub fn validate_return_to(return_to: Option<&str>) -> String {
     match return_to {
-        Some(p) if p.starts_with('/') && !p.starts_with("//") => p.to_string(),
+        Some(p) if p.starts_with('/') && !p[1..].starts_with(['/', '\\']) => p.to_string(),
         _ => "/".to_string(),
     }
 }
