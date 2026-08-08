@@ -1,0 +1,104 @@
+---
+name: build
+
+# tasks (Rust backend + Angular frontend) — gate on fmt + clippy + cargo test
+# against a real MariaDB, and the frontend's eslint + typecheck + unit tests +
+# prod build + the shared phone-layout harness, then build and push
+# xinutec/tasks:latest to Docker Hub. The k8s manifests and the deploy live in
+# the home monorepo (pippijn code/kubes/tasks/k8s); the image tag is the only
+# contract between this repo and the deploy.
+#
+# Nobody's task list is anywhere in here: the tests run against a throwaway
+# database this workflow starts, and the real one is a cluster sidecar.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/flake.lock"
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    container: rust:1-bookworm
+    # The SQL here is runtime strings, so running the queries is the only check
+    # on them — the suite fails rather than skips without this, deliberately.
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: tasks
+          MARIADB_DATABASE: tasks
+          MARIADB_USER: tasks
+          MARIADB_PASSWORD: tasks
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      # `mariadb` is the service's hostname on the job's network, which only
+      # holds because this job runs in a container. On a bare runner the service
+      # is published on localhost instead, and this would resolve to nothing.
+      TASKS_TEST_DATABASE_URL: mysql://tasks:tasks@mariadb:3306/tasks
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup component add clippy rustfmt
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test -- --test-threads=1
+
+  fe-verify:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      # Before setup-node, which is what this action is for: setup-node's
+      # `cache: pnpm` shells out to `pnpm store path`, so pnpm has to exist
+      # first. The major is floating rather than pinned — pinning it here would
+      # be a second version number held level with the flake's by hand, and the
+      # lockfile is the thing that actually has to match.
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      # pnpm's ci: install exactly the lockfile, or fail.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+      - run: pnpm test
+      - run: pnpm run build
+      # Real-browser render check: icon fonts load, no text overlaps or overflow.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run ui-check
+
+  image:
+    needs: [verify, fe-verify]
+    # Docker Hub auth comes from repo secrets; the GITHUB_TOKEN only reads.
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: xinutec/tasks:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=registry,ref=xinutec/tasks:cache
+          cache-to: type=registry,ref=xinutec/tasks:cache

@@ -55,11 +55,11 @@ pub(crate) async fn fresh_db() -> MySqlPool {
             .await
             .unwrap_or_else(|e| panic!("running {statement}: {e}"));
     }
-    // Ids appear in assertions and in the digest, so the sequence is reset too:
-    // a test asserting `#1` should not depend on how many ran before it.
-    sqlx::query("ALTER TABLE tasks AUTO_INCREMENT = 1")
-        .execute(&pool)
-        .await
-        .expect("resetting the task id sequence");
+    // ⚠ **The id sequence is deliberately NOT reset.** An `ALTER TABLE …
+    // AUTO_INCREMENT` here would let a test assert on `#1`, and a test that
+    // depends on the id it is about to be given is one that breaks the day
+    // another test is added above it. Every assertion below names the id it was
+    // handed. (It is also DDL dev-lint's schema reader cannot parse, which
+    // silently disables its absence checks for the whole repository.)
     pool
 }

@@ -98,6 +98,14 @@
     white-space: nowrap;
   }
 
+  .what {
+    // The verb — created, assigned, status, edited — set apart from the words
+    // around it, since it is the only part of the line with a closed vocabulary.
+    font-variant: small-caps;
+    letter-spacing: 0.03em;
+    color: var(--mat-sys-primary);
+  }
+
   .detail {
     color: var(--mat-sys-on-surface-variant);
     overflow-wrap: break-word;

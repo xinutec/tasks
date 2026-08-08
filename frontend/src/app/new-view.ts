@@ -9,7 +9,8 @@ import { Router } from '@angular/router';
 
 import { reason } from './errors';
 import { sessionLabel } from './holder';
-import { Assignee, RepoCount, Session } from './models';
+import { Assignee } from './models';
+import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
 /**
@@ -39,6 +40,7 @@ export class NewView {
   readonly maxSubject = 200;
 
   private api = inject(TasksApi);
+  private store = inject(TaskStore);
   private router = inject(Router);
 
   readonly subject = signal('');
@@ -46,28 +48,16 @@ export class NewView {
   readonly repo = signal<string>('');
   readonly to = signal<string>('nobody');
 
-  readonly repos = signal<RepoCount[]>([]);
-  readonly sessions = signal<Session[]>([]);
+  readonly repos = this.store.repos;
   readonly sessionOptions = computed(() =>
-    this.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
+    this.store.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
   );
-  readonly me = signal<string | null>(null);
+  readonly me = computed(() => this.store.personId());
   readonly saving = signal(false);
   readonly failed = signal<string | null>(null);
 
   constructor() {
-    this.api.repos().subscribe({
-      next: (repos) => this.repos.set(repos),
-      error: () => this.repos.set([]),
-    });
-    this.api.sessions().subscribe({
-      next: (sessions) => this.sessions.set(sessions),
-      error: () => this.sessions.set([]),
-    });
-    this.api.me().subscribe({
-      next: (me) => this.me.set(me.kind === 'person' ? me.id : null),
-      error: () => this.me.set(null),
-    });
+    this.store.ensure();
   }
 
   private assignee(): Assignee | undefined {
@@ -95,6 +85,8 @@ export class NewView {
       .subscribe({
         next: (task) => {
           this.saving.set(false);
+          // The list does not know about this one yet.
+          this.store.refresh();
           // Straight to the task rather than back to the list: the next thing
           // wanted after filing one is usually to add to it.
           void this.router.navigate(['/t', task.id]);

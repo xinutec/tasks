@@ -28,9 +28,9 @@
         @for (count of repos(); track count.repo) {
           <button
             mat-button
-            [class.on]="repo() === (count.repo ?? null)"
-            (click)="pickRepo(count.repo ?? null)"
-            [attr.aria-pressed]="repo() === (count.repo ?? null)"
+            [class.on]="repo() === count.repo"
+            (click)="pickRepo(count.repo)"
+            [attr.aria-pressed]="repo() === count.repo"
           >
             {{ count.repo ?? 'no repo' }}
             <span class="count">{{ count.open }}</span>
@@ -50,17 +50,19 @@
         <h2>{{ group.repo }}</h2>
       }
       <ul class="tasks">
-        @for (task of group.tasks; track task.id) {
+        @for (row of group.tasks; track row.task.id) {
           <li>
-            <a class="task" [routerLink]="['/t', task.id]">
-              <mat-icon class="status" [class]="task.status">{{ statusIcon[task.status] }}</mat-icon>
-              <span class="subject">{{ task.subject }}</span>
+            <a class="task" [routerLink]="['/t', row.task.id]">
+              <mat-icon class="status" [class]="row.task.status">{{
+                statusIcon[row.task.status]
+              }}</mat-icon>
+              <span class="subject">{{ row.task.subject }}</span>
               <span class="meta">
-                <span class="id">#{{ task.id }}</span>
-                @if (task.assignee.kind !== 'nobody') {
-                  <span class="holder">{{ holder(task) }}</span>
+                <span class="id">#{{ row.task.id }}</span>
+                @if (row.task.assignee.kind !== 'nobody') {
+                  <span class="holder">{{ row.holder }}</span>
                 }
-                @if (task.detailed) {
+                @if (row.task.detailed) {
                   <mat-icon class="has-body" aria-label="has notes">notes</mat-icon>
                 }
               </span>

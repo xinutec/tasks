@@ -5,8 +5,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 
 import { STATUS_ICON, STATUS_LABEL, WHO_LABEL, Who, holderLabel, inBucket } from './holder';
-import { RepoCount, Task } from './models';
-import { TasksApi } from './tasks-api';
+import { Task } from './models';
+import { TaskStore } from './task-store';
 
 /**
  * The open list.
@@ -17,8 +17,9 @@ import { TasksApi } from './tasks-api';
  * it is presentation and can change without the API changing.
  *
  * The two filters answer the two questions actually asked of this screen:
- * *which project* and *whose is it*. Both are held in the URL, so a filtered
- * list is a link.
+ * *which project* and *whose is it*. Both are held as state on the screen rather
+ * than as a query the backend runs, because the whole list is already here and a
+ * round trip to hide four rows is a round trip a phone waits for.
  */
 @Component({
   selector: 'app-list-view',
@@ -27,31 +28,27 @@ import { TasksApi } from './tasks-api';
   imports: [RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule],
 })
 export class ListView {
-  private api = inject(TasksApi);
+  private store = inject(TaskStore);
 
   readonly statusIcon = STATUS_ICON;
   readonly statusLabel = STATUS_LABEL;
   readonly whoLabel = WHO_LABEL;
   readonly buckets: Who[] = ['all', 'mine', 'sessions', 'pile'];
 
-  readonly loading = signal(true);
-  readonly failed = signal<string | null>(null);
-  readonly tasks = signal<Task[]>([]);
-  readonly repos = signal<RepoCount[]>([]);
+  readonly loading = this.store.loading;
+  readonly failed = this.store.failed;
+  readonly repos = this.store.repos;
 
   readonly repo = signal<string | null>(null);
   readonly who = signal<Who>('all');
 
-  /** Who the signed-in person is, so `mine` means them and not a hard-coded
-   *  username. Null while `/api/me` is in flight, which `inBucket` treats as
-   *  "any person" rather than "nobody" — a list that is briefly empty reads as
-   *  no work. */
-  readonly me = signal<string | null>(null);
-
   readonly shown = computed(() =>
-    this.tasks().filter((task) => {
+    this.store.tasks().filter((task) => {
       if (this.repo() !== null && (task.repo ?? null) !== this.repo()) return false;
-      return inBucket(task.assignee, this.who(), this.me());
+      // `personId()` is null while `/api/me` is in flight, which `inBucket`
+      // treats as "any person" rather than "nobody" — a list that is briefly
+      // empty reads as no work.
+      return inBucket(task.assignee, this.who(), this.store.personId());
     }),
   );
 
@@ -69,35 +66,14 @@ export class ListView {
       // The empty key is the pile of tasks belonging to no checkout — named
       // rather than left blank, because a heading of nothing reads as a bug.
       repo: repo || 'no repo',
-      tasks,
+      tasks: tasks.map((task) => ({ task, holder: holderLabel(task.assignee) })),
     }));
   });
 
   readonly doing = computed(() => this.shown().filter((t) => t.status === 'doing').length);
 
   constructor() {
-    this.api.me().subscribe({
-      next: (me) => this.me.set(me.kind === 'person' ? me.id : null),
-      error: () => this.me.set(null),
-    });
-    this.api.list().subscribe({
-      next: (tasks) => {
-        this.tasks.set(tasks);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.failed.set('The tasks service did not answer.');
-        this.loading.set(false);
-      },
-    });
-    this.api.repos().subscribe({
-      next: (repos) => this.repos.set(repos),
-      error: () => this.repos.set([]),
-    });
-  }
-
-  holder(task: Task): string {
-    return holderLabel(task.assignee);
+    this.store.ensure();
   }
 
   pickRepo(repo: string | null): void {

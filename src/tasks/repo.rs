@@ -158,6 +158,10 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
 
 /// One task, its prose and its history. `None` when there is no such task.
 pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
+    // `select!` expands to `concat!`, so this argument IS a string literal by the
+    // time rustc sees it; only the linter's reader sees a macro. The alternative
+    // is writing the twelve-column projection out twice.
+    // dev-lint: allow-sqlx — a `concat!`ed literal, not a runtime-built string.
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
         .fetch_optional(pool)
@@ -212,14 +216,22 @@ pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
 }
 
 /// A task being filed.
+///
+/// ⚠ **The `skip_serializing_if` attributes change no behaviour** — this struct
+/// is deserialised and never serialised. They state the shape the *client*
+/// sends, which is the contract both sides are written against and what
+/// dev-lint's wire-mirror check compares `frontend/src/app/models.ts` against.
+/// Without them the check reads "always present" from a type nothing ever
+/// serialises, and asks the client to send a key whose absence is the meaning.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct NewTask {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo: Option<String>,
     pub subject: String,
     #[serde(default)]
     pub body: String,
     /// Who it is for. Absent leaves it in the pile.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
 }
 
@@ -228,9 +240,15 @@ pub struct NewTask {
 /// need not restate a body it has not read.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct Change {
+    // As in `NewTask`: absence is the meaning, and these attributes are how that
+    // is stated to the mirror check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
 }
 
@@ -460,6 +478,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 /// One task without its prose or history — the read every write does first,
 /// and the value every write returns.
 async fn list_one(pool: &MySqlPool, id: u64) -> Result<Task> {
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` above.
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
         .fetch_optional(pool)

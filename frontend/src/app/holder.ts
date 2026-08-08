@@ -29,9 +29,9 @@ export const STATUS_ICON: Record<Status, string> = {
  * name, leaving a blank chip — which reads as unassigned, and is a lie about a
  * task somebody is holding.
  */
-function said(value: string | undefined): string | undefined {
+function said(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
-  return trimmed === '' ? undefined : trimmed;
+  return trimmed === '' || trimmed === null ? undefined : trimmed;
 }
 
 /** What to call whoever is holding a task, in one word. */
@@ -42,7 +42,7 @@ export function holderLabel(assignee: Assignee): string {
 
 /** The same rule for a session row, which has the fields loose rather than in
  *  an `Assignee`. */
-export function sessionLabel(session: { id: string; name?: string }): string {
+export function sessionLabel(session: { id: string; name?: string | null }): string {
   return holderLabel({ kind: 'session', id: session.id, name: session.name });
 }
 

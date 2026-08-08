@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod auth;
+pub mod telemetry;
 
 use axum::Router;
 use axum::routing::{get, patch, post};
@@ -22,7 +23,8 @@ pub fn router(state: AppState) -> Router {
         .route("/tasks/{id}", get(api::detail).patch(api::update))
         .route("/sessions", get(api::session_list))
         .route("/sessions/{id}", patch(api::rename))
-        .route("/repos", get(api::repo_counts));
+        .route("/repos", get(api::repo_counts))
+        .route("/telemetry", post(telemetry::record));
 
     let app = Router::new()
         .route("/login", get(auth::login))

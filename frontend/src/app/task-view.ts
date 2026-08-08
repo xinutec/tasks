@@ -5,8 +5,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
+import { reason } from './errors';
 import { STATUS_ICON, STATUS_LABEL, holderLabel, sessionLabel } from './holder';
-import { Assignee, Session, Status, TaskDetail } from './models';
+import { Assignee, Status, TaskDetail } from './models';
+import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
 /**
@@ -29,18 +31,18 @@ export class TaskView {
   readonly id = input.required<string>();
 
   private api = inject(TasksApi);
+  private store = inject(TaskStore);
 
   readonly statusIcon = STATUS_ICON;
   readonly statusLabel = STATUS_LABEL;
   readonly statuses: Status[] = ['open', 'doing', 'done'];
 
   readonly task = signal<TaskDetail | null>(null);
-  readonly sessions = signal<Session[]>([]);
   /** The move menu's destinations, labelled here rather than in the template:
    *  a method call in a template runs on every change-detection pass, and
    *  `DL-ANGULAR-TEMPLATE-METHOD-CALL` exists because that is invisible. */
   readonly sessionOptions = computed(() =>
-    this.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
+    this.store.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
   );
   readonly loading = signal(true);
   readonly failed = signal<string | null>(null);
@@ -49,21 +51,14 @@ export class TaskView {
   readonly saving = signal(false);
   /** The signed-in person's own id, so "give it to me" names them rather than
    *  a username written into a template. */
-  readonly me = signal<string | null>(null);
+  readonly me = computed(() => this.store.personId());
 
   constructor() {
     // An effect rather than `ngOnInit`, because the router reuses this
     // component when only the parameter changes: going from #4 to #7 through a
     // link would otherwise leave #4 on the screen with #7 in the address bar.
     effect(() => this.load(Number(this.id())));
-    this.api.sessions().subscribe({
-      next: (sessions) => this.sessions.set(sessions),
-      error: () => this.sessions.set([]),
-    });
-    this.api.me().subscribe({
-      next: (me) => this.me.set(me.kind === 'person' ? me.id : null),
-      error: () => this.me.set(null),
-    });
+    this.store.ensure();
   }
 
   /** Hand it to the person. Hidden when a session is driving the page, which
@@ -77,10 +72,13 @@ export class TaskView {
     this.api.task(id).subscribe({
       next: (task) => {
         this.task.set(task);
+        // Withdrawn on success: an error signal that is only ever set stays on
+        // screen after the retry that fixed it (`DL-ANGULAR-ERROR-SIGNAL-STICKY`).
+        this.failed.set(null);
         this.loading.set(false);
       },
-      error: () => {
-        this.failed.set('No such task, or the service did not answer.');
+      error: (err: unknown) => {
+        this.failed.set(reason(err));
         this.loading.set(false);
       },
     });
@@ -107,12 +105,15 @@ export class TaskView {
         this.saving.set(false);
         // Re-read rather than patching the held object: the write also appends
         // to the history, and a page that showed the new status beside a
-        // history that had not moved would be telling two stories.
+        // history that had not moved would be telling two stories. `load`
+        // clears the failure on the way through.
         this.load();
+        // The list this task came from is now out of date in the same way.
+        this.store.refresh();
       },
-      error: () => {
+      error: (err: unknown) => {
         this.saving.set(false);
-        this.failed.set('That change did not stick.');
+        this.failed.set(reason(err));
       },
     });
   }

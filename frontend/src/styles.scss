@@ -26,6 +26,16 @@ body {
   margin: 0;
 }
 
+// An icon has one correct size, so this is unconditionally true and belongs
+// where invariants belong. Material gives `mat-icon` `overflow: hidden`, and a
+// flex item whose overflow is not `visible` loses the `min-width: auto` floor
+// that stops it collapsing below its content — so without this an icon beside a
+// long subject can be squeezed to nothing and CLIPPED rather than scaled, which
+// shows as a fragment of a glyph. (dev-lint DL-ANGULAR-ICON-SHRINK.)
+mat-icon {
+  flex-shrink: 0;
+}
+
 body {
   font-family: Roboto, sans-serif;
   // Paint the page with the theme surface (like the sibling viewers) rather

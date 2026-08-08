@@ -74,14 +74,14 @@ enum Command {
         body: Option<String>,
         /// Who it is for: `me`, `nobody`, or a session id.
         #[arg(long)]
-        to: Option<String>,
+        to: Option<To>,
     },
     /// Mark a task as being worked on.
     Start { id: u64 },
     /// Mark a task finished.
     Done { id: u64 },
     /// Hand a task over: `me`, `nobody`, or a session id.
-    Move { id: u64, to: String },
+    Move { id: u64, to: To },
     /// Change a task's words.
     Edit {
         id: u64,
@@ -148,16 +148,23 @@ impl Client {
         if !status.is_success() {
             // The service's own message, not a status code: it says which field
             // was wrong, and that is the whole value of the round trip.
-            let said = serde_json::from_str::<Value>(&body)
-                .ok()
-                .and_then(|v| v["error"].as_str().map(str::to_string))
-                .unwrap_or(body);
+            let said = match serde_json::from_str::<Value>(&body) {
+                Ok(parsed) => parsed["error"].as_str().map(str::to_string).unwrap_or(body),
+                // Not JSON at all — an ingress page, a proxy timeout. The body
+                // IS the message there, so nothing is being defaulted away.
+                Err(_) => body,
+            };
             bail!("{status}: {said}");
         }
         if body.trim().is_empty() {
             return Ok(None);
         }
-        Ok(serde_json::from_str(&body).ok())
+        // Propagated, never defaulted: a success whose body will not parse means
+        // this CLI and that service disagree about the API, and reporting it as
+        // "nothing came back" would send somebody looking at the database.
+        Ok(Some(serde_json::from_str(&body).with_context(|| {
+            format!("the service answered {status} with something this CLI could not read")
+        })?))
     }
 
     async fn text(&self, req: reqwest::RequestBuilder) -> Result<String> {
@@ -187,16 +194,44 @@ impl Client {
     }
 }
 
-/// `me` / `nobody` / a session id → the assignee the API takes.
-fn assignee(to: &str) -> Value {
+/// Who a task is being handed to.
+///
+/// Parsed once, at the argument boundary, rather than matched as a string where
+/// it is used: clap rejects nothing here — anything that is not one of the two
+/// words is a session id — but having the type means the three destinations are
+/// enumerated in one place and `assignee` cannot be handed a fourth spelling of
+/// "nobody" that nothing recognises.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum To {
+    /// Back in the pile, for whoever picks it up.
+    Nobody,
+    /// The person.
+    ///
+    /// ⚠ `me` means Pippijn even when a session types it. A session handing work
+    /// back says "this one is for you", which is what the word means in the
+    /// sentence being written; a session taking one on uses `start`, which is
+    /// what it actually wants.
+    Person,
+    Session(String),
+}
+
+impl std::str::FromStr for To {
+    type Err = std::convert::Infallible;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s {
+            "nobody" | "none" | "" => To::Nobody,
+            "me" | "pippijn" => To::Person,
+            id => To::Session(id.to_string()),
+        })
+    }
+}
+
+/// The assignee the API takes.
+fn assignee(to: &To) -> Value {
     match to {
-        "nobody" | "none" | "" => json!({ "kind": "nobody" }),
-        // `me` means the person, not the caller. A session handing work back
-        // says `me` about Pippijn because that is what it means in the sentence
-        // being typed — "this one is for you" — and a session assigning to
-        // itself uses `start`, which is what it actually wants.
-        "me" | "pippijn" => json!({ "kind": "person", "id": "pippijn" }),
-        id => json!({ "kind": "session", "id": id }),
+        To::Nobody => json!({ "kind": "nobody" }),
+        To::Person => json!({ "kind": "person", "id": "pippijn" }),
+        To::Session(id) => json!({ "kind": "session", "id": id }),
     }
 }
 
@@ -324,8 +359,8 @@ async fn main() -> Result<()> {
             if let Some(repo) = repo {
                 payload["repo"] = json!(repo);
             }
-            if let Some(to) = to {
-                payload["assignee"] = assignee(&to);
+            if let Some(to) = &to {
+                payload["assignee"] = assignee(to);
             }
             let req = client
                 .request(reqwest::Method::POST, "/api/tasks")
