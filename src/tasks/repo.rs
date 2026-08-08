@@ -63,6 +63,8 @@ struct Row {
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
     closed_at: Option<NaiveDateTime>,
+    origin_session: Option<String>,
+    origin_number: Option<u32>,
 }
 
 /// The session zone is pinned to UTC in `db::connect`, so a DB-clock column
@@ -96,6 +98,16 @@ impl Row {
             created_at: utc(self.created_at),
             updated_at: utc(self.updated_at),
             closed_at: self.closed_at.map(utc),
+            // Rendered here rather than stored joined, so the two columns stay
+            // separately queryable and the wire carries one readable thing.
+            origin: match (self.origin_session, self.origin_number) {
+                (Some(session), Some(number)) => Some(format!("{session}#{number}")),
+                // A session with no number, or the other way round, is a
+                // half-written import; say what is known rather than nothing.
+                (Some(session), None) => Some(session),
+                (None, Some(number)) => Some(format!("#{number}")),
+                (None, None) => None,
+            },
         }
     }
 }
@@ -113,7 +125,8 @@ macro_rules! select {
             "SELECT t.id, t.repo, t.subject, t.status, t.assignee_kind, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
             "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
-            "t.created_at, t.updated_at, t.closed_at ",
+            "t.created_at, t.updated_at, t.closed_at, ",
+            "t.origin_session, t.origin_number ",
             "FROM tasks t LEFT JOIN sessions s ON s.id = t.assignee_session",
             $tail
         )

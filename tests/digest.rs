@@ -22,6 +22,9 @@ fn task(id: u64, repo: Option<&str>, subject: &str, status: Status, assignee: As
         created_at: at,
         updated_at: at,
         closed_at: None,
+        // Never in a digest: the origin answers "is this the #79 I remember",
+        // which is a question asked of one task, not of a list.
+        origin: None,
     }
 }
 

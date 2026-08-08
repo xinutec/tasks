@@ -37,6 +37,9 @@ export interface Task {
   created_at: string;
   updated_at: string;
   closed_at?: string | null;
+  /** What it was called before it lived here — `health#79`. Absent for a task
+   *  filed in this service. */
+  origin?: string | null;
 }
 
 export interface TaskEvent {

@@ -336,6 +336,12 @@ async fn main() -> Result<()> {
             let req = client.request(reqwest::Method::GET, &format!("/api/tasks/{id}"));
             let task = client.send(req).await?.context("no such task")?;
             println!("{}", line(&task));
+            // Only on `show`, never in a list: this is what somebody checking
+            // whether #79 is *their* #79 needs, and it is dead weight on a line
+            // that is scanned rather than read.
+            if let Some(origin) = task["origin"].as_str() {
+                println!("  was {origin}");
+            }
             let body = task["body"].as_str().unwrap_or("").trim();
             if !body.is_empty() {
                 println!("\n{body}");

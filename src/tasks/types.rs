@@ -207,6 +207,15 @@ pub struct Task {
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub closed_at: Option<DateTime<Utc>>,
+    /// What this task was called before it lived here — `health#79`.
+    ///
+    /// Absent for a task filed in this service, which is most of them from now
+    /// on. Present for the 598 migrated out of the CLI's per-session stores,
+    /// where a number was unique only within one session: 46% of them could not
+    /// keep the number they had, so this is what says whether `#79` means the
+    /// `#79` somebody is remembering. See `migrations/0002_origin.sql`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 /// One task with its prose and its history — what opening a task returns.

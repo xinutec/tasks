@@ -9,6 +9,14 @@
         @if (t.repo) {
           <span class="repo">{{ t.repo }}</span>
         }
+        @if (t.origin) {
+          <!-- What it was called before. 46% of the migrated tasks could not
+               keep their number, so this is what says whether the id above
+               means the one somebody is remembering. -->
+          <span class="origin" title="what this was called before it lived here">{{
+            t.origin
+          }}</span>
+        }
         <span class="status" [class]="t.status">{{ statusLabel[t.status] }}</span>
       </p>
     </header>

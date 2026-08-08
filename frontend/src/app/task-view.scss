@@ -19,6 +19,13 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .origin {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px dashed var(--mat-sys-outline);
+    font-variant-numeric: tabular-nums;
+  }
+
   .repo,
   .status {
     padding: 2px 8px;
