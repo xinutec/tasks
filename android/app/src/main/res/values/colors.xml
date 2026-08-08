@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive-icon background, matching the web icon and the page's
+         theme-color (frontend/public/icon.svg, frontend/src/index.html).
+
+         ⚠ Deliberately NOT memview's #5E35B1. The two apps sit side by side on
+         the same launcher, and an icon that differs only by its mark is one you
+         tap wrong at a glance. -->
+    <color name="ic_launcher_background">#1565C0</color>
+</resources>

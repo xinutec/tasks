@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- What the launcher says under the icon. "Tasks" rather than the repo's
+         name, because the phone is where it is read as a to-do list. -->
+    <string name="app_name">Tasks</string>
+</resources>

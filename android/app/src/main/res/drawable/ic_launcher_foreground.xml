@@ -1,0 +1,49 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A ticked box with an arrow leaving it — the same mark as the web app's
+         frontend/public/icon.svg. The app's thesis is not the list but the
+         handover, so the arrow is half the icon.
+
+         Ported rather than reused: a vector drawable has no <rect>, so the box
+         is a closed path, and the SVG's two-tone stroke (#fff + #bbdefb)
+         collapses to solid white — this same drawable is the <monochrome> layer
+         for themed icons, where a tinted second colour would wash out.
+
+         The source viewBox is 0 0 64 64 and the adaptive-icon safe zone is the
+         middle 72 of 108, so the group scales by 72/64 = 1.125 and is offset by
+         (108 - 64 * 1.125) / 2 = 18. -->
+    <group
+        android:scaleX="1.125"
+        android:scaleY="1.125"
+        android:translateX="18"
+        android:translateY="18">
+        <!-- The box: rect x=12 y=16 w=26 h=26 rx=5, as a rounded path. -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineJoin="round"
+            android:pathData="M17,16 L33,16 a5,5 0 0 1 5,5 L38,37 a5,5 0 0 1 -5,5 L17,42 a5,5 0 0 1 -5,-5 L12,21 a5,5 0 0 1 5,-5 Z" />
+        <!-- The tick. -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M18,29 L24,35 L34,22" />
+        <!-- The handover: a line and an arrowhead. -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:pathData="M20,52 L44,52" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M38,46 L45,52 L38,58" />
+    </group>
+</vector>
