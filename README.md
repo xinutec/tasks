@@ -90,10 +90,29 @@ task rename <name>                        # tell the service what I call myself
 ```
 
 `--body -` reads stdin, which is how a session writes a long one without fighting
-shell quoting. `TASKS_SESSION` is this conversation's id (the prompt hook prints
-it); `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret. **Never on
-argv** — a token in a command line is in every process listing on the machine and
-in the transcript of the session that typed it.
+shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.
+**Never on argv** — a token in a command line is in every process listing on the
+machine and in the transcript of the session that typed it.
+
+**Identity needs no setup.** Claude Code sets `$CLAUDE_CODE_SESSION_ID` in every
+shell it runs, and the CLI reads it: `--session`, then `$TASKS_SESSION`, then
+that. A session therefore cannot forget to say who it is, nor mistype *another*
+conversation's id into its own history. There is no anonymous mode for reads
+either — the service needs both halves of the credential to answer at all — so a
+bare token gets a 401 that names the missing half rather than the generic one
+that once read as a bad token.
+
+### Installing it
+
+```sh
+nix build .#task            # just the binary, here
+```
+
+On the Mac it is installed through home-manager (`pippijn/mac-config`) like every
+other tool, pinned to this repo's committed HEAD. ⚠ **A commit here is not an
+installed CLI**: `~/.config/home-manager/switch.sh` re-locks and activates, and
+until it runs every session is holding the previous build. The gate has a row for
+the package, so the flake cannot rot unnoticed between switches.
 
 `task digest` prints the byte count on stderr. That number is the per-turn cost of
 the whole system, and it is the one worth watching.

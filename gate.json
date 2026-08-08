@@ -168,6 +168,18 @@
     {
       "argv": [
         "nix",
+        "build",
+        ".#task",
+        "--no-link"
+      ],
+      "cwd": ".",
+      "env": {},
+      "name": "the CLI still packages",
+      "timeout_s": 1800
+    },
+    {
+      "argv": [
+        "nix",
         "run",
         "../dev-lint#gate",
         "--",

@@ -123,6 +123,18 @@ in  { name = "tasks"
         , env = G.oneAngularWorker
         , timeout_s = 1800
         }
+      , {-  The CLI is delivered by nix, not by the container, so `cargo build`
+            passing says nothing about whether a session can still install it:
+            the package pins its own source fileset and its own lockfile, and
+            adding a file outside that fileset breaks the build here and nowhere
+            else. Cheap after the first run — nix answers from the store unless
+            something it depends on actually moved.
+        -}
+        G.Check::{
+        , name = "the CLI still packages"
+        , argv = [ "nix", "build", ".#task", "--no-link" ]
+        , timeout_s = 1800
+        }
       , G.checkTable "../dev-lint"
       , G.devLint "../"
       ]

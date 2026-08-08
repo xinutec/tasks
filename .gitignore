@@ -7,3 +7,4 @@
 # Written by frontend/scripts/stamp-version.mjs at build time — the running
 # build stamp, which is a fact about a build and not about the source.
 frontend/src/app/build-info.ts
+/result

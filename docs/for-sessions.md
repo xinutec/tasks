@@ -23,8 +23,9 @@ task show <id>            # one task: its prose, and its history
 
 Nothing to set up: the CLI reads `$CLAUDE_CODE_SESSION_ID`, which is already in
 every shell you run, so it knows which conversation it is and files your changes
-against you. If it ever says *"a token but no session id"*, your `task` is older
-than 2026-08-08 — rebuild it from `~/Code/tasks`.
+against you. It is installed by home-manager and lives in the nix profile — if
+`task` is not found, or says *"a token but no session id"*, the fix is
+`~/.config/home-manager/switch.sh` rather than anything in your shell.
 
 Your old numbers were kept **where they were free**. They were unique only
 inside your own session, and 124 numbers were claimed by more than one — so 46%
