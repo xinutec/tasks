@@ -106,6 +106,14 @@ enum Command {
 ///
 /// Never on argv: a token in a command line is in every process listing on the
 /// machine and in the transcript of the session that typed it.
+///
+/// dev-lint: allow-env-contract — read by THIS BINARY, which is the Mac's CLI
+/// and is not what the container runs. The env-contract join reads the whole
+/// repo's sources against the deployment's env, and the deployment must not
+/// supply this: the pod is the thing the token authenticates *to*, so a copy of
+/// it inside the pod would be a credential held by its own verifier for no
+/// caller. `src/main.rs` reads `AGENT_TOKEN` instead, which the manifest does
+/// supply.
 fn token() -> Option<String> {
     if let Ok(value) = std::env::var("TASKS_TOKEN")
         && !value.trim().is_empty()
