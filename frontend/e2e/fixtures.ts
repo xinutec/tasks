@@ -51,7 +51,13 @@ export const REPOS = [
 export const HOLDERS = [
   { kind: 'session', id: SESSIONS[0].id, name: 'memview', open: 12, total: 34 },
   { kind: 'session', id: SESSIONS[1].id, open: 3, total: 3 },
-  { kind: 'session', id: '296dae53-3f84-4bd1-afbb-9ddcddedbdbb', name: 'health', open: 0, total: 56 },
+  {
+    kind: 'session',
+    id: '296dae53-3f84-4bd1-afbb-9ddcddedbdbb',
+    name: 'health',
+    open: 0,
+    total: 56,
+  },
   { kind: 'person', id: 'pippijn', name: 'Pippijn', open: 4, total: 19 },
   { kind: 'nobody', name: 'nobody', open: 7, total: 61 },
 ];
@@ -123,7 +129,12 @@ interpreter</strong>: it evaluates as far as the text determines and stops.</p>
 <table><thead><tr><th>module</th><th>question it answers</th></tr></thead>
 <tbody><tr><td>reader/src/shell_ops.rs</td><td>what does one command do — to which paths?</td></tr></tbody></table>`,
   events: [
-    { at: '2026-08-05T09:00:00Z', kind: 'created', detail: 'Abstractly evaluate', actor: 'pippijn' },
+    {
+      at: '2026-08-05T09:00:00Z',
+      kind: 'created',
+      detail: 'Abstractly evaluate',
+      actor: 'pippijn',
+    },
     {
       at: '2026-08-08T09:00:00Z',
       kind: 'assigned',
@@ -136,6 +147,26 @@ interpreter</strong>: it evaluates as far as the text determines and stops.</p>
       detail: 'open → doing',
       // The raw id, which is what an unnamed session's history line carries.
       actor: SESSIONS[1].id,
+    },
+  ],
+};
+
+/** The same task, closed without being done.
+ *
+ *  A separate fixture because a dropped task is only ever *read*: it is gone
+ *  from every list the API answers, so the one screen that can show one is this
+ *  one, and the strike-through on the chip has nowhere else to be looked at. */
+export const DROPPED = {
+  ...DETAIL,
+  status: 'dropped',
+  closed_at: '2026-08-08T12:00:00Z',
+  events: [
+    ...DETAIL.events,
+    {
+      at: '2026-08-08T12:00:00Z',
+      kind: 'status',
+      detail: 'doing → dropped',
+      actor: 'pippijn',
     },
   ],
 };

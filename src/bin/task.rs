@@ -25,10 +25,11 @@
 //! contains no other handle.
 //!
 //! ```text
-//! task list [--repo R] [--mine] [--done]   what is open
+//! task list [--repo R] [--mine] [--done]    what is open
 //! task show <id>                            one task, its prose and its history
 //! task add <subject> [--repo R] [--body -] [--to me|<session>|nobody]
 //! task start <id> / task done <id> [--to W] move it along
+//! task drop <id>                            close it without doing it
 //! task move <id> me|<session>|nobody        hand it over
 //! task edit <id> [--subject S] [--body -]   change the words
 //! task digest [--repo R]                    exactly what a prompt receives
@@ -118,6 +119,13 @@ enum Command {
         #[arg(long)]
         to: Option<To>,
     },
+    /// Close a task WITHOUT doing it: overtaken, obsolete, decided against.
+    ///
+    /// The counterpart to `done`, and the reason both exist: a task that has
+    /// gone out of date has to be able to leave the list without anybody being
+    /// credited with having done it. If why it went matters, write it — `task
+    /// edit <id> --body -` — because that is prose and there is no field for it.
+    Drop { id: TaskRef },
     /// Hand a task over: `me`, `nobody`, or a session id.
     Move { id: TaskRef, to: To },
     /// Change a task's words.
@@ -337,6 +345,7 @@ fn line(task: &Value) -> String {
     let marker = match task["status"].as_str().unwrap_or("open") {
         "doing" => "- [>]",
         "done" => "- [x]",
+        "dropped" => "- [-]",
         _ => "- [ ]",
     };
     let mut out = format!(
@@ -496,6 +505,9 @@ async fn main() -> Result<()> {
                 change["assignee"] = assignee(to);
             }
             patch(&client, cli.json, id, change).await?
+        }
+        Command::Drop { id } => {
+            patch(&client, cli.json, id, json!({ "status": "dropped" })).await?
         }
         Command::Move { id, to } => {
             patch(&client, cli.json, id, json!({ "assignee": assignee(&to) })).await?

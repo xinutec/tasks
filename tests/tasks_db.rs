@@ -84,7 +84,7 @@ async fn a_finished_task_leaves_every_open_list_and_stays_in_the_record() {
     let all = repo::list(
         &pool,
         &Filter {
-            include_done: true,
+            include_closed: true,
             ..Default::default()
         },
     )
@@ -623,4 +623,196 @@ async fn who_holds_what_counts_the_finished_work_too() {
     // landmarks rather than entries in that ranking, so they are always last.
     assert_eq!(holders[holders.len() - 2].kind, "person");
     assert_eq!(holders[holders.len() - 1].kind, "nobody");
+}
+
+/// The one test tying `Status::is_open` to the SQL that means the same thing.
+///
+/// ⚠ **This is the test the fourth status was added for.** Every query that
+/// meant *open* said `status <> 'done'`, which was correct while there were
+/// three states and became a silent miscount the moment `dropped` existed —
+/// nothing would have failed, the numbers would just have been wrong. So this
+/// puts one task in each of the four states and asks every counting query in
+/// the service what it sees, rather than trusting that the six call sites were
+/// all found.
+#[tokio::test]
+async fn a_dropped_task_is_not_open_anywhere() {
+    let pool = common::fresh_db().await;
+    let mut ids = Vec::new();
+    for (subject, status) in [
+        ("Still to do", Status::Open),
+        ("In hand", Status::Doing),
+        ("Finished", Status::Done),
+        ("Overtaken by events", Status::Dropped),
+    ] {
+        let task = repo::create(&pool, filed("tasks", subject), &pippijn())
+            .await
+            .expect("filing");
+        if status != Status::Open {
+            repo::update(
+                &pool,
+                task.id,
+                Change {
+                    status: Some(status),
+                    ..Default::default()
+                },
+                &pippijn(),
+            )
+            .await
+            .expect("moving it along");
+        }
+        ids.push((task.id, status));
+    }
+
+    let open = repo::list(&pool, &Filter::default())
+        .await
+        .expect("listing");
+    let open_subjects: Vec<&str> = open.iter().map(|t| t.subject.as_str()).collect();
+    assert_eq!(
+        open_subjects,
+        ["Still to do", "In hand"],
+        "the open list is exactly the tasks Status::is_open admits"
+    );
+
+    // The digest reads that same list, and this is the property the whole
+    // service is built to keep: a dropped task never reaches a prompt.
+    let digest = tasks::digest::render(&open);
+    assert!(
+        !digest.contains("Overtaken by events"),
+        "a dropped task reached the digest: {digest}"
+    );
+    assert!(
+        !digest.contains("Finished"),
+        "a done task reached the digest"
+    );
+
+    let all = repo::list(
+        &pool,
+        &Filter {
+            include_closed: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("listing everything");
+    assert_eq!(all.len(), 4, "closed means kept, both kinds of closed");
+
+    // Closed is closed: a dropped task has a closing time, which `IF(? =
+    // 'done', …)` would not have given it.
+    let dropped = all
+        .iter()
+        .find(|t| t.status == Status::Dropped)
+        .expect("the dropped task");
+    assert!(
+        dropped.closed_at.is_some(),
+        "a dropped task was left with no closing time"
+    );
+
+    // The person filed and closed all four, so the finisher rule handed them
+    // over — including the dropped one, which is the point: a list has to be
+    // able to say who decided it was not worth doing.
+    assert_eq!(dropped.assignee.kind, AssigneeKind::Person);
+
+    // The filter bar's per-repo count, which is the query least like the others
+    // and the one a reader is most likely to miss.
+    let counts = tasks::routes::api::repos_with_work(&pool)
+        .await
+        .expect("counting repos");
+    assert_eq!(counts.len(), 1);
+    assert_eq!(counts[0].open, 2, "the filter bar counted a closed task");
+
+    // Every session row carries its own open count, by a seventh query.
+    sessions::touch(&pool, "sess-1", Some("tasks"))
+        .await
+        .expect("recording a session");
+    let listed = sessions::list(&pool).await.expect("listing sessions");
+    assert_eq!(listed[0].open, 0, "a session that holds nothing");
+
+    // `open` is what is in hand; `total` is that plus what was done. The
+    // dropped one is in neither, because it is not work and was not done.
+    //
+    // The person closed two of the four, so the finisher rule handed both to
+    // them and left the other two in the pile. **`1` is the whole assertion**:
+    // they closed two tasks and one of them counts, because the other was
+    // dropped. Counting it would read as having finished twice the work.
+    let holders = sessions::holders(&pool).await.expect("counting");
+    let person = holders
+        .iter()
+        .find(|h| h.kind == "person")
+        .expect("the person's row");
+    assert_eq!(
+        (person.open, person.total),
+        (0, 1),
+        "the dropped task was counted as work done"
+    );
+    let pile = holders
+        .iter()
+        .find(|h| h.kind == "nobody")
+        .expect("the pile's row");
+    assert_eq!(
+        (pile.open, pile.total),
+        (2, 2),
+        "the pile is the two nobody has closed"
+    );
+}
+
+/// Dropping and finishing are different answers to the same question, and the
+/// difference has to survive being read back.
+#[tokio::test]
+async fn dropping_a_task_credits_nobody_with_doing_it() {
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", Some("memview"))
+        .await
+        .expect("recording a session");
+    let task = repo::create(
+        &pool,
+        filed("memview", "Wait for a thing that never came"),
+        &pippijn(),
+    )
+    .await
+    .expect("filing");
+
+    let dropped = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Dropped),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("dropping");
+    assert_eq!(dropped.status, Status::Dropped);
+    assert_eq!(dropped.assignee.id.as_deref(), Some("sess-1"));
+
+    // The history says which of the two it was, in the words the status uses.
+    let detail = repo::get(&pool, task.id)
+        .await
+        .expect("reading")
+        .expect("the task");
+    let moves: Vec<&str> = detail
+        .events
+        .iter()
+        .filter(|e| e.kind == "status")
+        .filter_map(|e| e.detail.as_deref())
+        .collect();
+    assert_eq!(moves, ["open → dropped"]);
+
+    // Reopening it leaves the holder alone and takes the closing time back off.
+    let reopened = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Open),
+            ..Default::default()
+        },
+        &pippijn(),
+    )
+    .await
+    .expect("reopening");
+    assert_eq!(reopened.assignee.id.as_deref(), Some("sess-1"));
+    assert!(
+        reopened.closed_at.is_none(),
+        "a reopened task is still closed"
+    );
 }

@@ -11,6 +11,7 @@ use crate::digest;
 use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
+use crate::still_open;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Task, TaskDetail};
 
@@ -83,7 +84,9 @@ pub async fn digest(
 #[derive(Deserialize)]
 pub struct ListQuery {
     repos: Option<String>,
-    /// Include finished tasks. Off unless asked, everywhere.
+    /// Include closed tasks — the done and the dropped alike. Off unless asked,
+    /// everywhere. Still spelled `done` on the wire: it is what every existing
+    /// caller sends, and "show me the closed ones too" is what it always meant.
     #[serde(default)]
     done: bool,
     session: Option<String>,
@@ -98,7 +101,7 @@ pub async fn list(
 ) -> Result<Json<Vec<Task>>, AppError> {
     let filter = Filter {
         repos: repo_list(q.repos.as_deref()),
-        include_done: q.done,
+        include_closed: q.done,
         session: q.session,
         person: q.person,
     };
@@ -211,11 +214,19 @@ pub struct RepoCount {
 }
 
 /// Which repositories have work, and how much — the client's filter bar.
-pub async fn repos_with_work(app: &AppState) -> Result<Vec<RepoCount>, AppError> {
-    let rows: Vec<(Option<String>, i64)> = sqlx::query_as(
-        "SELECT repo, COUNT(*) FROM tasks WHERE status <> 'done' GROUP BY repo ORDER BY repo",
-    )
-    .fetch_all(&app.db)
+///
+/// Takes the pool rather than the whole state so the DB suite can call it: this
+/// is one of the six queries that meant "open" and said "not done", and the one
+/// furthest from anything else a test already touches.
+pub async fn repos_with_work(pool: &sqlx::MySqlPool) -> Result<Vec<RepoCount>, AppError> {
+    // dev-lint: allow-sqlx — a `concat!`ed literal; `still_open!` is the only
+    // place the open vocabulary is spelled in SQL.
+    let rows: Vec<(Option<String>, i64)> = sqlx::query_as(concat!(
+        "SELECT repo, COUNT(*) FROM tasks WHERE ",
+        still_open!("status"),
+        " GROUP BY repo ORDER BY repo",
+    ))
+    .fetch_all(pool)
     .await?;
     Ok(rows
         .into_iter()
@@ -227,5 +238,5 @@ pub async fn repo_counts(
     Access(_): Access,
     State(app): State<AppState>,
 ) -> Result<Json<Vec<RepoCount>>, AppError> {
-    Ok(Json(repos_with_work(&app).await?))
+    Ok(Json(repos_with_work(&app.db).await?))
 }

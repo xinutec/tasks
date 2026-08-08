@@ -14,12 +14,17 @@ export const STATUS_LABEL: Record<Status, string> = {
   open: 'open',
   doing: 'in progress',
   done: 'done',
+  dropped: 'dropped',
 };
 
 export const STATUS_ICON: Record<Status, string> = {
   open: 'radio_button_unchecked',
   doing: 'pending',
   done: 'check_circle',
+  // Not a second tick in another colour: a glance at a closed task has to say
+  // which of the two closings it was, and a cross is the only shape that reads
+  // as "this did not happen" without being read as "this failed".
+  dropped: 'cancel',
 };
 
 /**

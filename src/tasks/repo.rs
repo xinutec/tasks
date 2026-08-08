@@ -10,6 +10,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 
 use crate::error::AppError;
+use crate::still_open;
 use crate::tasks::types::{
     Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Status, Task, TaskDetail,
 };
@@ -24,9 +25,13 @@ pub struct Filter {
     /// person's own list. A session asks by repo, so it is never handed the
     /// personal items that have no checkout.
     pub repos: Vec<String>,
-    /// Include finished tasks. Off by default, and every injected path leaves
-    /// it off: see the invariant in `lib.rs`.
-    pub include_done: bool,
+    /// Include closed tasks — both the done and the dropped. Off by default,
+    /// and every injected path leaves it off: see the invariant in `lib.rs`.
+    ///
+    /// One flag rather than two, because the caller asking this question is
+    /// asking to see history at all; which *kind* of closed a task is is a
+    /// property of the row it then reads.
+    pub include_closed: bool,
     /// Only tasks held by this session id.
     pub session: Option<String>,
     /// Only tasks held by this person (Nextcloud user id).
@@ -141,8 +146,8 @@ macro_rules! select {
 pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     let mut query = QueryBuilder::<MySql>::new(select!(""));
     query.push(" WHERE 1 = 1");
-    if !filter.include_done {
-        query.push(" AND t.status <> 'done'");
+    if !filter.include_closed {
+        query.push(concat!(" AND ", still_open!("t.status")));
     }
     if !filter.repos.is_empty() {
         query.push(" AND t.repo IN (");
@@ -451,16 +456,18 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         && status != before.status
     {
         // `closed_at` moves with the status in the same statement, so a row
-        // cannot be done with no closing time or open with one.
-        sqlx::query(
-            "UPDATE tasks SET status = ?, closed_at = IF(? = 'done', NOW(), NULL) WHERE id = ?",
-        )
-        .bind(status)
-        .bind(status)
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .context("changing a status")?;
+        // cannot be closed with no closing time or open with one. The condition
+        // is computed here rather than written as SQL against the word: the
+        // vocabulary lives in `Status::is_open`, whose `match` is exhaustive,
+        // and `IF(? = 'done', …)` was how a dropped task would have ended up
+        // closed with no closing time.
+        sqlx::query("UPDATE tasks SET status = ?, closed_at = IF(?, NOW(), NULL) WHERE id = ?")
+            .bind(status)
+            .bind(!status.is_open())
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .context("changing a status")?;
         record(
             &mut tx,
             id,
@@ -471,7 +478,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         .await?;
     }
 
-    // Finishing a task makes the finisher its holder.
+    // Closing a task makes the closer its holder.
     //
     // ⚠ **Not decoration: `assignee` is the only place a LIST can say who did
     // something.** The history knows — every change records its actor — but no
@@ -479,12 +486,18 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // "done by nobody" everywhere it is ever seen again. That was true of #461,
     // finished by the session that wrote this.
     //
+    // **Dropping counts as closing here**, on the same argument read the other
+    // way: *who decided this was not worth doing* is exactly as much a thing a
+    // list should be able to say as who did it, and the status beside the name
+    // is what distinguishes the two.
+    //
     // An explicit assignee in the same change wins: a caller saying where a task
     // should go is more specific than this rule inferring it from who is asking.
-    // Only on the way IN to `done` — reopening leaves the holder alone, because
-    // the last person to touch it is a better guess than nobody.
-    let finisher = (change.status == Some(Status::Done)
-        && before.status != Status::Done
+    // Only on the way OUT of open — reopening leaves the holder alone, because
+    // the last person to touch it is a better guess than nobody, and done →
+    // dropped is a correction to a closed task rather than a new closing.
+    let finisher = (change.status.is_some_and(|status| !status.is_open())
+        && before.status.is_open()
         && change.assignee.is_none())
     .then(|| match actor {
         Actor::Person(id) => Assignee {

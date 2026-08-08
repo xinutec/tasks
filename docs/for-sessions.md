@@ -105,6 +105,7 @@ what stops the per-turn attachment; this is the whole point of the exercise.
 ```sh
 task start <id>                 # you have picked it up  (shows as - [>])
 task done <id>                  # finished
+task drop <id>                  # closed WITHOUT doing it (shows as - [-])
 task move <id> me               # hand it to Pippijn
 task move <id> <session-id>     # hand it to another conversation
 task move <id> nobody           # put it back in the pile
@@ -120,11 +121,20 @@ body, and says so.
 
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
 every list afterwards says who did it — pass `--to me` (or anyone) in the same
-breath if it should go somewhere else instead.
+breath if it should go somewhere else instead. `task drop` does the same, and
+that is deliberate: who decided a thing was not worth doing is as much a fact as
+who did it.
 
-⚠ **Delete nothing to "tidy up".** A finished task is kept here on purpose:
-under the old file scheme it was deleted because git recorded the finishing
-better, and there is no git behind a database. `task done` is the whole of it.
+⚠ **A task that has gone out of date is `drop`, not `done`.** Both close it and
+both take it out of every prompt; the difference is that `done` credits somebody
+with having done it, and a list that says that when nobody did is a list you
+stop trusting. Overtaken, obsolete, decided against, superseded by how the code
+actually went — all `drop`. If *why* matters, write it: `task edit <id> --body -`.
+
+⚠ **Delete nothing to "tidy up".** A closed task is kept here on purpose: under
+the old file scheme it was deleted because git recorded the finishing better,
+and there is no git behind a database. `task done` and `task drop` are the whole
+of it — between them they cover every reason a task should stop appearing.
 
 ## Which repos you see
 

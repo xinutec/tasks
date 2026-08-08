@@ -56,16 +56,27 @@ macro_rules! varchar_enum {
 
 /// Where a task stands.
 ///
-/// Three states, matching the two the file scheme wrote (`- [ ]` and `- [>]`)
-/// plus the one it expressed by deleting the line. `Doing` is not decoration: a
-/// session that has picked a task up says so, and that is how the other reader
-/// knows not to start it.
+/// Two open states and two ways out. The first three match the two the file
+/// scheme wrote (`- [ ]` and `- [>]`) plus the one it expressed by deleting the
+/// line. `Doing` is not decoration: a session that has picked a task up says so,
+/// and that is how the other reader knows not to start it.
+///
+/// ⚠ **`Dropped` is a closed task that was never done**, and it exists because
+/// the alternative was worse in both directions: leaving a task that has gone
+/// out of date open for ever, or closing it as `Done` and having every later
+/// list credit somebody with work nobody did. The distinction is only ever read
+/// *after* the fact — nothing injected selects a closed row either way — so it
+/// buys nothing at all except an honest record, which is the whole of the case
+/// for it. There is deliberately no *reason* field beside it: if why it went
+/// matters, that is prose, and the body is where prose lives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     Open,
     Doing,
     Done,
+    /// Closed without being done: overtaken, obsolete, or decided against.
+    Dropped,
 }
 
 impl Status {
@@ -74,26 +85,35 @@ impl Status {
             Status::Open => "open",
             Status::Doing => "doing",
             Status::Done => "done",
+            Status::Dropped => "dropped",
         }
     }
 
     /// Whether this status is still work. The digest selects on exactly this,
     /// and it is a method rather than a comparison at each call site so that
     /// adding a fourth state cannot quietly leave one of them behind.
+    ///
+    /// It very nearly did. Every SQL query that meant *open* spelled it
+    /// `status <> 'done'`, which was the same thing right up until it wasn't —
+    /// see [`still_open!`](crate::still_open), which is this predicate's other
+    /// half and the only place the vocabulary appears in SQL.
     pub fn is_open(self) -> bool {
         match self {
             Status::Open | Status::Doing => true,
-            Status::Done => false,
+            Status::Done | Status::Dropped => false,
         }
     }
 
     /// The checkbox the file scheme used, kept because the digest still renders
-    /// it and a session has read thousands of these lines.
+    /// it and a session has read thousands of these lines. `- [-]` is the one
+    /// spelling that was never in those files, because the scheme had no way to
+    /// say it.
     pub fn marker(self) -> &'static str {
         match self {
             Status::Open => "- [ ]",
             Status::Doing => "- [>]",
             Status::Done => "- [x]",
+            Status::Dropped => "- [-]",
         }
     }
 }
@@ -105,9 +125,33 @@ impl FromStr for Status {
             "open" => Ok(Status::Open),
             "doing" => Ok(Status::Doing),
             "done" => Ok(Status::Done),
+            "dropped" => Ok(Status::Dropped),
             other => Err(format!("unknown task status {other:?}")),
         }
     }
+}
+
+/// SQL for *this task is still work*, spelled in exactly one place.
+///
+/// ⚠ **The obvious spelling is the wrong one.** Six queries said `status <>
+/// 'done'` and meant "open", which was true while there were three states and
+/// false the moment [`Status::Dropped`] existed — a dropped task would have gone
+/// on being counted as open in the list, the digest's repo counts and all three
+/// of the `/who` tallies, none of which would have failed loudly.
+///
+/// A macro rather than a `const` because sqlx 0.9 takes only `&'static str`:
+/// this expands inside `concat!` and the compiler assembles the literal, so
+/// there is still nothing built at runtime for anybody to audit. The column is
+/// an argument because half these queries join and have to qualify it.
+///
+/// `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere` is what ties this to
+/// [`Status::is_open`]: nothing else can compare a match arm against a string
+/// living in a database.
+#[macro_export]
+macro_rules! still_open {
+    ($column:literal) => {
+        concat!($column, " IN ('open', 'doing')")
+    };
 }
 
 varchar_enum!(Status);

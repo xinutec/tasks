@@ -16,8 +16,10 @@
 //!    open the task, and nothing more.
 //! 2. **Only open tasks.** The file scheme achieved this by deleting finished
 //!    ones; this service keeps them, so the guarantee moved into the query.
-//!    [`Filter::include_done`](crate::tasks::repo::Filter) is never set on this
-//!    path.
+//!    [`Filter::include_closed`](crate::tasks::repo::Filter) is never set on
+//!    this path, and *open* is [`Status::is_open`] rather than "not done" — a
+//!    dropped task is closed and belongs in a prompt no more than a finished
+//!    one does.
 //! 3. **A budget, enforced rather than hoped for.** Past [`MAX_BYTES`] the
 //!    digest stops and says how many it left out. An index that quietly grows
 //!    into content is the exact failure this replaced, and the old hook refused

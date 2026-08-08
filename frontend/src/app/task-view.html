@@ -62,6 +62,31 @@
           </button>
         }
       </mat-menu>
+
+      <!-- Dropping is behind a menu rather than beside the three status
+           buttons, and not to hide it: those three are a progression a task
+           moves along, and this is the other exit. A fourth button would also
+           have pushed the row past the edge of a phone, which the layout
+           harness would have caught and the shape would still have been wrong. -->
+      <button
+        mat-icon-button
+        [matMenuTriggerFor]="more"
+        [disabled]="saving()"
+        aria-label="More actions"
+      >
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <mat-menu #more="matMenu">
+        <!-- "not done" rather than nothing: the verb alone reads as *delete* to
+             anybody who has not been told otherwise, and this deletes nothing.
+             Longer wordings than this ran the label flush to the panel's edge
+             on a phone, which the overflow check passes and a screenshot does
+             not — the menu is right-anchored, so the text is what sizes it. -->
+        <button mat-menu-item [disabled]="t.status === 'dropped'" (click)="drop()">
+          <mat-icon>cancel</mat-icon>
+          <span>Drop it — not done</span>
+        </button>
+      </mat-menu>
     </div>
 
     @if (saving()) {

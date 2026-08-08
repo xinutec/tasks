@@ -11,8 +11,12 @@
  * fussily. `?` mirrors `skip_serializing_if`; `| null` mirrors `Option`.
  */
 
-/** Where a task stands. Mirrors `tasks::types::Status`. */
-export type Status = 'open' | 'doing' | 'done';
+/** Where a task stands. Mirrors `tasks::types::Status`.
+ *
+ *  Two open states and two ways out: `dropped` is a task closed without being
+ *  done — overtaken, obsolete, decided against — and it is a separate word from
+ *  `done` so that no list credits anybody with work nobody did. */
+export type Status = 'open' | 'doing' | 'done' | 'dropped';
 
 /** Who holds a task. Mirrors `tasks::types::AssigneeKind`. */
 export type AssigneeKind = 'nobody' | 'person' | 'session';

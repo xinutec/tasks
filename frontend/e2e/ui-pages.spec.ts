@@ -9,7 +9,7 @@ import {
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 
-import { SESSIONS, TASKS, mockApi } from './fixtures';
+import { DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
  * L2 phone-width layout harness. Render the real screens at a Pixel viewport
@@ -97,6 +97,31 @@ test('a task — the move menu, with an unnamed session in it @ phone width', as
   // with itself, and that a 36-character id does not push it off the screen.
   await expectNoTextOverlaps(page, testInfo, '.mat-mdc-menu-panel');
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+});
+
+test('a task — the overflow menu, whose one item is a sentence @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/t/92');
+  await page.getByRole('button', { name: 'More actions' }).click();
+  // The label is a phrase rather than a verb, because "drop" alone reads as
+  // "delete" — and a phrase in a menu on a phone is where width runs out.
+  await page.getByRole('menuitem', { name: 'Drop it' }).waitFor();
+  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-menu-panel');
+  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+});
+
+test('a dropped task — closed, and not counted as done @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DROPPED }));
+  await page.goto('/t/92');
+  await page.getByText('dropped').first().waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+  await expectNoClippedIcons(page, testInfo);
 });
 
 test('filing a task — two fields side by side or stacked @ phone width', async ({

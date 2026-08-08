@@ -35,6 +35,9 @@ export class TaskView {
 
   readonly statusIcon = STATUS_ICON;
   readonly statusLabel = STATUS_LABEL;
+  /** The progression, as buttons. `dropped` is deliberately not in it — it is
+   *  the other way out rather than the next step along, and it lives in the
+   *  overflow menu. */
   readonly statuses: Status[] = ['open', 'doing', 'done'];
 
   readonly task = signal<TaskDetail | null>(null);
@@ -90,6 +93,13 @@ export class TaskView {
 
   setStatus(status: Status): void {
     this.change({ status });
+  }
+
+  /** Close it without doing it. Undone by tapping `open`, like any other status
+   *  — there is no separate "undrop", because there is no separate state to
+   *  come back from. */
+  drop(): void {
+    this.change({ status: 'dropped' });
   }
 
   moveTo(assignee: Assignee): void {

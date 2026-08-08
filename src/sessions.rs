@@ -15,6 +15,7 @@ use serde::Serialize;
 use sqlx::MySqlPool;
 
 use crate::error::AppError;
+use crate::still_open;
 
 type Result<T> = std::result::Result<T, AppError>;
 
@@ -68,6 +69,13 @@ pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()>
 /// about who has done anything, because a task leaves `open` the moment it is
 /// finished. A session with `0/56` has cleared its plate, and a bare `0` reads
 /// as an idle one.
+///
+/// ⚠ **A dropped task is in neither number.** It is not work in hand and it is
+/// not work done, and counting it would make `total` mean "tasks that reached an
+/// end", which is a figure nobody wants — dropping ten stale items would read as
+/// having finished ten. So a task that is dropped simply leaves the tally, which
+/// is the honest thing for a number whose whole job is to say what somebody has
+/// got through.
 #[derive(Debug, Clone, Serialize)]
 pub struct Holder {
     /// `session`, `person` or `nobody` — the same vocabulary as an assignee.
@@ -84,6 +92,30 @@ pub struct Holder {
     pub total: i64,
 }
 
+/// Count a group of tasks as `open` and `done`.
+///
+/// ⚠ **Both halves are counted, and `total` is added up in Rust.** Not for want
+/// of a third `SUM`: the two figures must agree, and expressing the second as
+/// "everything except dropped" would have put the closed vocabulary into SQL
+/// three more times, in the exact shape (`<> 'something'`) that made the fourth
+/// status a silent miscount in the first place. `still_open!` and `= 'done'`
+/// are the only two things these queries know how to say. `SUM` of a boolean
+/// comes back DECIMAL, hence the cast — sqlx will not decode it into `i64`, and
+/// nothing but a real query finds that out.
+macro_rules! tally {
+    ($extra:literal, $tail:literal) => {
+        concat!(
+            "SELECT ",
+            $extra,
+            "CAST(COALESCE(SUM(",
+            still_open!("t.status"),
+            "), 0) AS SIGNED) AS open, ",
+            "CAST(COALESCE(SUM(t.status = 'done'), 0) AS SIGNED) AS done ",
+            $tail
+        )
+    };
+}
+
 /// Who holds what: every session, Pippijn, and the pile.
 ///
 /// Three queries rather than one union, because the three groups are counted
@@ -91,58 +123,54 @@ pub struct Holder {
 /// absence of both. Ordered by what is open, most first, since the question
 /// this answers is "who is loaded"; ties go to the larger history.
 pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
-    let sessions: Vec<(String, Option<String>, i64, i64)> = sqlx::query_as(
-        "SELECT s.id, s.name, \
-                CAST(COALESCE(SUM(t.status <> 'done'), 0) AS SIGNED) AS open, \
-                COUNT(t.id) AS total \
-         FROM sessions s \
-         LEFT JOIN tasks t ON t.assignee_session = s.id \
-         GROUP BY s.id, s.name",
-    )
+    // dev-lint: allow-sqlx — a `concat!`ed literal assembled by `tally!`, not a
+    // string built at runtime; the only interpolation is another macro.
+    let sessions: Vec<(String, Option<String>, i64, i64)> = sqlx::query_as(tally!(
+        "s.id, s.name, ",
+        "FROM sessions s LEFT JOIN tasks t ON t.assignee_session = s.id GROUP BY s.id, s.name"
+    ))
     .fetch_all(pool)
     .await
     .context("counting what each session holds")?;
 
     let mut out: Vec<Holder> = sessions
         .into_iter()
-        .map(|(id, name, open, total)| Holder {
+        .map(|(id, name, open, done)| Holder {
             kind: "session".into(),
             id: Some(id),
             name,
             open,
-            total,
+            total: open + done,
         })
         .collect();
     out.sort_by_key(|h| (-h.open, -h.total));
 
-    let (open, total): (i64, i64) = sqlx::query_as(
-        "SELECT CAST(COALESCE(SUM(status <> 'done'), 0) AS SIGNED), COUNT(*) \
-         FROM tasks WHERE assignee_kind = 'person'",
-    )
-    .fetch_one(pool)
-    .await
-    .context("counting what the person holds")?;
+    // dev-lint: allow-sqlx — as above.
+    let (open, done): (i64, i64) =
+        sqlx::query_as(tally!("", "FROM tasks t WHERE t.assignee_kind = 'person'"))
+            .fetch_one(pool)
+            .await
+            .context("counting what the person holds")?;
     out.push(Holder {
         kind: "person".into(),
         id: Some("pippijn".into()),
         name: Some("Pippijn".into()),
         open,
-        total,
+        total: open + done,
     });
 
-    let (open, total): (i64, i64) = sqlx::query_as(
-        "SELECT CAST(COALESCE(SUM(status <> 'done'), 0) AS SIGNED), COUNT(*) \
-         FROM tasks WHERE assignee_kind = 'nobody'",
-    )
-    .fetch_one(pool)
-    .await
-    .context("counting the pile")?;
+    // dev-lint: allow-sqlx — as above.
+    let (open, done): (i64, i64) =
+        sqlx::query_as(tally!("", "FROM tasks t WHERE t.assignee_kind = 'nobody'"))
+            .fetch_one(pool)
+            .await
+            .context("counting the pile")?;
     out.push(Holder {
         kind: "nobody".into(),
         id: None,
         name: Some("nobody".into()),
         open,
-        total,
+        total: open + done,
     });
 
     Ok(out)
@@ -150,15 +178,16 @@ pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
 
 /// Every session known, most recently seen first.
 pub async fn list(pool: &MySqlPool) -> Result<Vec<Session>> {
-    let rows: Vec<Row> = sqlx::query_as(
-        "SELECT s.id, s.name, s.first_seen, s.last_seen, \
-                COUNT(t.id) AS open \
-         FROM sessions s \
-         LEFT JOIN tasks t \
-                ON t.assignee_session = s.id AND t.status <> 'done' \
-         GROUP BY s.id, s.name, s.first_seen, s.last_seen \
-         ORDER BY s.last_seen DESC",
-    )
+    // dev-lint: allow-sqlx — a `concat!`ed literal; the only interpolation is
+    // `still_open!`, which is where the open vocabulary lives.
+    let rows: Vec<Row> = sqlx::query_as(concat!(
+        "SELECT s.id, s.name, s.first_seen, s.last_seen, COUNT(t.id) AS open ",
+        "FROM sessions s ",
+        "LEFT JOIN tasks t ON t.assignee_session = s.id AND ",
+        still_open!("t.status"),
+        " GROUP BY s.id, s.name, s.first_seen, s.last_seen ",
+        "ORDER BY s.last_seen DESC",
+    ))
     .fetch_all(pool)
     .await
     .context("listing sessions")?;

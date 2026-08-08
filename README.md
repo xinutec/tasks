@@ -51,9 +51,25 @@ a done row.
 | thing | what it is |
 | --- | --- |
 | a **task** | a one-line subject, a markdown body, a status, and a holder |
+| a **status** | `open`, `doing`, `done`, `dropped` — two open states and two ways out |
 | a **holder** | nobody, the person, or a session |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
 | a **repo** | which checkout the work is in, as a bare name; may be absent |
+
+⚠ **Status and holder are independent, and that is why there are four states and
+not seven.** "New" is `open` with no holder; "assigned" is `open` with one;
+"accepted" is `doing`. Chaining those into one ladder would have made handing a
+task back to the pile a *status* change, which would then have to un-say that
+somebody had started it — and the whole point of this service is that work moves
+between a person and a conversation repeatedly.
+
+⚠ **`dropped` is a closed task that was never done**, for one that has been
+overtaken, has gone out of date, or has been decided against. It exists because
+the two alternatives are both worse: leaving it open for ever, or closing it as
+`done` and having every later list credit somebody with work nobody did. It buys
+nothing anywhere else — nothing injected selects a closed row of either kind —
+and there is deliberately no *reason* field beside it, because a reason is prose
+and the body is where prose goes.
 
 ⚠ **A session's id is its identity and its name is an attribute.** A session
 renames itself as its job changes and pushes the new name here; that is an
@@ -80,12 +96,13 @@ of every prompt.
 ## The CLI
 
 ```sh
-task list [--repo R] [--mine] [--done]   # what is open
+task list [--repo R] [--mine] [--done]    # what is open
 task show <id> [--body]                   # one task, its prose and its history
 task sessions                             # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
 task add "<subject>" [--repo R] [--body -] [--to me|<session>|nobody]
 task start <id> / task done <id> [--to W] # move it along
+task drop <id>                            # close it without doing it
 task move <id> me|<session>|nobody        # hand it over
 task edit <id> [--subject S] [--body -]   # change the words
 task digest [--repo R]                    # exactly what a prompt receives
@@ -125,11 +142,21 @@ old prose contains no other. `GET /api/tasks/by/{session}/{number}` is the
 endpoint, two path segments rather than an escaped `#`, which is the fragment
 delimiter and would truncate the request.
 
-**Finishing a task makes the finisher its holder.** `assignee` is the only place
-a *list* can say who did something — the history records every actor, and no list
+**Closing a task makes the closer its holder.** `assignee` is the only place a
+*list* can say who did something — the history records every actor, and no list
 renders a history — so a task closed while held by `nobody` read as "done by
-nobody" everywhere it was seen again. An explicit assignee in the same change
-wins (`task done <id> --to me`), and reopening leaves the holder alone.
+nobody" everywhere it was seen again. Dropping counts, on the same argument read
+backwards: who decided a thing was not worth doing belongs in a list too, and the
+status beside the name is what tells the two apart. An explicit assignee in the
+same change wins (`task done <id> --to me`), and reopening leaves the holder
+alone.
+
+⚠ **"Open" is `Status::is_open`, never `status <> 'done'`.** Six queries spelled
+it the second way, which was the same thing until it wasn't: a dropped task would
+have gone on counting as open in the list, the filter bar and all three `/who`
+tallies, and none of them would have failed. `still_open!` is now the only place
+that vocabulary appears in SQL, and `a_dropped_task_is_not_open_anywhere` is what
+holds the Rust and the SQL halves together.
 
 **`--json` on any read command prints what the service answered, verbatim**, and
 `task show <id> --body` prints the stored markdown alone. Both exist so a claim
