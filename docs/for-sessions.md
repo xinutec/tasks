@@ -15,11 +15,16 @@ created with full bodies. On one session that reached 527 kB a turn, 93% of it a
 ## 1. Find your tasks
 
 ```sh
-task list                 # everything open, in the repos you have claimed
-task list --mine          # only what is assigned to you
-task list --done          # including what is finished
+task list --mine --done   # YOUR list — every task you hold, finished or not
+task list --mine          # just what is still on your plate
 task show <id>            # one task: its prose, and its history
+task list                 # everyone's open work, every repo — not yours
 ```
+
+⚠ **`task list` is not your list.** It is every open task in the service,
+across every repo, and it does not honour the repo claim the way the prompt
+digest does — that filtering happens in the hook, not here. `--mine` is the
+one that answers "what am I holding".
 
 Nothing to set up: the CLI reads `$CLAUDE_CODE_SESSION_ID`, which is already in
 every shell you run, so it knows which conversation it is and files your changes
@@ -28,14 +33,18 @@ against you. It is installed by home-manager and lives in the nix profile — if
 `~/.config/home-manager/switch.sh` rather than anything in your shell.
 
 Your old numbers were kept **where they were free**. They were unique only
-inside your own session, and 124 numbers were claimed by more than one — so 46%
-had to change. Every migrated task says what it used to be called:
+inside your own session, and 124 numbers were claimed by more than one — so 178
+of the 620 (29%) had to move; open tasks got first refusal, and 114 of 125 are
+on the number they had. Every migrated task says what it used to be called:
 
 ```sh
 task show 79
-# - [ ] #79   Some subject   [health]
-#   was health#79            ← it really is the one you remember
+# - [ ] #79   Exercise the share-sheet upload against Isis  [recall]  (recall)
+#   was recall#79            ← so this is recall's #79, not health's
 ```
+
+⚠ **Four sessions had a `#79`.** If a number you remember now shows a subject you
+do not, that is why — and the `was` line is how you tell in one command.
 
 **If a number moved, use the old name — it still works.** Every command that
 takes a task accepts `79`, `#79`, or `recall#79`:
@@ -50,10 +59,17 @@ a session called it cannot.
 
 ## 2. Check the list looks like yours
 
-Compare against `~/.claude/tasks/<your-session-id>/` before deleting anything.
-The counts should match, subjects verbatim, and every `description` is now the
-task's body. If something is missing, **stop and say so** — the old files are
-still there, and that is the only reason recovery is possible.
+Compare `task list --mine --done` against `~/.claude/tasks/<your-session-id>/`
+before deleting anything — one line per `<n>.json`, subjects verbatim, and every
+`description` now the task's body:
+
+```sh
+ls ~/.claude/tasks/$CLAUDE_CODE_SESSION_ID/*.json | wc -l   # what you had
+task list --mine --done | wc -l                             # what is here
+```
+
+If something is missing, **stop and say so** — the old files are still there,
+and that is the only reason recovery is possible.
 
 ## 3. Delete your built-in tasks
 
@@ -100,15 +116,26 @@ The hook shows the repos **you have claimed**, not everything:
 ~/Code/xinutec-infra/mac-mini/claude_tasks.py --session <your-id> --claim ~/Code/one ~/Code/two
 ```
 
-Your session id is printed by the hook itself when you have never claimed
-anything. `--claim none` if you want to be left alone.
+Your own id is `$CLAUDE_CODE_SESSION_ID` — `echo` it, or read it off the hook,
+which prints it when you have never claimed anything. `--claim none` if you want
+to be left alone.
+
+⚠ **The claim moves your PROMPT, not your list.** A session that has claimed
+nothing gets an empty digest, which looks exactly like a failed migration —
+while `task list --mine` still shows everything it holds. Check with the CLI
+before concluding anything is lost.
 
 ## If it is not answering
 
-The service is on isis, over the VPN. The hook keeps a cache and prints the last
-known list rather than an error, so a quiet spell is invisible; the CLI will say
-`no answer — check the VPN`. Nothing is lost — the list is on isis, not in your
-context.
+The service is on isis, over the VPN. The hook keeps a 60-second cache and
+prints the last known list rather than an error, so a quiet spell is invisible in
+your prompt; the CLI is blunter and reports `reaching the tasks service` with the
+cause under it. Check the VPN first — that is the usual answer. Nothing is lost
+either way: the list is on isis, not in your context.
+
+`task sessions` shows who holds what — every session, Pippijn and the pile, as
+`open/total`. The same thing is at <https://tasks.xinutec.org> for Pippijn, which
+is why a task's subject is written to be read by somebody who is not you.
 
 `task --help` is the authority on the commands. `README.md` beside this file is
 the authority on why any of it is shaped this way.
