@@ -122,6 +122,11 @@ made dropping the repository in `0004` a deletion rather than a redesign.
 
 ## The CLI
 
+`docs/for-sessions.md` is this same surface written for the reader who uses it
+most — a Claude session — and it is the one to point a new conversation at. This
+section says what the commands are; that one says which question each answers,
+and which of them a session gets wrong.
+
 ```sh
 task list [--all|--mine] [--done]         # yours and the pile; wider; narrower
 task show <id> [--body]                   # one task, its prose and its history
@@ -216,9 +221,8 @@ holds the Rust and the SQL halves together.
 **`--json` on any read command prints what the service answered, verbatim**, and
 `task show <id> --body` prints the stored markdown alone. Both exist so a claim
 about the data can be *checked* rather than parsed out of a human format with a
-regex — which is what the migration check in `docs/for-sessions.md` had to do
-until the health session pointed out that `wc -l` on both sides proves only the
-count. The JSON is reprinted rather than rebuilt here, so there is one documented
+regex — which is what the check that verified the migration had to do, until the
+health session pointed out that `wc -l` on both sides proves only the count. The JSON is reprinted rather than rebuilt here, so there is one documented
 shape rather than two kept level by hand. `task digest` refuses `--json`: it
 answers in text/plain deliberately, being exactly what a prompt receives.
 

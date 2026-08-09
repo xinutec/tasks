@@ -1,11 +1,9 @@
-# Your tasks moved. Here is how to find them, and how to clear the old ones.
+# The task list, for a session
 
-Read this once, do the four steps, and carry on.
-
-Your task list is no longer in `~/.claude/tasks/<your-session-id>/`. It is in a
-service at `https://tasks.xinutec.org`, and the open items are already being
-injected into your prompt by the `UserPromptSubmit` hook — that is the block at
-the top of your context beginning *"N open task(s)"*.
+Your tasks live in a service at `https://tasks.xinutec.org`. The open ones are
+already in your context — the `UserPromptSubmit` hook injects them as the block
+beginning *"N open task(s)"* — so reading them costs you nothing. `task` is how
+you change them.
 
 **Do not use the built-in task tool.** Whatever it stores is re-sent as a
 `task_reminder` attachment 1.75 times per message, carrying every task ever
@@ -18,7 +16,7 @@ exists. It is wrong here, and the digest at the top of your context now says so
 on every turn too — because an instruction read once cannot outweigh one
 repeated every message. `task add` is how you file work.
 
-## 1. Find your tasks
+## Find your tasks
 
 ```sh
 task list                 # yours, and the pile — what you could pick up
@@ -39,71 +37,17 @@ Which leaves three questions with three names. `task list` is *what could I pick
 up*; `--mine` is *what am I holding*; `--all` is *what is going on*, and it is
 the expensive one on purpose.
 
+`--json` on any read command prints what the service answered, verbatim, and
+`task show <id> --body` prints the stored markdown alone — so a claim about the
+data can be checked rather than parsed back out of a human format.
+
 Nothing to set up: the CLI reads `$CLAUDE_CODE_SESSION_ID`, which is already in
 every shell you run, so it knows which conversation it is and files your changes
 against you. It is installed by home-manager and lives in the nix profile — if
 `task` is not found, or says *"a token but no session id"*, the fix is
 `~/.config/home-manager/switch.sh` rather than anything in your shell.
 
-Your old numbers were kept **where they were free**. They were unique only
-inside your own session, and 124 numbers were claimed by more than one — so 178
-of the 620 (29%) had to move; open tasks got first refusal, and 114 of 125 are
-on the number they had.
-
-⚠ **The `recall#79` spelling is GONE (2026-08-09), and so is the `was` line.**
-It existed to carry you across the migration, Pippijn confirmed every session had
-made it, and a second id space that nothing needs is a second id space to keep
-level. Every command takes `79` or `#79`, and that is now the whole of it.
-
-Nothing was orphaned by the removal: the mapping was spent before the columns
-were dropped. 29 tasks whose bodies carried machine-written `blockedBy` /
-`blocks` numbers in the old space, and 21 further citations in ordinary prose,
-were rewritten to live ids first.
-
-**If you are holding an old number in your own notes**, and `task show <n>` shows
-a subject you do not recognise, that is the four-sessions-had-a-`#79` problem and
-there is no longer a lookup for it. Search instead — `task list --mine --done`
-prints every task you have ever held, and the subject is what you actually
-remember.
-
-## 2. Check the list looks like yours
-
-Compare `task list --mine --done` against `~/.claude/tasks/<your-session-id>/`
-before deleting anything — one line per `<n>.json`, subjects verbatim, and every
-`description` now the task's body:
-
-```sh
-# Every subject, both sides, sorted — a real diff rather than a count.
-task list --mine --done --json | jq -r '.[].subject' | sort > /tmp/now
-jq -r .subject ~/.claude/tasks/$CLAUDE_CODE_SESSION_ID/*.json | sort > /tmp/was
-diff /tmp/was /tmp/now && echo "verbatim"
-```
-
-And a body, if you want to check one:
-
-```sh
-task show <id> --body | diff - <(jq -r .description ~/.claude/tasks/$CLAUDE_CODE_SESSION_ID/<n>.json)
-```
-
-`--json` prints what the service answered, verbatim, on any read command; the
-bodies gained a footer where the import kept an `activeForm` or a `blockedBy`,
-so expect that one addition and nothing else.
-
-If something is missing, **stop and say so** — the old files are still there,
-and that is the only reason recovery is possible.
-
-## 3. Delete your built-in tasks
-
-Only after step 2, and only your own directory:
-
-```sh
-rm ~/.claude/tasks/<your-session-id>/*.json
-```
-
-Keep `.highwatermark` and `.lock` — the CLI owns those. Deleting the JSON is
-what stops the per-turn attachment; this is the whole point of the exercise.
-
-## 4. Work the list
+## Work the list
 
 ```sh
 task start <id>                 # you have picked it up  (shows as - [>])
@@ -176,7 +120,7 @@ all of them — and it is the answer to "what if I re-file something already in
 hand": if it is in hand it is somebody's, and if it is nobody's it is yours to
 take.
 
-Looking wider is something you ask for: `task list` shows every open task
+Looking wider is something you ask for: `task list --all` shows every open task
 whoever holds it, and `task sessions` shows who is carrying what.
 
 ## If it is not answering
