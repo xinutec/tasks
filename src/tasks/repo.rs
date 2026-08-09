@@ -36,13 +36,32 @@ pub struct Filter {
     pub session: Option<String>,
     /// Only tasks held by this person (Nextcloud user id).
     pub person: Option<String>,
+    /// Widen [`session`](Self::session) to *and the ones nobody holds*.
+    ///
+    /// ⚠ **The pile is not a courtesy here, it is the handover channel.** A
+    /// digest narrowed to strictly its own tasks would be smaller still and
+    /// would also make the pile invisible — and a pile nobody can see is one
+    /// nobody takes from, which is how Pippijn hands work to whichever
+    /// conversation is around. Ignored unless `session` is set: on its own it
+    /// would mean "held tasks, plus the pile", which is every task there is.
+    pub or_unheld: bool,
 }
 
 impl Filter {
-    /// Just the open tasks of these repositories — what a digest asks for.
+    /// Just the open tasks of these repositories — every holder.
     pub fn open_in(repos: Vec<String>) -> Self {
         Self {
             repos,
+            ..Default::default()
+        }
+    }
+
+    /// What a session's digest asks for: its own open tasks and the pile.
+    pub fn digest_for(session: &str, repos: Vec<String>) -> Self {
+        Self {
+            repos,
+            session: Some(session.to_string()),
+            or_unheld: true,
             ..Default::default()
         }
     }
@@ -158,8 +177,13 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         query.push(")");
     }
     if let Some(session) = &filter.session {
-        query.push(" AND t.assignee_kind = 'session' AND t.assignee_session = ");
+        query.push(" AND ((t.assignee_kind = 'session' AND t.assignee_session = ");
         query.push_bind(session);
+        query.push(")");
+        if filter.or_unheld {
+            query.push(" OR t.assignee_kind = 'nobody'");
+        }
+        query.push(")");
     }
     if let Some(person) = &filter.person {
         query.push(" AND t.assignee_kind = 'person' AND t.assignee_person = ");
@@ -321,6 +345,24 @@ fn assignee_columns(assignee: &Assignee) -> (AssigneeKind, Option<&str>, Option<
     }
 }
 
+/// Whoever is asking, as a holder.
+///
+/// The three places a holder is inferred rather than stated — filing, starting,
+/// closing — all mean the same thing by it, so they say it once. The name is
+/// left empty: it is resolved through the session join on the way back out, and
+/// writing one here would be a second copy to keep level with a rename.
+fn actor_holder(actor: &Actor) -> Assignee {
+    let (kind, id) = match actor {
+        Actor::Person(id) => (AssigneeKind::Person, id),
+        Actor::Session(id) => (AssigneeKind::Session, id),
+    };
+    Assignee {
+        kind,
+        id: Some(id.clone()),
+        name: None,
+    }
+}
+
 fn check_assignee(assignee: &Assignee) -> Result<()> {
     match assignee.kind {
         AssigneeKind::Nobody => Ok(()),
@@ -389,7 +431,25 @@ async fn record(
 /// File a new task.
 pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Task> {
     let subject = check_subject(&new.subject)?;
-    let assignee = new.assignee.unwrap_or_else(Assignee::nobody);
+    // Filing a task takes it on, unless the caller says where it goes.
+    //
+    // ⚠ **The default used to be the pile, and that was the wrong way round.**
+    // Nothing was ever implicitly the filer's, so a session filed, worked and
+    // closed without the holder column ever naming it while the work was in
+    // flight — `task sessions` read `0/3 open` for a conversation that had spent
+    // hours on three tasks, because a holder was only ever recorded on the way
+    // out. Pippijn's rule: a task a Claude session deals with is that session's
+    // by default, the way the built-in task tool behaves. The pile is still one
+    // word away (`--to nobody`, or "nobody" in the form) and is now something
+    // said rather than something fallen into.
+    //
+    // ⚠ **A session filing a task now needs a row in `sessions`**, where before
+    // it did not: the default holder is a foreign key. Both write routes call
+    // `sessions::touch` before reaching here, which is what makes that hold —
+    // and a caller coming in below the routes (a test, an import) has to do the
+    // same. Falling back to the pile for an unknown session would hide a
+    // conversation's work rather than fail, which is the wrong way round.
+    let assignee = new.assignee.unwrap_or_else(|| actor_holder(actor));
     check_assignee(&assignee)?;
     let (kind, person, session) = assignee_columns(&assignee);
 
@@ -499,20 +559,31 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     let finisher = (change.status.is_some_and(|status| !status.is_open())
         && before.status.is_open()
         && change.assignee.is_none())
-    .then(|| match actor {
-        Actor::Person(id) => Assignee {
-            kind: AssigneeKind::Person,
-            id: Some(id.clone()),
-            name: None,
-        },
-        Actor::Session(id) => Assignee {
-            kind: AssigneeKind::Session,
-            id: Some(id.clone()),
-            name: None,
-        },
-    });
+    .then(|| actor_holder(actor));
 
-    if let Some(assignee) = change.assignee.as_ref().or(finisher.as_ref()) {
+    // Starting a task claims it too — the same rule read at the other end.
+    //
+    // ⚠ **Without this the holder column could only ever describe the past.** It
+    // was set when a task was closed and at no other time, so a list could say
+    // who had finished something and never who was carrying it; every session
+    // showed its in-flight work as belonging to nobody. `task start` was already
+    // documented as the way a session takes a task on, and it did not do it.
+    //
+    // Only on the way IN to `doing`: a task already being worked is left alone,
+    // so a second conversation running `start` on one somebody else has in hand
+    // cannot quietly take it. Moving one from another holder is a real handover
+    // and is what `move` is for.
+    let starter = (change.status == Some(Status::Doing)
+        && before.status != Status::Doing
+        && change.assignee.is_none())
+    .then(|| actor_holder(actor));
+
+    if let Some(assignee) = change
+        .assignee
+        .as_ref()
+        .or(finisher.as_ref())
+        .or(starter.as_ref())
+    {
         check_assignee(assignee)?;
         let (kind, person, session) = assignee_columns(assignee);
         // Compared as (kind, id), which is what the three columns encode: for

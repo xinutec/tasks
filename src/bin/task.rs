@@ -27,10 +27,10 @@
 //! ```text
 //! task list [--repo R] [--mine] [--done]    what is open
 //! task show <id>                            one task, its prose and its history
-//! task add <subject> [--repo R] [--body -] [--to me|<session>|nobody]
+//! task add <subject> [--repo R] [--body -] [--to me|pippijn|<session>|nobody]
 //! task start <id> / task done <id> [--to W] move it along
 //! task drop <id>                            close it without doing it
-//! task move <id> me|<session>|nobody        hand it over
+//! task move <id> me|pippijn|<session>|nobody  hand it over
 //! task edit <id> [--subject S] [--body -]   change the words
 //! task digest [--repo R]                    exactly what a prompt receives
 //! task rename <name>                        tell the service what I call myself
@@ -104,7 +104,8 @@ enum Command {
         /// without fighting shell quoting.
         #[arg(long)]
         body: Option<String>,
-        /// Who it is for: `me`, `nobody`, or a session id.
+        /// Who it is for: `me` (the default — whoever is filing), `pippijn`,
+        /// `nobody` for the pile, or a session id.
         #[arg(long)]
         to: Option<To>,
     },
@@ -126,7 +127,8 @@ enum Command {
     /// credited with having done it. If why it went matters, write it — `task
     /// edit <id> --body -` — because that is prose and there is no field for it.
     Drop { id: TaskRef },
-    /// Hand a task over: `me`, `nobody`, or a session id.
+    /// Hand a task over: `me` (this conversation), `pippijn`, `nobody`, or a
+    /// session id.
     Move { id: TaskRef, to: To },
     /// Change a task's words.
     Edit {
@@ -268,6 +270,18 @@ impl Client {
         Ok(())
     }
 
+    /// This conversation's own id, which is what `me` resolves to.
+    ///
+    /// Separate from [`writing`](Self::writing) with the same message because a
+    /// destination is worked out before the request that would have complained:
+    /// `task move 5 me` has to know who "me" is in order to build the body.
+    fn me(&self) -> Result<&str> {
+        self.session.as_deref().context(
+            "no session id: pass --session or set TASKS_SESSION. \
+             Claude Code normally sets $CLAUDE_CODE_SESSION_ID.",
+        )
+    }
+
     fn writing(&self) -> Result<()> {
         if self.token.is_none() {
             bail!(
@@ -288,20 +302,25 @@ impl Client {
 /// Who a task is being handed to.
 ///
 /// Parsed once, at the argument boundary, rather than matched as a string where
-/// it is used: clap rejects nothing here — anything that is not one of the two
-/// words is a session id — but having the type means the three destinations are
+/// it is used: clap rejects nothing here — anything that is not one of the three
+/// words is a session id — but having the type means the destinations are
 /// enumerated in one place and `assignee` cannot be handed a fourth spelling of
 /// "nobody" that nothing recognises.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum To {
     /// Back in the pile, for whoever picks it up.
     Nobody,
-    /// The person.
+    /// Whoever is running this — for a session, itself.
     ///
-    /// ⚠ `me` means Pippijn even when a session types it. A session handing work
-    /// back says "this one is for you", which is what the word means in the
-    /// sentence being written; a session taking one on uses `start`, which is
-    /// what it actually wants.
+    /// ⚠ **`me` used to mean Pippijn even when a session typed it**, on the
+    /// argument that a session saying "me" was writing "this one is for you".
+    /// It read the sentence right and the situation wrong: nothing was ever
+    /// implicitly a session's own, so the word every conversation reached for
+    /// handed its work to the person. Pippijn's rule is that a Claude session
+    /// dealing with a task should own it by default, as the built-in task tool
+    /// does. Handing work to the person is `pippijn`, which says so.
+    Me,
+    /// The person, by name.
     Person,
     Session(String),
 }
@@ -311,16 +330,23 @@ impl std::str::FromStr for To {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         Ok(match s {
             "nobody" | "none" | "" => To::Nobody,
-            "me" | "pippijn" => To::Person,
+            "me" | "self" | "mine" => To::Me,
+            "pippijn" => To::Person,
             id => To::Session(id.to_string()),
         })
     }
 }
 
 /// The assignee the API takes.
-fn assignee(to: &To) -> Value {
+///
+/// `me` is resolved here rather than on the far side: the session id is
+/// something this process knows and the service must not take on faith — a
+/// request body says *what* to change and never *who* is changing it, so there
+/// is no wire spelling of "whoever is asking" for a caller to claim.
+fn assignee(to: &To, me: &str) -> Value {
     match to {
         To::Nobody => json!({ "kind": "nobody" }),
+        To::Me => json!({ "kind": "session", "id": me }),
         To::Person => json!({ "kind": "person", "id": "pippijn" }),
         To::Session(id) => json!({ "kind": "session", "id": id }),
     }
@@ -489,7 +515,7 @@ async fn main() -> Result<()> {
                 payload["repo"] = json!(repo);
             }
             if let Some(to) = &to {
-                payload["assignee"] = assignee(to);
+                payload["assignee"] = assignee(to, client.me()?);
             }
             let req = client
                 .request(reqwest::Method::POST, "/api/tasks")
@@ -502,7 +528,7 @@ async fn main() -> Result<()> {
         Command::Done { id, to } => {
             let mut change = json!({ "status": "done" });
             if let Some(to) = &to {
-                change["assignee"] = assignee(to);
+                change["assignee"] = assignee(to, client.me()?);
             }
             patch(&client, cli.json, id, change).await?
         }
@@ -510,7 +536,13 @@ async fn main() -> Result<()> {
             patch(&client, cli.json, id, json!({ "status": "dropped" })).await?
         }
         Command::Move { id, to } => {
-            patch(&client, cli.json, id, json!({ "assignee": assignee(&to) })).await?
+            patch(
+                &client,
+                cli.json,
+                id,
+                json!({ "assignee": assignee(&to, client.me()?) }),
+            )
+            .await?
         }
 
         Command::Edit {

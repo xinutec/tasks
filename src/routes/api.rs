@@ -71,7 +71,27 @@ pub async fn digest(
     if let Some(id) = &session {
         sessions::touch(&app.db, id, None).await?;
     }
-    let tasks = repo::list(&app.db, &Filter::open_in(repo_list(q.repos.as_deref()))).await?;
+    // What a session is shown: its own open tasks and the pile, in the repos it
+    // claimed — not the ones another conversation is holding.
+    //
+    // ⚠ **The old shape was inherited from the storage, not chosen.** One
+    // `TASKS.md` per repository meant both parties' work was in one file, so
+    // seeing across holders was a side effect of there being nowhere else to put
+    // it; carrying that over made every session pay, on every turn, for work it
+    // could not act on. Pippijn's rule: a session should usually see only its
+    // own, and looking at another's should take asking — which the CLI already
+    // answers, `task list --repo R` for every holder and `task sessions` for who
+    // carries what.
+    //
+    // A person reading a digest without naming a session gets everything: that
+    // path is `task digest` for checking the cost, and there is no "own" to
+    // narrow to.
+    let repos = repo_list(q.repos.as_deref());
+    let filter = match &session {
+        Some(id) => Filter::digest_for(id, repos),
+        None => Filter::open_in(repos),
+    };
+    let tasks = repo::list(&app.db, &filter).await?;
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
@@ -104,6 +124,9 @@ pub async fn list(
         include_closed: q.done,
         session: q.session,
         person: q.person,
+        // `--mine` means mine. Widening it to the pile is the digest's rule and
+        // is about what a turn costs; a list is asked a question and answers it.
+        or_unheld: false,
     };
     Ok(Json(repo::list(&app.db, &filter).await?))
 }

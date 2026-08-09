@@ -38,15 +38,40 @@ fn filed(repo_name: &str, subject: &str) -> NewTask {
     }
 }
 
+/// Filed straight into the pile, which since 2026-08-09 has to be asked for:
+/// leaving the assignee out means the task belongs to whoever filed it.
+fn unclaimed(repo_name: &str, subject: &str) -> NewTask {
+    NewTask {
+        assignee: Some(Assignee::nobody()),
+        ..filed(repo_name, subject)
+    }
+}
+
+/// Every event kind on a task, oldest first.
+async fn kinds(pool: &sqlx::MySqlPool, id: u64) -> Vec<String> {
+    repo::get(pool, id)
+        .await
+        .expect("reading")
+        .expect("a task")
+        .events
+        .iter()
+        .map(|e| e.kind.clone())
+        .collect()
+}
+
 #[tokio::test]
-async fn a_filed_task_comes_back_open_and_in_the_pile() {
+async fn a_filed_task_comes_back_open_and_held_by_whoever_filed_it() {
     let pool = common::fresh_db().await;
     let task = repo::create(&pool, filed("memview", "Something to do"), &pippijn())
         .await
         .expect("filing");
     assert_eq!(task.subject, "Something to do");
     assert_eq!(task.status, Status::Open);
-    assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
+    // Filing takes it on. The default was the pile until 2026-08-09, which meant
+    // nothing was ever implicitly its filer's and a session's row could not say
+    // what it was carrying.
+    assert_eq!(task.assignee.kind, AssigneeKind::Person);
+    assert_eq!(task.assignee.id.as_deref(), Some("pippijn"));
     assert!(!task.detailed, "no body was given");
 
     let listed = repo::list(&pool, &Filter::default())
@@ -54,6 +79,29 @@ async fn a_filed_task_comes_back_open_and_in_the_pile() {
         .expect("listing");
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, task.id);
+}
+
+#[tokio::test]
+async fn the_pile_is_something_said_rather_than_something_fallen_into() {
+    let pool = common::fresh_db().await;
+    let task = repo::create(
+        &pool,
+        NewTask {
+            assignee: Some(Assignee::nobody()),
+            ..filed("memview", "For whoever picks it up")
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("filing");
+    assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
+
+    // The history has to say it went to the pile, because that is now a
+    // decision. `create` only records an `assigned` event for a holder that is
+    // somebody, so this is the assertion that the silent case stays silent
+    // while the row itself is right.
+    let moves = kinds(&pool, task.id).await;
+    assert_eq!(moves, vec!["created"], "filing to the pile moves nobody");
 }
 
 #[tokio::test]
@@ -101,7 +149,8 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
     sessions::touch(&pool, "sess-1", Some("memview"))
         .await
         .expect("recording a session");
-    let task = repo::create(&pool, filed("memview", "Hand this over"), &pippijn())
+    // From the pile, so the two handovers under test are the whole history.
+    let task = repo::create(&pool, unclaimed("memview", "Hand this over"), &pippijn())
         .await
         .expect("filing");
 
@@ -180,6 +229,15 @@ async fn history_names_the_session_that_acted_rather_than_its_id() {
 
     // A session nobody has named still says something, and the something is its
     // id rather than a blank.
+    //
+    // Touched first, and that is load-bearing since filing takes the task on:
+    // the default holder is a foreign key into `sessions`, so a write by a
+    // session the table has never heard of fails rather than quietly landing in
+    // the pile. Both write routes touch before they reach the repo; a caller
+    // coming in underneath them has to do the same.
+    sessions::touch(&pool, "sess-9", None)
+        .await
+        .expect("recording a session");
     let anon = repo::create(
         &pool,
         filed("memview", "By a stranger"),
@@ -197,7 +255,10 @@ async fn history_names_the_session_that_acted_rather_than_its_id() {
 #[tokio::test]
 async fn a_change_that_changes_nothing_writes_no_history() {
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("memview", "Steady"), &pippijn())
+    // Filed into the pile so that the object restated below is the object that
+    // is there — `assignee: nobody` against a task the filer now holds would be
+    // a real change, and the point of this test is that nothing changes.
+    let task = repo::create(&pool, unclaimed("memview", "Steady"), &pippijn())
         .await
         .expect("filing");
 
@@ -414,9 +475,13 @@ async fn finishing_a_task_records_who_finished_it() {
     sessions::touch(&pool, "sess-1", Some("tasks"))
         .await
         .expect("recording a session");
-    let task = repo::create(&pool, filed("tasks", "Nobody is holding this"), &pippijn())
-        .await
-        .expect("filing");
+    let task = repo::create(
+        &pool,
+        unclaimed("tasks", "Nobody is holding this"),
+        &pippijn(),
+    )
+    .await
+    .expect("filing");
     assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
 
     let done = repo::update(
@@ -598,7 +663,7 @@ async fn who_holds_what_counts_the_finished_work_too() {
     )
     .await
     .expect("taking it");
-    repo::create(&pool, filed("recall", "Unclaimed"), &pippijn())
+    repo::create(&pool, unclaimed("recall", "Unclaimed"), &pippijn())
         .await
         .expect("filing");
 
@@ -644,7 +709,9 @@ async fn a_dropped_task_is_not_open_anywhere() {
         ("Finished", Status::Done),
         ("Overtaken by events", Status::Dropped),
     ] {
-        let task = repo::create(&pool, filed("tasks", subject), &pippijn())
+        // Into the pile, so that what each holder ends up with is the doing of
+        // the status rules rather than of the filing.
+        let task = repo::create(&pool, unclaimed("tasks", subject), &pippijn())
             .await
             .expect("filing");
         if status != Status::Open {
@@ -730,10 +797,11 @@ async fn a_dropped_task_is_not_open_anywhere() {
     // `open` is what is in hand; `total` is that plus what was done. The
     // dropped one is in neither, because it is not work and was not done.
     //
-    // The person closed two of the four, so the finisher rule handed both to
-    // them and left the other two in the pile. **`1` is the whole assertion**:
-    // they closed two tasks and one of them counts, because the other was
-    // dropped. Counting it would read as having finished twice the work.
+    // Of the four filed into the pile the person took three — one by starting
+    // it and two by closing them — and left the one nobody has touched. So
+    // `total` is **2**, and that is the whole assertion: they are holding three
+    // tasks and only two of them count, because the third was dropped.
+    // Counting it would read as half again as much work done.
     let holders = sessions::holders(&pool).await.expect("counting");
     let person = holders
         .iter()
@@ -741,7 +809,7 @@ async fn a_dropped_task_is_not_open_anywhere() {
         .expect("the person's row");
     assert_eq!(
         (person.open, person.total),
-        (0, 1),
+        (1, 2),
         "the dropped task was counted as work done"
     );
     let pile = holders
@@ -750,8 +818,8 @@ async fn a_dropped_task_is_not_open_anywhere() {
         .expect("the pile's row");
     assert_eq!(
         (pile.open, pile.total),
-        (2, 2),
-        "the pile is the two nobody has closed"
+        (1, 1),
+        "the pile is the one nobody has picked up"
     );
 }
 
@@ -815,4 +883,155 @@ async fn dropping_a_task_credits_nobody_with_doing_it() {
         reopened.closed_at.is_none(),
         "a reopened task is still closed"
     );
+}
+
+/// The holder column has to be able to describe the present, not only the past.
+///
+/// ⚠ **This is the test the starter rule was added for.** A holder was recorded
+/// when a task was CLOSED and at no other moment, so a session could show three
+/// finished tasks and `0 open` while it was in the middle of a fourth — every
+/// conversation looked idle for as long as it was actually working. `start` was
+/// already documented as how a session takes a task on, and it moved nobody.
+#[tokio::test]
+async fn starting_a_task_claims_it_the_way_finishing_one_does() {
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", Some("tasks"))
+        .await
+        .expect("recording a session");
+    sessions::touch(&pool, "sess-2", Some("memview"))
+        .await
+        .expect("recording a session");
+
+    let task = repo::create(&pool, unclaimed("tasks", "In the pile"), &pippijn())
+        .await
+        .expect("filing");
+    assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
+
+    let started = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("starting");
+    assert_eq!(started.status, Status::Doing);
+    assert_eq!(started.assignee.kind, AssigneeKind::Session);
+    assert_eq!(started.assignee.id.as_deref(), Some("sess-1"));
+    // Resolved through the join, so a list can print a name rather than a
+    // 36-character id.
+    assert_eq!(started.assignee.name.as_deref(), Some("tasks"));
+
+    // It reads as a handover in the history, because it is one.
+    let detail = repo::get(&pool, task.id)
+        .await
+        .expect("reading")
+        .expect("a task");
+    let moves: Vec<&str> = detail
+        .events
+        .iter()
+        .filter(|e| e.kind == "assigned")
+        .filter_map(|e| e.detail.as_deref())
+        .collect();
+    assert_eq!(moves, vec!["nobody → tasks"]);
+
+    // A second conversation running `start` on one already in hand takes
+    // nothing: the claim rides on the move INTO doing, and there is no move.
+    // Taking work off another session is a handover, which is what `move` is.
+    let poached = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &Actor::Session("sess-2".into()),
+    )
+    .await
+    .expect("starting again");
+    assert_eq!(
+        poached.assignee.id.as_deref(),
+        Some("sess-1"),
+        "a second session quietly took a task already being worked on"
+    );
+    assert_eq!(
+        kinds(&pool, task.id).await,
+        vec!["created", "status", "assigned"],
+        "starting a task twice wrote a second history"
+    );
+
+    // The session's own row is the thing this exists for: work in flight, not
+    // only work finished.
+    let listed = sessions::list(&pool).await.expect("listing sessions");
+    let busy = listed
+        .iter()
+        .find(|s| s.id == "sess-1")
+        .expect("the session's row");
+    assert_eq!(busy.open, 1, "a session in the middle of a task reads idle");
+}
+
+/// What a session is shown, and what it is not.
+///
+/// ⚠ **The digest is the only thing that costs anything per turn**, so who it
+/// selects for is a cost question before it is a courtesy one. Until 2026-08-09
+/// it filtered on repository alone — inherited from one `TASKS.md` per repo
+/// holding both parties' work — and every session paid, every turn, for tasks
+/// another conversation was already carrying.
+#[tokio::test]
+async fn a_session_digest_carries_its_own_work_and_the_pile() {
+    let pool = common::fresh_db().await;
+    for (id, name) in [("sess-1", "tasks"), ("sess-2", "memview")] {
+        sessions::touch(&pool, id, Some(name))
+            .await
+            .expect("recording a session");
+    }
+
+    let mut filed_ids = Vec::new();
+    for (subject, holder) in [
+        ("Mine to do", Some(to_session("sess-1"))),
+        ("Another conversation has this", Some(to_session("sess-2"))),
+        ("Pippijn is holding this", Some(to_person())),
+        ("For whoever picks it up", Some(Assignee::nobody())),
+    ] {
+        let task = repo::create(
+            &pool,
+            NewTask {
+                assignee: holder,
+                ..filed("tasks", subject)
+            },
+            &pippijn(),
+        )
+        .await
+        .expect("filing");
+        filed_ids.push(task.id);
+    }
+    assert_eq!(filed_ids.len(), 4);
+
+    let mine = repo::list(&pool, &Filter::digest_for("sess-1", vec!["tasks".into()]))
+        .await
+        .expect("listing");
+    let subjects: Vec<&str> = mine.iter().map(|t| t.subject.as_str()).collect();
+    assert_eq!(
+        subjects,
+        ["Mine to do", "For whoever picks it up"],
+        "a session's digest is its own work and the pile, in that order of id"
+    );
+
+    // The pile is the handover channel and losing it would be the real cost of
+    // this change: work Pippijn leaves for whoever is around would become
+    // invisible to everybody at once.
+    assert!(
+        subjects.contains(&"For whoever picks it up"),
+        "the pile fell out of the digest"
+    );
+
+    // A person reading a digest without naming a session still sees everything
+    // — that path is `task digest`, for measuring the cost.
+    let everything = repo::list(&pool, &Filter::open_in(vec!["tasks".into()]))
+        .await
+        .expect("listing");
+    assert_eq!(everything.len(), 4);
 }

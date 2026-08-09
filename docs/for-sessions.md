@@ -106,12 +106,25 @@ what stops the per-turn attachment; this is the whole point of the exercise.
 task start <id>                 # you have picked it up  (shows as - [>])
 task done <id>                  # finished
 task drop <id>                  # closed WITHOUT doing it (shows as - [-])
-task move <id> me               # hand it to Pippijn
+task move <id> me               # take it — `me` is YOU, this conversation
+task move <id> pippijn          # hand it to Pippijn
 task move <id> <session-id>     # hand it to another conversation
 task move <id> nobody           # put it back in the pile
-task add "One line" --repo <repo> --body - --to nobody   # body on stdin
+task add "One line" --repo <repo> --body -               # yours, by default
+task add "One line" --repo <repo> --to nobody            # for whoever picks it up
 task edit <id> --body -         # rewrite the prose
 ```
+
+⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
+takes it on and `task start` claims it, the same way `task done` already put your
+name on it. Until 2026-08-09 none of that was true: a holder was recorded when a
+task was *closed* and at no other moment, so a session could show three finished
+tasks and `0 open` while it was hours into a fourth. If you want it in the pile
+instead, say `--to nobody` — that is now a decision rather than a default.
+
+⚠ **`me` is you.** It used to mean Pippijn even when a session typed it, which
+was the one word every conversation reached for. Handing work to the person is
+`pippijn`. Nothing means him implicitly any more.
 
 ⚠ **A subject is one line and at most 200 characters**, because the subject is
 the only part that reaches a prompt — and it reaches one on every turn for as
@@ -120,10 +133,10 @@ when somebody opens the task. The service refuses a subject that is really a
 body, and says so.
 
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
-every list afterwards says who did it — pass `--to me` (or anyone) in the same
-breath if it should go somewhere else instead. `task drop` does the same, and
-that is deliberate: who decided a thing was not worth doing is as much a fact as
-who did it.
+every list afterwards says who did it — pass `--to pippijn` (or anyone) in the
+same breath if it should go somewhere else instead. `task drop` does the same,
+and that is deliberate: who decided a thing was not worth doing is as much a fact
+as who did it.
 
 ⚠ **A task that has gone out of date is `drop`, not `done`.** Both close it and
 both take it out of every prompt; the difference is that `done` credits somebody
@@ -135,6 +148,24 @@ actually went — all `drop`. If *why* matters, write it: `task edit <id> --body
 the old file scheme it was deleted because git recorded the finishing better,
 and there is no git behind a database. `task done` and `task drop` are the whole
 of it — between them they cover every reason a task should stop appearing.
+
+## What your prompt shows you
+
+**Your own open tasks, and the pile — in the repos you have claimed.** Not what
+another conversation is holding, and not Pippijn's own items. Until 2026-08-09 it
+was every open task in those repos regardless of holder, which came from the file
+scheme rather than from a decision: one `TASKS.md` per repo meant both parties'
+work sat in one file. It cost every session, on every turn, a description of work
+it could not act on.
+
+The pile is deliberately still there. It is how a task gets handed to whichever
+conversation is around rather than to a named one, so it has to stay visible to
+all of them — and it is the answer to "what if I re-file something already in
+hand": if it is in hand it is somebody's, and if it is nobody's it is yours to
+take.
+
+Looking wider is something you ask for: `task list --repo R` shows every holder
+in a repo, and `task sessions` shows who is carrying what.
 
 ## Which repos you see
 

@@ -25,12 +25,25 @@
 //!    into content is the exact failure this replaced, and the old hook refused
 //!    one over the same limit.
 //!
-//! **What is deliberately NOT here yet: filtering by who holds a task.** A
-//! session is shown every open task in the repos it claimed, including the ones
-//! Pippijn is holding — which is what the file scheme did, since both lived in
-//! one file. Showing only its own would be smaller still and is the obvious next
-//! step; it is left until the shape has been used, because a session that cannot
-//! see what the other party is holding will re-file work already in hand.
+//! **Who it selects for is a fourth rule, and it arrived late.** A session is
+//! shown *its own* open tasks and *the pile*, in the repos it claimed — never
+//! what another conversation is holding. The first shape filtered on repository
+//! alone, which was inherited rather than decided: one `TASKS.md` per repo put
+//! both parties' work in one file because there was nowhere else to put it. In a
+//! database that made every session pay, every turn, for work it could not act
+//! on.
+//!
+//! ⚠ **The pile is the half that must not be dropped.** Narrowing to strictly
+//! *mine* is smaller again and breaks the handover: a task left for whichever
+//! conversation is around would become invisible to all of them at once, and the
+//! objection that stalled this decision for a day — a session that cannot see
+//! what is already in hand will re-file it — is answered by the pile rather than
+//! by showing everything. Looking across holders is something to ask for, and
+//! the CLI is where you ask: `task list --repo R`, `task sessions`.
+//!
+//! The selection lives in [`Filter::digest_for`](crate::tasks::repo::Filter),
+//! not here — this module is handed a list and renders it. Which is why the
+//! render tests can stay about cost.
 
 use crate::tasks::types::{AssigneeKind, Status, Task};
 

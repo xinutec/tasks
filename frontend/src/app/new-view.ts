@@ -60,9 +60,21 @@ export class NewView {
     this.store.ensure();
   }
 
+  /**
+   * Where the new task goes — always stated, never left out.
+   *
+   * ⚠ **Absence is no longer the pile.** The service now files a task to
+   * whoever is filing it unless told otherwise, so returning `undefined` for
+   * "nobody" would put every task the form filed onto Pippijn. The pile is a
+   * choice made in the picker and it has to travel as one.
+   *
+   * The one case that still returns nothing is "me" before `/api/me` has
+   * answered: there is no id to send, and letting the service infer the person
+   * it already knows is asking is right rather than a fallback.
+   */
   private assignee(): Assignee | undefined {
     const to = this.to();
-    if (to === 'nobody') return undefined;
+    if (to === 'nobody') return { kind: 'nobody' };
     if (to === 'me') {
       const me = this.me();
       return me ? { kind: 'person', id: me } : undefined;

@@ -39,6 +39,20 @@ a hook ever sees. `tests/digest.rs` is the only test file in the repository whos
 assertions are about cost rather than correctness — including one that renders
 4,000 tasks and fails if the result is not still small.
 
+⚠ **A session is shown its own open tasks and the pile, in the repos it claimed
+— not what another conversation is holding.** The first shape filtered on
+repository alone, which was inherited rather than chosen: one `TASKS.md` per repo
+meant both parties' work sat in one file because there was nowhere else to put
+it. Carried into a database it made every session pay, on every turn, for tasks
+it could not act on — 132 open across 13 repos, 12,371 bytes, half the budget
+spent describing other people's work.
+
+The pile stays, and that is the part worth stating: it is how a task is handed to
+whichever conversation is around rather than to a named one, so a digest narrowed
+to strictly its own would make work Pippijn left for anybody invisible to
+everybody. Looking across holders is a thing you ask for — `task list --repo R`
+for every holder in a repo, `task sessions` for who is carrying what.
+
 ⚠ **What changed is what happens to a finished task.** The file scheme *deleted*
 it, because keeping it is what turned 48 live items into 366, and git recorded the
 completion better than a flag did. There is no git here — so the database keeps
@@ -100,10 +114,10 @@ task list [--repo R] [--mine] [--done]    # what is open
 task show <id> [--body]                   # one task, its prose and its history
 task sessions                             # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
-task add "<subject>" [--repo R] [--body -] [--to me|<session>|nobody]
+task add "<subject>" [--repo R] [--body -] [--to me|pippijn|<session>|nobody]
 task start <id> / task done <id> [--to W] # move it along
 task drop <id>                            # close it without doing it
-task move <id> me|<session>|nobody        # hand it over
+task move <id> me|pippijn|<session>|nobody  # hand it over
 task edit <id> [--subject S] [--body -]   # change the words
 task digest [--repo R]                    # exactly what a prompt receives
 task rename <name>                        # tell the service what I call myself
@@ -142,14 +156,35 @@ old prose contains no other. `GET /api/tasks/by/{session}/{number}` is the
 endpoint, two path segments rather than an escaped `#`, which is the fragment
 delimiter and would truncate the request.
 
-**Closing a task makes the closer its holder.** `assignee` is the only place a
-*list* can say who did something — the history records every actor, and no list
-renders a history — so a task closed while held by `nobody` read as "done by
-nobody" everywhere it was seen again. Dropping counts, on the same argument read
-backwards: who decided a thing was not worth doing belongs in a list too, and the
-status beside the name is what tells the two apart. An explicit assignee in the
-same change wins (`task done <id> --to me`), and reopening leaves the holder
-alone.
+**A task belongs to whoever is dealing with it, and the service works that out
+rather than waiting to be told.** Three moments infer a holder, all meaning the
+same thing by it and sharing one function (`actor_holder`):
+
+| moment | the rule |
+| --- | --- |
+| **filing** | a new task is the filer's, unless the call says where it goes |
+| **starting** | moving one into `doing` claims it, if it was not already being worked |
+| **closing** | `done` and `drop` alike hand it to whoever closed it |
+
+`assignee` is the only place a *list* can say any of this — the history records
+every actor, and no list renders a history — so a task closed while held by
+`nobody` read as "done by nobody" everywhere it was seen again. Dropping counts
+on the same argument backwards: who decided a thing was not worth doing belongs
+in a list too, and the status beside the name tells the two apart. An explicit
+assignee in the same change always wins, and reopening leaves the holder alone.
+
+⚠ **Nothing means Pippijn implicitly.** `me` is whoever is running the command,
+so for a session it is that conversation; handing work to the person is
+`pippijn`, which says so. It read the other way round until 2026-08-09, together
+with a default of the pile on filing and a `start` that claimed nothing — three
+separate places where a session's own work was not its own. The visible symptom
+was a conversation showing `0 open` while it was hours into a task, because a
+holder was recorded on the way out and at no other time.
+
+⚠ **The pile is a decision now, not a default.** `--to nobody` — or "nobody" in
+the form — is how work is left for whoever picks it up, which is how Pippijn
+hands a task to no conversation in particular. It is still the second thing a
+digest carries, deliberately: see below.
 
 ⚠ **"Open" is `Status::is_open`, never `status <> 'done'`.** Six queries spelled
 it the second way, which was the same thing until it wasn't: a dropped task would
