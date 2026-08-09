@@ -879,6 +879,95 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
     assert_eq!(busy.open, 1, "a session in the middle of a task reads idle");
 }
 
+/// A task put back in the pile mid-flight is still `doing`, and `start` is how
+/// the next session takes it on.
+///
+/// ⚠ **The claim rule read the status, and this is the state where the status
+/// says nothing about the holder.** A holder was inferred only where a task was
+/// *entering* `doing`, which was indistinguishable from "already held by
+/// somebody" until a session stopped work deliberately and handed the task back
+/// with its findings — leaving it `doing` and held by nobody. #19 is that task,
+/// and it is the only one: 1 of the 17 in `doing` when this was written. The one
+/// command a session would run to pick it up reported success and moved nothing,
+/// so a task nobody was carrying sat in the pile reading as somebody's work.
+///
+/// What stops a second session poaching held work is the HOLDER check beside
+/// this one, not the status; and what keeps a redundant `start` from writing
+/// history is the `moved` comparison, which sees the holder is already right.
+#[tokio::test]
+async fn starting_a_task_already_doing_in_the_pile_claims_it() {
+    let pool = common::fresh_db().await;
+    for (id, name) in [("sess-1", "observe"), ("sess-2", "tasks")] {
+        sessions::touch(&pool, id, Some(name))
+            .await
+            .expect("recording a session");
+    }
+
+    // How the state arises, and the only way it can: one session starts the
+    // work, then hands it back without closing it — the question is still open,
+    // the approach is not.
+    let task = repo::create(&pool, unclaimed("Half-explored, put down"), &pippijn())
+        .await
+        .expect("filing");
+    repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("starting");
+    let released = repo::update(
+        &pool,
+        task.id,
+        Change {
+            assignee: Some(Assignee::nobody()),
+            ..Default::default()
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("releasing");
+    assert_eq!(
+        released.status,
+        Status::Doing,
+        "handing a task back closed it"
+    );
+    assert_eq!(released.assignee.kind, AssigneeKind::Nobody);
+
+    // The next session picks it up with the command that is documented as how
+    // you pick something up.
+    let taken = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &Actor::Session("sess-2".into()),
+    )
+    .await
+    .expect("taking it on");
+    assert_eq!(
+        taken.assignee.id.as_deref(),
+        Some("sess-2"),
+        "`start` left a task nobody was carrying in the pile"
+    );
+    assert_eq!(taken.assignee.name.as_deref(), Some("tasks"));
+    assert_eq!(taken.status, Status::Doing);
+
+    // One status change and three moves: the status was never touched twice, so
+    // the history says the work carried on rather than restarted.
+    assert_eq!(
+        kinds(&pool, task.id).await,
+        vec!["created", "status", "assigned", "assigned", "assigned"],
+        "taking a doing task on wrote the wrong history"
+    );
+}
+
 /// What a session is shown, and what it is not.
 ///
 /// ⚠ **The digest is the only thing that costs anything per turn**, so who it

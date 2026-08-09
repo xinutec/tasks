@@ -577,10 +577,20 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     //
     // So: a holder is inferred only where there is none. If the task is already
     // yours there is nothing to move; if it is somebody else's, taking it is a
-    // handover and `move` is the word for that. The `doing` guard stays so that
-    // starting an already-started task still writes no history.
+    // handover and `move` is the word for that.
+    //
+    // ⚠ **And it does not read the status, which was the last thing keeping this
+    // from firing where it was most needed.** A `&& before.status != Doing`
+    // clause survived that narrowing, on the argument that starting an
+    // already-started task should write no history — true of every task that is
+    // `doing` *because somebody is doing it*, and false of the one state where
+    // the status says nothing about the holder. A session that stops work
+    // deliberately hands the task back without closing it, leaving it `doing`
+    // and in the pile (#19), and `start` — the documented way to pick something
+    // up — then reported success and moved nobody. The no-history property was
+    // never this clause's to keep: `moved` below compares the holders and
+    // suppresses a write when they already match.
     let starter = (change.status == Some(Status::Doing)
-        && before.status != Status::Doing
         && before.assignee.kind == AssigneeKind::Nobody
         && change.assignee.is_none())
     .then(|| actor_holder(actor));

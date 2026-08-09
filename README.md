@@ -188,7 +188,7 @@ same thing by it and sharing one function (`actor_holder`):
 | moment | the rule |
 | --- | --- |
 | **filing** | a new task is the filer's, unless the call says where it goes |
-| **starting** | moving one into `doing` claims it **out of the pile** — never off another holder |
+| **starting** | `start` claims it **out of the pile** — never off another holder |
 | **closing** | `done` and `drop` alike hand it to whoever closed it |
 
 `assignee` is the only place a *list* can say any of this — the history records
@@ -197,6 +197,17 @@ every actor, and no list renders a history — so a task closed while held by
 on the same argument backwards: who decided a thing was not worth doing belongs
 in a list too, and the status beside the name tells the two apart. An explicit
 assignee in the same change always wins, and reopening leaves the holder alone.
+
+⚠ **`doing` and `nobody` together is a real state, not a leftover.** A session
+that stops work deliberately hands the task back without closing it — the
+question is still open, the approach is not — so the status is testimony that
+work happened rather than a claim that it is happening, and the body is where
+the next taker finds out how far it got. #19 is the task that established it,
+and it is why the starting rule reads the holder and nothing else: a
+`before.status != Doing` clause survived here until 2026-08-09, which made
+`start` a silent no-op on the one state where there was nobody to displace.
+Refusing the state instead would have been the wrong fix — unlike a task closed
+into the pile, which claims a finish nobody made, this one is true.
 
 ⚠ **Nothing means Pippijn implicitly.** `me` is whoever is running the command,
 so for a session it is that conversation; handing work to the person is

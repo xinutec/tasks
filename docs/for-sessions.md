@@ -71,6 +71,12 @@ task was *closed* and at no other moment, so a session could show three finished
 tasks and `0 open` while it was hours into a fourth. If you want it in the pile
 instead, say `--to nobody` — that is now a decision rather than a default.
 
+⚠ **A task in the pile can be `- [>]`, and it is yours to take.** Somebody
+started it and handed it back without closing it — the question is still open,
+the approach is not — so the status is saying work happened, not that anybody is
+doing it now. Read the body before you begin: it is where the previous holder
+left what they found. `task start` takes it on, the same as any other pile task.
+
 ⚠ **`me` is you.** It used to mean Pippijn even when a session typed it, which
 was the one word every conversation reached for. Handing work to the person is
 `pippijn`. Nothing means him implicitly any more.
