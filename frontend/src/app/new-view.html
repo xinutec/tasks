@@ -29,43 +29,18 @@
     <mat-hint>Markdown. Never injected — read when the task is opened.</mat-hint>
   </mat-form-field>
 
-  <div class="pair">
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Repository</mat-label>
-      <input
-        matInput
-        name="repo"
-        [ngModel]="repo()"
-        (ngModelChange)="repo.set($event)"
-        list="repos"
-        autocomplete="off"
-        placeholder="none"
-      />
-      <!-- A datalist rather than a select: the repositories with work are a
-           suggestion, and a task in a checkout nobody has filed against yet
-           must still be fileable. -->
-      <datalist id="repos">
-        @for (count of repos(); track count.repo) {
-          @if (count.repo) {
-            <option [value]="count.repo"></option>
-          }
-        }
-      </datalist>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>For</mat-label>
-      <mat-select name="to" [ngModel]="to()" (ngModelChange)="to.set($event)">
-        <mat-option value="nobody">the pile</mat-option>
-        @if (me(); as who) {
-          <mat-option value="me">{{ who }}</mat-option>
-        }
-        @for (session of sessionOptions(); track session.id) {
-          <mat-option [value]="session.id">{{ session.label }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </div>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>For</mat-label>
+    <mat-select name="to" [ngModel]="to()" (ngModelChange)="to.set($event)">
+      <mat-option value="nobody">the pile</mat-option>
+      @if (me(); as who) {
+        <mat-option value="me">{{ who }}</mat-option>
+      }
+      @for (session of sessionOptions(); track session.id) {
+        <mat-option [value]="session.id">{{ session.label }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
 
   @if (failed(); as why) {
     <p class="failed">{{ why }}</p>

@@ -14,7 +14,8 @@ import { type Page } from '@playwright/test';
  *      no name is shown as — in a chip, in a menu, and in every history line.
  *   2. **A subject may be 200 characters** and is prose, so it wraps beside a
  *      meta column that must not be pushed off the edge.
- *   3. **The filter rows grow with the number of repositories**, without limit.
+ *   3. **A holder chip may be a raw session id**, which is the widest thing
+ *      the meta column ever has to carry.
  */
 export const ME = { kind: 'person', id: 'pippijn', name: 'Pippijn' };
 
@@ -34,14 +35,6 @@ export const SESSIONS = [
     last_seen: '2026-08-08T12:00:00Z',
     open: 3,
   },
-];
-
-export const REPOS = [
-  { repo: 'memview', open: 21 },
-  { repo: 'xinutec-infra', open: 8 },
-  { repo: 'health', open: 34 },
-  { repo: 'tasks', open: 5 },
-  { repo: null, open: 2 },
 ];
 
 /** Who holds what. Carries the two hazards this screen has: an unnamed session,
@@ -66,7 +59,6 @@ export const HOLDERS = [
 export const TASKS = [
   {
     id: 80,
-    repo: 'memview',
     subject: 'Stop walking every transcript on the request path',
     status: 'open',
     assignee: { kind: 'nobody' },
@@ -76,7 +68,6 @@ export const TASKS = [
   },
   {
     id: 92,
-    repo: 'memview',
     subject:
       'Abstractly evaluate what the agents run, across languages, into one effect language, keeping the undetermined subjects counted rather than dropped, so a gap is a number and never a silence',
     status: 'doing',
@@ -87,7 +78,6 @@ export const TASKS = [
   },
   {
     id: 106,
-    repo: 'memview',
     subject: 'The console task reader points at a store we deliberately emptied',
     status: 'open',
     // No name: drawn as the raw uuid, which is wider than the phone.
@@ -98,7 +88,6 @@ export const TASKS = [
   },
   {
     id: 110,
-    repo: 'xinutec-infra',
     subject: 'Nothing watches the boot disk, and nix deletes store paths mid-build before it fills',
     status: 'open',
     assignee: { kind: 'person', id: 'pippijn', name: 'pippijn' },
@@ -180,7 +169,6 @@ export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
   await page.route('**/api/tasks**', (r) => r.fulfill({ json: TASKS }));
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DETAIL }));
-  await page.route('**/api/repos', (r) => r.fulfill({ json: REPOS }));
   await page.route('**/api/sessions', (r) => r.fulfill({ json: SESSIONS }));
   await page.route('**/api/holders', (r) => r.fulfill({ json: HOLDERS }));
 }

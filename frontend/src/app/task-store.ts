@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 
 import { reason } from './errors';
-import { Holder, Me, RepoCount, Session, Task } from './models';
+import { Holder, Me, Session, Task } from './models';
 import { TasksApi } from './tasks-api';
 
 /**
@@ -13,10 +13,10 @@ import { TasksApi } from './tasks-api';
  * away and back, so a phone user tapping a task and pressing back watches the
  * list blank and refill. Here it is retained, and a return is instant.
  *
- * Three things are held: the tasks, the repositories that have work, and the
- * sessions work can be handed to. All three are read by more than one screen —
- * the move menu and the file form both need the sessions — so a component-level
- * copy would also mean fetching the same thing twice on one navigation.
+ * Two things are held: the tasks, and the sessions work can be handed to. Both
+ * are read by more than one screen — the move menu and the file form both need
+ * the sessions — so a component-level copy would also mean fetching the same
+ * thing twice on one navigation.
  *
  * ⚠ **A failure is withdrawn when the next attempt succeeds.** An error signal
  * that is only ever set stays on screen forever after one dropped request, which
@@ -28,7 +28,6 @@ export class TaskStore {
   private api = inject(TasksApi);
 
   readonly tasks = signal<Task[]>([]);
-  readonly repos = signal<RepoCount[]>([]);
   readonly sessions = signal<Session[]>([]);
   readonly holders = signal<Holder[]>([]);
   readonly me = signal<Me | null>(null);
@@ -67,10 +66,6 @@ export class TaskStore {
     this.api.holders().subscribe({
       next: (holders) => this.holders.set(holders),
       error: () => this.holders.set([]),
-    });
-    this.api.repos().subscribe({
-      next: (repos) => this.repos.set(repos),
-      error: () => this.repos.set([]),
     });
     this.api.sessions().subscribe({
       next: (sessions) => this.sessions.set(sessions),

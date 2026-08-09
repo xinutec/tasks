@@ -39,19 +39,29 @@ a hook ever sees. `tests/digest.rs` is the only test file in the repository whos
 assertions are about cost rather than correctness — including one that renders
 4,000 tasks and fails if the result is not still small.
 
-⚠ **A session is shown its own open tasks and the pile, in the repos it claimed
-— not what another conversation is holding.** The first shape filtered on
-repository alone, which was inherited rather than chosen: one `TASKS.md` per repo
-meant both parties' work sat in one file because there was nowhere else to put
-it. Carried into a database it made every session pay, on every turn, for tasks
-it could not act on — 132 open across 13 repos, 12,371 bytes, half the budget
-spent describing other people's work.
+⚠ **A session is shown its own open tasks and the pile — not what another
+conversation is holding.** The first shape filtered on repository alone, which
+was inherited rather than chosen: one `TASKS.md` per repo meant both parties'
+work sat in one file because there was nowhere else to put it. Carried into a
+database it made every session pay, on every turn, for tasks it could not act
+on — 132 open across 13 repos, 12,371 bytes, half the budget spent describing
+other people's work.
+
+The repository itself went in `0004`, and the holder is now the whole of the
+question. A session spans checkouts — fleet work is `xinutec-infra` and
+`nixos-config` together — so it was never a question with one answer, and
+selecting on the set a session had *claimed* made an unclaimed session's empty
+digest indistinguishable from a broken service. A task handed to the right
+session in the wrong repo was invisible to the receiver, and `task edit` had no
+`--repo` to correct it.
 
 The pile stays, and that is the part worth stating: it is how a task is handed to
 whichever conversation is around rather than to a named one, so a digest narrowed
 to strictly its own would make work Pippijn left for anybody invisible to
-everybody. Looking across holders is a thing you ask for — `task list --repo R`
-for every holder in a repo, `task sessions` for who is carrying what.
+everybody. It is global now that there is no repo to scope it to — 3 unheld of
+134 open when that was measured, which is what makes it affordable. Looking
+across holders is a thing you ask for: `task list` for every open task,
+`task sessions` for who is carrying what.
 
 ⚠ **What changed is what happens to a finished task.** The file scheme *deleted*
 it, because keeping it is what turned 48 live items into 366, and git recorded the
@@ -68,7 +78,6 @@ a done row.
 | a **status** | `open`, `doing`, `done`, `dropped` — two open states and two ways out |
 | a **holder** | nobody, the person, or a session |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
-| a **repo** | which checkout the work is in, as a bare name; may be absent |
 
 ⚠ **Status and holder are independent, and that is why there are four states and
 not seven.** "New" is `open` with no holder; "assigned" is `open` with one;
@@ -90,13 +99,10 @@ renames itself as its job changes and pushes the new name here; that is an
 `UPDATE` of one column, and every task assigned to it stays assigned. Making the
 name the key would have re-pointed the whole list on a rename.
 
-⚠ **The id is global, not per repository.** The file scheme numbered per repo and
-its own hook documented the cost: *"a bare `#4` means nothing when two repos both
-have one"*. One id space means `task show 4` needs no repo.
-
-⚠ **A repo filter never returns the tasks that belong to no repo.** A session asks
-by repo, so that is what keeps Pippijn's own items — which have no checkout — out
-of every prompt.
+⚠ **The id is global.** The file scheme numbered per repo and its own hook
+documented the cost: *"a bare `#4` means nothing when two repos both have one"*.
+One id space means `task show 4` needs nothing else to resolve it — which is what
+made dropping the repository in `0004` a deletion rather than a redesign.
 
 ## Views
 

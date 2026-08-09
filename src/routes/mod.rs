@@ -24,7 +24,6 @@ pub fn router(state: AppState) -> Router {
         .route("/sessions", get(api::session_list))
         .route("/holders", get(api::holders))
         .route("/sessions/{id}", patch(api::rename))
-        .route("/repos", get(api::repo_counts))
         .route("/telemetry", post(telemetry::record))
         // ⚠ **`/api/*` must never reach the page.** Without this an unknown API
         // path falls through the nest to the `ServeDir` fallback below and comes

@@ -32,7 +32,6 @@ export interface Assignee {
 /** A task in a list. Deliberately has no `body` — see `TaskDetail`. */
 export interface Task {
   id: number;
-  repo?: string | null;
   subject: string;
   status: Status;
   assignee: Assignee;
@@ -82,14 +81,6 @@ export interface Holder {
   total: number;
 }
 
-export interface RepoCount {
-  /** `null` is the pile of tasks belonging to no checkout. Always present on
-   *  the wire — the backend does not skip it, because a missing key and a task
-   *  with no repository would then look the same. */
-  repo: string | null;
-  open: number;
-}
-
 /** Who the caller is, as `/api/me` answers. */
 export interface Me {
   kind: 'person' | 'session';
@@ -101,13 +92,11 @@ export interface Me {
  * A task being filed.
  *
  * A REQUEST body: this side serialises it and Rust deserialises it, which is the
- * one place the mirror runs backwards. Omitting `repo` is what "no repository"
- * means and omitting `assignee` is what "leave it in the pile" means, so both
- * are optional — see the note on `NewTask` in `tasks/repo.rs` for how that is
- * stated on the other side.
+ * one place the mirror runs backwards. Omitting `assignee` is what "leave it in
+ * the pile" means, so it is optional — see the note on `NewTask` in
+ * `tasks/repo.rs` for how that is stated on the other side.
  */
 export interface NewTask {
-  repo?: string | null;
   subject: string;
   body: string;
   assignee?: Assignee | null;

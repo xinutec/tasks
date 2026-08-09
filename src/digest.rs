@@ -26,12 +26,16 @@
 //!    one over the same limit.
 //!
 //! **Who it selects for is a fourth rule, and it arrived late.** A session is
-//! shown *its own* open tasks and *the pile*, in the repos it claimed — never
-//! what another conversation is holding. The first shape filtered on repository
-//! alone, which was inherited rather than decided: one `TASKS.md` per repo put
-//! both parties' work in one file because there was nowhere else to put it. In a
-//! database that made every session pay, every turn, for work it could not act
-//! on.
+//! shown *its own* open tasks and *the pile* — never what another conversation
+//! is holding. The first shape filtered on repository alone, which was inherited
+//! rather than decided: one `TASKS.md` per repo put both parties' work in one
+//! file because there was nowhere else to put it. In a database that made every
+//! session pay, every turn, for work it could not act on.
+//!
+//! The repository is gone entirely as of `0004`. A session spans checkouts, so
+//! it was never a question with one answer, and selecting on the *claimed* set
+//! made an unclaimed session's empty digest indistinguishable from a broken
+//! service. What is left is the holder, which was always the real question.
 //!
 //! ⚠ **The pile is the half that must not be dropped.** Narrowing to strictly
 //! *mine* is smaller again and breaks the handover: a task left for whichever
@@ -39,7 +43,7 @@
 //! objection that stalled this decision for a day — a session that cannot see
 //! what is already in hand will re-file it — is answered by the pile rather than
 //! by showing everything. Looking across holders is something to ask for, and
-//! the CLI is where you ask: `task list --repo R`, `task sessions`.
+//! the CLI is where you ask: `task list`, `task sessions`.
 //!
 //! The selection lives in [`Filter::digest_for`](crate::tasks::repo::Filter),
 //! not here — this module is handed a list and renders it. Which is why the
@@ -55,29 +59,17 @@ pub const MAX_BYTES: usize = 25_000;
 
 /// Render the index for a set of tasks, already filtered to the open ones.
 ///
-/// `groups_named` asks for the repository to be named above each group, which
-/// the old hook did only when a session had claimed more than one — a bare
-/// `#4` means nothing when two repos both have one. That argument no longer
-/// applies to the id, which is global now, but the grouping still tells a
-/// reader which checkout the work is in.
+/// One flat list, in id order. This grouped by repository until `0004`, and the
+/// grouping is not worth reinstating under another key: the header cost a line
+/// per group on every turn to tell a reader something the subject already says.
 pub fn render(tasks: &[Task]) -> String {
     if tasks.is_empty() {
         return String::new();
     }
 
     let doing = tasks.iter().filter(|t| t.status == Status::Doing).count();
-    let mut repos: Vec<Option<&str>> = Vec::new();
-    for task in tasks {
-        let repo = task.repo.as_deref();
-        if !repos.contains(&repo) {
-            repos.push(repo);
-        }
-    }
 
     let mut head = format!("{} open task(s)", tasks.len());
-    if repos.len() > 1 {
-        head.push_str(&format!(" across {} repos", repos.len()));
-    }
     if doing > 0 {
         head.push_str(&format!(", {doing} in progress"));
     }
@@ -104,33 +96,20 @@ pub fn render(tasks: &[Task]) -> String {
     let mut bytes = out[0].len();
     let mut omitted = 0usize;
 
-    for repo in repos.iter() {
-        let group: Vec<&Task> = tasks
-            .iter()
-            .filter(|t| t.repo.as_deref() == *repo)
-            .collect();
-        if repos.len() > 1 {
-            // Named only when there is more than one, so the single-repo case —
-            // which is most of them — reads exactly as it always has.
-            let label = repo.unwrap_or("no repo");
-            out.push(format!("{label} ({} open)", group.len()));
+    for task in tasks {
+        if omitted > 0 {
+            omitted += 1;
+            continue;
         }
-        for task in group {
-            if omitted > 0 {
-                omitted += 1;
-                continue;
-            }
-            let line = line(task);
-            // Counted before pushing: a digest that goes over the budget and
-            // then reports it has already cost what the budget exists to
-            // prevent.
-            if bytes + line.len() + 1 > MAX_BYTES {
-                omitted = 1;
-                continue;
-            }
-            bytes += line.len() + 1;
-            out.push(line);
+        let line = line(task);
+        // Counted before pushing: a digest that goes over the budget and then
+        // reports it has already cost what the budget exists to prevent.
+        if bytes + line.len() + 1 > MAX_BYTES {
+            omitted = 1;
+            continue;
         }
+        bytes += line.len() + 1;
+        out.push(line);
     }
 
     if omitted > 0 {

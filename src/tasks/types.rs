@@ -136,7 +136,7 @@ impl FromStr for Status {
 /// ⚠ **The obvious spelling is the wrong one.** Six queries said `status <>
 /// 'done'` and meant "open", which was true while there were three states and
 /// false the moment [`Status::Dropped`] existed — a dropped task would have gone
-/// on being counted as open in the list, the digest's repo counts and all three
+/// on being counted as open in the list, the digest's counts and all three
 /// of the `/who` tallies, none of which would have failed loudly.
 ///
 /// A macro rather than a `const` because sqlx 0.9 takes only `&'static str`:
@@ -160,7 +160,7 @@ varchar_enum!(Status);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssigneeKind {
-    /// In the pile: nobody has taken it, and whoever works that repo may.
+    /// In the pile: nobody has taken it, and whichever conversation is around may.
     Nobody,
     /// A Nextcloud user — Pippijn.
     Person,
@@ -238,8 +238,6 @@ impl Assignee {
 #[derive(Debug, Clone, Serialize)]
 pub struct Task {
     pub id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub repo: Option<String>,
     pub subject: String,
     pub status: Status,
     pub assignee: Assignee,

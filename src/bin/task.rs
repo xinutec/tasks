@@ -25,14 +25,14 @@
 //! been rewritten to a live id.
 //!
 //! ```text
-//! task list [--repo R] [--mine] [--done]    what is open
+//! task list [--mine] [--done]              what is open
 //! task show <id>                            one task, its prose and its history
-//! task add <subject> [--repo R] [--body -] [--to me|pippijn|<session>|nobody]
+//! task add <subject> [--body -] [--to me|pippijn|<session>|nobody]
 //! task start <id> / task done <id> [--to W] move it along
 //! task drop <id>                            close it without doing it
 //! task move <id> me|pippijn|<session>|nobody  hand it over
 //! task edit <id> [--subject S] [--body -]   change the words
-//! task digest [--repo R]                    exactly what a prompt receives
+//! task digest                              exactly what a prompt receives
 //! task rename <name>                        tell the service what I call myself
 //! ```
 
@@ -76,9 +76,6 @@ struct Cli {
 enum Command {
     /// What is open.
     List {
-        /// Comma-separated repositories. Absent means every one.
-        #[arg(long)]
-        repo: Option<String>,
         /// Only what this session is holding.
         #[arg(long)]
         mine: bool,
@@ -98,8 +95,6 @@ enum Command {
     /// File a task.
     Add {
         subject: String,
-        #[arg(long)]
-        repo: Option<String>,
         /// The body. `-` reads stdin, which is how a session writes a long one
         /// without fighting shell quoting.
         #[arg(long)]
@@ -140,10 +135,7 @@ enum Command {
         body: Option<String>,
     },
     /// Exactly what a prompt receives — for checking the cost, not for reading.
-    Digest {
-        #[arg(long)]
-        repo: Option<String>,
-    },
+    Digest,
     /// Who holds what: every session, Pippijn, and the pile — open/total each.
     Sessions,
     /// Tell the service what this session now calls itself.
@@ -379,9 +371,6 @@ fn line(task: &Value) -> String {
         task["id"].as_u64().unwrap_or(0),
         task["subject"].as_str().unwrap_or("")
     );
-    if let Some(repo) = task["repo"].as_str() {
-        out.push_str(&format!("  [{repo}]"));
-    }
     let holder = &task["assignee"];
     if holder["kind"].as_str().unwrap_or("nobody") != "nobody" {
         let who = holder["name"]
@@ -431,11 +420,8 @@ async fn main() -> Result<()> {
     client.identified()?;
 
     match cli.command {
-        Command::List { repo, mine, done } => {
+        Command::List { mine, done } => {
             let mut query: Vec<(String, String)> = Vec::new();
-            if let Some(repo) = repo {
-                query.push(("repos".into(), repo));
-            }
             if done {
                 query.push(("done".into(), "true".into()));
             }
@@ -499,15 +485,11 @@ async fn main() -> Result<()> {
 
         Command::Add {
             subject,
-            repo,
             body: raw,
             to,
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
-            if let Some(repo) = repo {
-                payload["repo"] = json!(repo);
-            }
             if let Some(to) = &to {
                 payload["assignee"] = assignee(to, client.me()?);
             }
@@ -557,11 +539,8 @@ async fn main() -> Result<()> {
             patch(&client, cli.json, id, change).await?;
         }
 
-        Command::Digest { repo } => {
-            let mut query: Vec<(String, String)> = Vec::new();
-            if let Some(repo) = repo {
-                query.push(("repos".into(), repo));
-            }
+        Command::Digest => {
+            let query: Vec<(String, String)> = Vec::new();
             let req = client
                 .request(reqwest::Method::GET, "/api/digest")
                 .query(&query);

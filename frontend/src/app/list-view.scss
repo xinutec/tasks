@@ -24,10 +24,9 @@
   .row {
     display: flex;
     gap: 4px;
-    // The filter rows are the one place a phone genuinely runs out of width:
-    // a repo list grows without limit and its members are unbreakable names.
-    // Scrolling sideways is the honest answer — wrapping would push the list
-    // itself below the fold.
+    // The holder row is fixed at four buttons now that the repository chips
+    // are gone, but the sideways scroll stays: it costs nothing, and wrapping
+    // would push the list itself below the fold on a narrow phone.
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -44,14 +43,6 @@
     margin-left: 6px;
     opacity: 0.7;
     font-variant-numeric: tabular-nums;
-  }
-}
-
-.group {
-  h2 {
-    font: var(--mat-sys-title-small);
-    color: var(--mat-sys-on-surface-variant);
-    margin: 1.2em 0 0.4em;
   }
 }
 

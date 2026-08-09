@@ -5,7 +5,7 @@
 //! and the pile. What decides to *call* it is one `match` in `routes::api`, and
 //! that line is the whole property: change it to `Filter::open_in` and every
 //! other test in this repository still passes while every session silently goes
-//! back to carrying every open task in its claimed repos — 12,371 bytes a turn,
+//! back to carrying every open task there is — 12,371 bytes a turn,
 //! measured, against a few hundred. That is the same shape as the
 //! `status <> 'done'` bug: one edit, nothing fails, the numbers are just wrong.
 //!
@@ -137,7 +137,6 @@ async fn seed(pool: &MySqlPool) {
         repo::create(
             pool,
             NewTask {
-                repo: Some("tasks".into()),
                 subject: subject.into(),
                 body: String::new(),
                 assignee: Some(holder),

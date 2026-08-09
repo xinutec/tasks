@@ -24,13 +24,11 @@ repeated every message. `task add` is how you file work.
 task list --mine --done   # YOUR list — every task you hold, finished or not
 task list --mine          # just what is still on your plate
 task show <id>            # one task: its prose, and its history
-task list                 # everyone's open work, every repo — not yours
+task list                 # everyone's open work — not just yours
 ```
 
-⚠ **`task list` is not your list.** It is every open task in the service,
-across every repo, and it does not honour the repo claim the way the prompt
-digest does — that filtering happens in the hook, not here. `--mine` is the
-one that answers "what am I holding".
+⚠ **`task list` is not your list.** It is every open task in the service, held
+by anybody. `--mine` is the one that answers "what am I holding".
 
 Nothing to set up: the CLI reads `$CLAUDE_CODE_SESSION_ID`, which is already in
 every shell you run, so it knows which conversation it is and files your changes
@@ -106,8 +104,8 @@ task move <id> me               # take it — `me` is YOU, this conversation
 task move <id> pippijn          # hand it to Pippijn
 task move <id> <session-id>     # hand it to another conversation
 task move <id> nobody           # put it back in the pile
-task add "One line" --repo <repo> --body -               # yours, by default
-task add "One line" --repo <repo> --to nobody            # for whoever picks it up
+task add "One line" --body -    # yours, by default
+task add "One line" --to nobody # for whoever picks it up
 task edit <id> --body -         # rewrite the prose
 ```
 
@@ -149,12 +147,19 @@ of it — between them they cover every reason a task should stop appearing.
 
 ## What your prompt shows you
 
-**Your own open tasks, and the pile — in the repos you have claimed.** Not what
-another conversation is holding, and not Pippijn's own items. Until 2026-08-09 it
-was every open task in those repos regardless of holder, which came from the file
-scheme rather than from a decision: one `TASKS.md` per repo meant both parties'
-work sat in one file. It cost every session, on every turn, a description of work
-it could not act on.
+**Your own open tasks, and the pile.** Not what another conversation is holding.
+Until 2026-08-09 it was every open task in the repos you had claimed, regardless
+of holder, which came from the file scheme rather than from a decision: one
+`TASKS.md` per repo meant both parties' work sat in one file. It cost every
+session, on every turn, a description of work it could not act on.
+
+⚠ **There is nothing to claim any more, and no repos.** The column went in
+`0004`. A session spans checkouts — fleet work is `xinutec-infra` and
+`nixos-config` together — so it was never a question with one answer, and a
+session that had never claimed got an empty digest that looked exactly like a
+broken service. Nothing to configure, no `--claim`. A session holding nothing,
+with an empty pile, is answered with silence, which is what `--claim none` used
+to be for.
 
 The pile is deliberately still there. It is how a task gets handed to whichever
 conversation is around rather than to a named one, so it has to stay visible to
@@ -162,25 +167,8 @@ all of them — and it is the answer to "what if I re-file something already in
 hand": if it is in hand it is somebody's, and if it is nobody's it is yours to
 take.
 
-Looking wider is something you ask for: `task list --repo R` shows every holder
-in a repo, and `task sessions` shows who is carrying what.
-
-## Which repos you see
-
-The hook shows the repos **you have claimed**, not everything:
-
-```sh
-~/Code/xinutec-infra/mac-mini/claude_tasks.py --session <your-id> --claim ~/Code/one ~/Code/two
-```
-
-Your own id is `$CLAUDE_CODE_SESSION_ID` — `echo` it, or read it off the hook,
-which prints it when you have never claimed anything. `--claim none` if you want
-to be left alone.
-
-⚠ **The claim moves your PROMPT, not your list.** A session that has claimed
-nothing gets an empty digest, which looks exactly like a failed migration —
-while `task list --mine` still shows everything it holds. Check with the CLI
-before concluding anything is lost.
+Looking wider is something you ask for: `task list` shows every open task
+whoever holds it, and `task sessions` shows who is carrying what.
 
 ## If it is not answering
 

@@ -20,11 +20,6 @@ type Result<T> = std::result::Result<T, AppError>;
 /// Which tasks a caller is asking for.
 #[derive(Debug, Clone, Default)]
 pub struct Filter {
-    /// Repositories to include. Empty means every task, **including the ones
-    /// belonging to no repo** — which is the only view they appear in besides a
-    /// person's own list. A session asks by repo, so it is never handed the
-    /// personal items that have no checkout.
-    pub repos: Vec<String>,
     /// Include closed tasks — both the done and the dropped. Off by default,
     /// and every injected path leaves it off: see the invariant in `lib.rs`.
     ///
@@ -48,18 +43,14 @@ pub struct Filter {
 }
 
 impl Filter {
-    /// Just the open tasks of these repositories — every holder.
-    pub fn open_in(repos: Vec<String>) -> Self {
-        Self {
-            repos,
-            ..Default::default()
-        }
-    }
-
     /// What a session's digest asks for: its own open tasks and the pile.
-    pub fn digest_for(session: &str, repos: Vec<String>) -> Self {
+    ///
+    /// There is nothing else to narrow by. The repository used to be the second
+    /// half of this and was dropped in `0004`: a session spans checkouts, and
+    /// selecting on a *claimed* set meant a session that had claimed nothing saw
+    /// an empty digest that looked exactly like a broken service.
+    pub fn digest_for(session: &str) -> Self {
         Self {
-            repos,
             session: Some(session.to_string()),
             or_unheld: true,
             ..Default::default()
@@ -71,7 +62,6 @@ impl Filter {
 #[derive(sqlx::FromRow)]
 struct Row {
     id: u64,
-    repo: Option<String>,
     subject: String,
     status: Status,
     assignee_kind: AssigneeKind,
@@ -112,7 +102,6 @@ impl Row {
         };
         Task {
             id: self.id,
-            repo: self.repo,
             subject: self.subject,
             status: self.status,
             assignee,
@@ -134,7 +123,7 @@ impl Row {
 macro_rules! select {
     ($tail:literal) => {
         concat!(
-            "SELECT t.id, t.repo, t.subject, t.status, t.assignee_kind, ",
+            "SELECT t.id, t.subject, t.status, t.assignee_kind, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
             "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
             "t.created_at, t.updated_at, t.closed_at ",
@@ -154,14 +143,6 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     query.push(" WHERE 1 = 1");
     if !filter.include_closed {
         query.push(concat!(" AND ", still_open!("t.status")));
-    }
-    if !filter.repos.is_empty() {
-        query.push(" AND t.repo IN (");
-        let mut list = query.separated(", ");
-        for repo in &filter.repos {
-            list.push_bind(repo);
-        }
-        query.push(")");
     }
     if let Some(session) = &filter.session {
         query.push(" AND ((t.assignee_kind = 'session' AND t.assignee_session = ");
@@ -274,8 +255,6 @@ pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
 /// serialises, and asks the client to send a key whose absence is the meaning.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct NewTask {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repo: Option<String>,
     pub subject: String,
     #[serde(default)]
     pub body: String,
@@ -442,10 +421,9 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
     let done = sqlx::query(
-        "INSERT INTO tasks (repo, subject, body, assignee_kind, assignee_person, assignee_session) \
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (subject, body, assignee_kind, assignee_person, assignee_session) \
+         VALUES (?, ?, ?, ?, ?)",
     )
-    .bind(new.repo.as_deref())
     .bind(&subject)
     .bind(&new.body)
     .bind(kind)

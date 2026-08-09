@@ -3,7 +3,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::access::{Access, Viewer};
@@ -11,7 +11,6 @@ use crate::digest;
 use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
-use crate::still_open;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Task, TaskDetail};
 
@@ -37,23 +36,8 @@ pub async fn me(Access(viewer): Access) -> Json<serde_json::Value> {
     })
 }
 
-/// A comma-separated repository list, as every query here takes it.
-///
-/// Repeated query keys are not what `serde_urlencoded` decodes into a `Vec`, and
-/// the alternative — a hand-rolled parse of the raw query string — is a parser
-/// on the path of every prompt. One separator, spelled out in the API doc.
-fn repo_list(raw: Option<&str>) -> Vec<String> {
-    raw.unwrap_or("")
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
 #[derive(Deserialize)]
 pub struct DigestQuery {
-    repos: Option<String>,
     /// The conversation asking. Optional — a person can read a digest too — and
     /// when present the session is recorded as seen, which is the only way a
     /// row for it ever comes to exist.
@@ -81,25 +65,24 @@ pub async fn digest(
     if let Some(id) = &session {
         sessions::touch(&app.db, id, None).await?;
     }
-    // What a session is shown: its own open tasks and the pile, in the repos it
-    // claimed — not the ones another conversation is holding.
+    // What a session is shown: its own open tasks and the pile — not the ones
+    // another conversation is holding.
     //
-    // ⚠ **The old shape was inherited from the storage, not chosen.** One
-    // `TASKS.md` per repository meant both parties' work was in one file, so
-    // seeing across holders was a side effect of there being nowhere else to put
-    // it; carrying that over made every session pay, on every turn, for work it
-    // could not act on. Pippijn's rule: a session should usually see only its
-    // own, and looking at another's should take asking — which the CLI already
-    // answers, `task list --repo R` for every holder and `task sessions` for who
-    // carries what.
+    // ⚠ **This used to also narrow by the repositories the session had
+    // claimed, and that half was inherited from the storage rather than
+    // chosen.** One `TASKS.md` per repository meant both parties' work sat in
+    // one file, so seeing across holders was a side effect of there being
+    // nowhere else to put it. Worse, it made the empty digest ambiguous: a
+    // session that had claimed nothing saw exactly what a broken service looks
+    // like. Dropped in `0004`, and the pile is global now — 3 unheld of 134
+    // open when that was measured, which is what makes it affordable.
     //
     // A person reading a digest without naming a session gets everything: that
     // path is `task digest` for checking the cost, and there is no "own" to
     // narrow to.
-    let repos = repo_list(q.repos.as_deref());
     let filter = match &session {
-        Some(id) => Filter::digest_for(id, repos),
-        None => Filter::open_in(repos),
+        Some(id) => Filter::digest_for(id),
+        None => Filter::default(),
     };
     let tasks = repo::list(&app.db, &filter).await?;
     Ok((
@@ -113,7 +96,6 @@ pub async fn digest(
 
 #[derive(Deserialize)]
 pub struct ListQuery {
-    repos: Option<String>,
     /// Include closed tasks — the done and the dropped alike. Off unless asked,
     /// everywhere. Still spelled `done` on the wire: it is what every existing
     /// caller sends, and "show me the closed ones too" is what it always meant.
@@ -130,7 +112,6 @@ pub async fn list(
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Vec<Task>>, AppError> {
     let filter = Filter {
-        repos: repo_list(q.repos.as_deref()),
         include_closed: q.done,
         session: q.session,
         person: q.person,
@@ -221,39 +202,4 @@ pub async fn rename(
     }
     sessions::touch(&app.db, &id, Some(&body.name)).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
-}
-
-#[derive(Serialize)]
-pub struct RepoCount {
-    /// `None` is the pile of tasks belonging to no checkout.
-    pub repo: Option<String>,
-    pub open: i64,
-}
-
-/// Which repositories have work, and how much — the client's filter bar.
-///
-/// Takes the pool rather than the whole state so the DB suite can call it: this
-/// is one of the six queries that meant "open" and said "not done", and the one
-/// furthest from anything else a test already touches.
-pub async fn repos_with_work(pool: &sqlx::MySqlPool) -> Result<Vec<RepoCount>, AppError> {
-    // dev-lint: allow-sqlx — a `concat!`ed literal; `still_open!` is the only
-    // place the open vocabulary is spelled in SQL.
-    let rows: Vec<(Option<String>, i64)> = sqlx::query_as(concat!(
-        "SELECT repo, COUNT(*) FROM tasks WHERE ",
-        still_open!("status"),
-        " GROUP BY repo ORDER BY repo",
-    ))
-    .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|(repo, open)| RepoCount { repo, open })
-        .collect())
-}
-
-pub async fn repo_counts(
-    Access(_): Access,
-    State(app): State<AppState>,
-) -> Result<Json<Vec<RepoCount>>, AppError> {
-    Ok(Json(repos_with_work(&app.db).await?))
 }

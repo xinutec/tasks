@@ -23,53 +23,33 @@
         </button>
       }
     </div>
-    @if (repos().length > 1) {
-      <div class="row" role="group" aria-label="Repository">
-        @for (count of repos(); track count.repo) {
-          <button
-            mat-button
-            [class.on]="repo() === count.repo"
-            (click)="pickRepo(count.repo)"
-            [attr.aria-pressed]="repo() === count.repo"
-          >
-            {{ count.repo ?? 'no repo' }}
-            <span class="count">{{ count.open }}</span>
-          </button>
-        }
-      </div>
-    }
   </nav>
 
   @if (shown().length === 0) {
     <p class="empty">Nothing here. That is allowed.</p>
   }
 
-  @for (group of groups(); track group.repo) {
-    <section class="group">
-      @if (groups().length > 1 || group.repo !== 'no repo') {
-        <h2>{{ group.repo }}</h2>
+  @if (shown().length > 0) {
+    <ul class="tasks">
+      @for (row of rows(); track row.task.id) {
+        <li>
+          <a class="task" [routerLink]="['/t', row.task.id]">
+            <mat-icon class="status" [class]="row.task.status">{{
+              statusIcon[row.task.status]
+            }}</mat-icon>
+            <span class="subject">{{ row.task.subject }}</span>
+            <span class="meta">
+              <span class="id">#{{ row.task.id }}</span>
+              @if (row.task.assignee.kind !== 'nobody') {
+                <span class="holder">{{ row.holder }}</span>
+              }
+              @if (row.task.detailed) {
+                <mat-icon class="has-body" aria-label="has notes">notes</mat-icon>
+              }
+            </span>
+          </a>
+        </li>
       }
-      <ul class="tasks">
-        @for (row of group.tasks; track row.task.id) {
-          <li>
-            <a class="task" [routerLink]="['/t', row.task.id]">
-              <mat-icon class="status" [class]="row.task.status">{{
-                statusIcon[row.task.status]
-              }}</mat-icon>
-              <span class="subject">{{ row.task.subject }}</span>
-              <span class="meta">
-                <span class="id">#{{ row.task.id }}</span>
-                @if (row.task.assignee.kind !== 'nobody') {
-                  <span class="holder">{{ row.holder }}</span>
-                }
-                @if (row.task.detailed) {
-                  <mat-icon class="has-body" aria-label="has notes">notes</mat-icon>
-                }
-              </span>
-            </a>
-          </li>
-        }
-      </ul>
-    </section>
+    </ul>
   }
 }

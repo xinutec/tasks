@@ -6,23 +6,15 @@ h1 {
 form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  // 4px until the repository field went and left `For` directly under `Notes`.
+  // A `subscriptSizing="dynamic"` hint is laid out under its field but is not
+  // fully inside its box, so at 4px the Notes hint clipped the `For` label by
+  // ~2px — caught by the phone-width harness, invisible at desktop width.
+  gap: 12px;
 }
 
 mat-form-field {
   width: 100%;
-}
-
-.pair {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-
-  mat-form-field {
-    // Both fit side by side on anything wider than a phone and stack on one.
-    // `min-width` rather than a breakpoint: what decides is whether they fit.
-    flex: 1 1 12rem;
-  }
 }
 
 button[type='submit'] {

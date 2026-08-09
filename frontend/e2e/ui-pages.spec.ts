@@ -47,13 +47,12 @@ test('the list — long subjects beside a holder chip @ phone width', async ({ p
 });
 
 /**
- * The filter rows scroll sideways BY DESIGN. The repository list grows without
- * limit and its members are unbreakable names, so wrapping them would push the
- * list itself below the fold on a phone — the one thing the screen is for.
+ * The filter row scrolls sideways BY DESIGN. Wrapping it would push the list
+ * itself below the fold on a phone — the one thing the screen is for.
  */
 const FILTER_SCROLLERS = ['.filters .row'];
 
-test('the list — filtered to one repository @ phone width', async ({ page }, testInfo) => {
+test('the list — filtered to one holder @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'with a session' }).click();
@@ -124,7 +123,7 @@ test('a dropped task — closed, and not counted as done @ phone width', async (
   await expectNoClippedIcons(page, testInfo);
 });
 
-test('filing a task — two fields side by side or stacked @ phone width', async ({
+test('filing a task — a hint under a field, and a label under that @ phone width', async ({
   page,
 }, testInfo) => {
   await mockApi(page);

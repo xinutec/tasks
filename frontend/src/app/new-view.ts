@@ -45,10 +45,8 @@ export class NewView {
 
   readonly subject = signal('');
   readonly body = signal('');
-  readonly repo = signal<string>('');
   readonly to = signal<string>('nobody');
 
-  readonly repos = this.store.repos;
   readonly sessionOptions = computed(() =>
     this.store.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
   );
@@ -91,7 +89,6 @@ export class NewView {
       .create({
         subject,
         body: this.body(),
-        repo: this.repo() || undefined,
         assignee: this.assignee(),
       })
       .subscribe({

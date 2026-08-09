@@ -29,9 +29,8 @@ fn to_session(id: &str) -> Assignee {
     }
 }
 
-fn filed(repo_name: &str, subject: &str) -> NewTask {
+fn filed(subject: &str) -> NewTask {
     NewTask {
-        repo: Some(repo_name.into()),
         subject: subject.into(),
         body: String::new(),
         assignee: None,
@@ -40,10 +39,10 @@ fn filed(repo_name: &str, subject: &str) -> NewTask {
 
 /// Filed straight into the pile, which since 2026-08-09 has to be asked for:
 /// leaving the assignee out means the task belongs to whoever filed it.
-fn unclaimed(repo_name: &str, subject: &str) -> NewTask {
+fn unclaimed(subject: &str) -> NewTask {
     NewTask {
         assignee: Some(Assignee::nobody()),
-        ..filed(repo_name, subject)
+        ..filed(subject)
     }
 }
 
@@ -62,7 +61,7 @@ async fn kinds(pool: &sqlx::MySqlPool, id: u64) -> Vec<String> {
 #[tokio::test]
 async fn a_filed_task_comes_back_open_and_held_by_whoever_filed_it() {
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("memview", "Something to do"), &pippijn())
+    let task = repo::create(&pool, filed("Something to do"), &pippijn())
         .await
         .expect("filing");
     assert_eq!(task.subject, "Something to do");
@@ -88,7 +87,7 @@ async fn the_pile_is_something_said_rather_than_something_fallen_into() {
         &pool,
         NewTask {
             assignee: Some(Assignee::nobody()),
-            ..filed("memview", "For whoever picks it up")
+            ..filed("For whoever picks it up")
         },
         &Actor::Session("sess-1".into()),
     )
@@ -107,7 +106,7 @@ async fn the_pile_is_something_said_rather_than_something_fallen_into() {
 #[tokio::test]
 async fn a_finished_task_leaves_every_open_list_and_stays_in_the_record() {
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("memview", "Finish me"), &pippijn())
+    let task = repo::create(&pool, filed("Finish me"), &pippijn())
         .await
         .expect("filing");
 
@@ -150,7 +149,7 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         .await
         .expect("recording a session");
     // From the pile, so the two handovers under test are the whole history.
-    let task = repo::create(&pool, unclaimed("memview", "Hand this over"), &pippijn())
+    let task = repo::create(&pool, unclaimed("Hand this over"), &pippijn())
         .await
         .expect("filing");
 
@@ -213,13 +212,9 @@ async fn history_names_the_session_that_acted_rather_than_its_id() {
     sessions::touch(&pool, "sess-1", Some("memview"))
         .await
         .expect("recording");
-    let task = repo::create(
-        &pool,
-        filed("memview", "Acted on"),
-        &Actor::Session("sess-1".into()),
-    )
-    .await
-    .expect("filing");
+    let task = repo::create(&pool, filed("Acted on"), &Actor::Session("sess-1".into()))
+        .await
+        .expect("filing");
 
     let detail = repo::get(&pool, task.id)
         .await
@@ -240,7 +235,7 @@ async fn history_names_the_session_that_acted_rather_than_its_id() {
         .expect("recording a session");
     let anon = repo::create(
         &pool,
-        filed("memview", "By a stranger"),
+        filed("By a stranger"),
         &Actor::Session("sess-9".into()),
     )
     .await
@@ -258,7 +253,7 @@ async fn a_change_that_changes_nothing_writes_no_history() {
     // Filed into the pile so that the object restated below is the object that
     // is there — `assignee: nobody` against a task the filer now holds would be
     // a real change, and the point of this test is that nothing changes.
-    let task = repo::create(&pool, unclaimed("memview", "Steady"), &pippijn())
+    let task = repo::create(&pool, unclaimed("Steady"), &pippijn())
         .await
         .expect("filing");
 
@@ -295,16 +290,15 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
     let pool = common::fresh_db().await;
 
     let long = "x".repeat(400);
-    let refused = repo::create(&pool, filed("memview", &long), &pippijn()).await;
+    let refused = repo::create(&pool, filed(&long), &pippijn()).await;
     assert!(refused.is_err(), "a 400-character subject was accepted");
 
-    let split = repo::create(&pool, filed("memview", "one\ntwo"), &pippijn()).await;
+    let split = repo::create(&pool, filed("one\ntwo"), &pippijn()).await;
     assert!(split.is_err(), "a two-line subject was accepted");
 
     let task = repo::create(
         &pool,
         NewTask {
-            repo: Some("memview".into()),
             subject: "Has prose".into(),
             body: "# Why\n\nA paragraph of reasoning.".into(),
             assignee: None,
@@ -340,7 +334,6 @@ async fn a_session_rename_moves_no_task() {
     let task = repo::create(
         &pool,
         NewTask {
-            repo: Some("memview".into()),
             subject: "Assigned to a session that will be renamed".into(),
             body: String::new(),
             assignee: Some(to_session("sess-1")),
@@ -393,7 +386,6 @@ async fn a_session_row_carries_how_much_it_is_holding() {
         repo::create(
             &pool,
             NewTask {
-                repo: Some("memview".into()),
                 subject: format!("Task {n}"),
                 body: String::new(),
                 assignee: Some(to_session("sess-1")),
@@ -406,7 +398,6 @@ async fn a_session_row_carries_how_much_it_is_holding() {
     let finished = repo::create(
         &pool,
         NewTask {
-            repo: Some("memview".into()),
             subject: "Already done".into(),
             body: String::new(),
             assignee: Some(to_session("sess-1")),
@@ -432,39 +423,6 @@ async fn a_session_row_carries_how_much_it_is_holding() {
 }
 
 #[tokio::test]
-async fn a_repo_filter_never_returns_the_tasks_that_belong_to_no_repo() {
-    // A session asks by repo, so this is what keeps Pippijn's own items — which
-    // have no checkout — out of every prompt.
-    let pool = common::fresh_db().await;
-    repo::create(&pool, filed("memview", "In a repo"), &pippijn())
-        .await
-        .expect("filing");
-    repo::create(
-        &pool,
-        NewTask {
-            repo: None,
-            subject: "Personal, no repo".into(),
-            body: String::new(),
-            assignee: Some(to_person()),
-        },
-        &pippijn(),
-    )
-    .await
-    .expect("filing");
-
-    let asked = repo::list(&pool, &Filter::open_in(vec!["memview".into()]))
-        .await
-        .expect("listing");
-    assert_eq!(asked.len(), 1);
-    assert_eq!(asked[0].subject, "In a repo");
-
-    let everything = repo::list(&pool, &Filter::default())
-        .await
-        .expect("listing");
-    assert_eq!(everything.len(), 2);
-}
-
-#[tokio::test]
 async fn finishing_a_task_records_who_finished_it() {
     // `assignee` is the only place a LIST can say who did something — the
     // history knows, and no list renders a history. A task closed while held by
@@ -475,13 +433,9 @@ async fn finishing_a_task_records_who_finished_it() {
     sessions::touch(&pool, "sess-1", Some("tasks"))
         .await
         .expect("recording a session");
-    let task = repo::create(
-        &pool,
-        unclaimed("tasks", "Nobody is holding this"),
-        &pippijn(),
-    )
-    .await
-    .expect("filing");
+    let task = repo::create(&pool, unclaimed("Nobody is holding this"), &pippijn())
+        .await
+        .expect("filing");
     assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
 
     let done = repo::update(
@@ -506,7 +460,7 @@ async fn saying_where_a_finished_task_goes_beats_inferring_it() {
     // one off the credential — handing work back while closing it must not be
     // silently rewritten into keeping it.
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("tasks", "Yours now"), &pippijn())
+    let task = repo::create(&pool, filed("Yours now"), &pippijn())
         .await
         .expect("filing");
 
@@ -535,7 +489,7 @@ async fn reopening_a_task_leaves_its_holder_alone() {
     sessions::touch(&pool, "sess-1", Some("tasks"))
         .await
         .expect("recording a session");
-    let task = repo::create(&pool, filed("tasks", "Not finished after all"), &pippijn())
+    let task = repo::create(&pool, filed("Not finished after all"), &pippijn())
         .await
         .expect("filing");
     repo::update(
@@ -581,7 +535,7 @@ async fn who_holds_what_counts_the_finished_work_too() {
         .expect("recording a session");
 
     for subject in ["One", "Two", "Three"] {
-        let task = repo::create(&pool, filed("recall", subject), &pippijn())
+        let task = repo::create(&pool, filed(subject), &pippijn())
             .await
             .expect("filing");
         repo::update(
@@ -613,7 +567,7 @@ async fn who_holds_what_counts_the_finished_work_too() {
         }
     }
     // One for the person, one left in the pile.
-    let mine = repo::create(&pool, filed("recall", "Mine"), &pippijn())
+    let mine = repo::create(&pool, filed("Mine"), &pippijn())
         .await
         .expect("filing");
     repo::update(
@@ -627,7 +581,7 @@ async fn who_holds_what_counts_the_finished_work_too() {
     )
     .await
     .expect("taking it");
-    repo::create(&pool, unclaimed("recall", "Unclaimed"), &pippijn())
+    repo::create(&pool, unclaimed("Unclaimed"), &pippijn())
         .await
         .expect("filing");
 
@@ -675,7 +629,7 @@ async fn a_dropped_task_is_not_open_anywhere() {
     ] {
         // Into the pile, so that what each holder ends up with is the doing of
         // the status rules rather than of the filing.
-        let task = repo::create(&pool, unclaimed("tasks", subject), &pippijn())
+        let task = repo::create(&pool, unclaimed(subject), &pippijn())
             .await
             .expect("filing");
         if status != Status::Open {
@@ -743,14 +697,6 @@ async fn a_dropped_task_is_not_open_anywhere() {
     // able to say who decided it was not worth doing.
     assert_eq!(dropped.assignee.kind, AssigneeKind::Person);
 
-    // The filter bar's per-repo count, which is the query least like the others
-    // and the one a reader is most likely to miss.
-    let counts = tasks::routes::api::repos_with_work(&pool)
-        .await
-        .expect("counting repos");
-    assert_eq!(counts.len(), 1);
-    assert_eq!(counts[0].open, 2, "the filter bar counted a closed task");
-
     // Every session row carries its own open count, by a seventh query.
     sessions::touch(&pool, "sess-1", Some("tasks"))
         .await
@@ -795,13 +741,9 @@ async fn dropping_a_task_credits_nobody_with_doing_it() {
     sessions::touch(&pool, "sess-1", Some("memview"))
         .await
         .expect("recording a session");
-    let task = repo::create(
-        &pool,
-        filed("memview", "Wait for a thing that never came"),
-        &pippijn(),
-    )
-    .await
-    .expect("filing");
+    let task = repo::create(&pool, filed("Wait for a thing that never came"), &pippijn())
+        .await
+        .expect("filing");
 
     let dropped = repo::update(
         &pool,
@@ -866,7 +808,7 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
         .await
         .expect("recording a session");
 
-    let task = repo::create(&pool, unclaimed("tasks", "In the pile"), &pippijn())
+    let task = repo::create(&pool, unclaimed("In the pile"), &pippijn())
         .await
         .expect("filing");
     assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
@@ -964,7 +906,7 @@ async fn a_session_digest_carries_its_own_work_and_the_pile() {
             &pool,
             NewTask {
                 assignee: holder,
-                ..filed("tasks", subject)
+                ..filed(subject)
             },
             &pippijn(),
         )
@@ -974,7 +916,7 @@ async fn a_session_digest_carries_its_own_work_and_the_pile() {
     }
     assert_eq!(filed_ids.len(), 4);
 
-    let mine = repo::list(&pool, &Filter::digest_for("sess-1", vec!["tasks".into()]))
+    let mine = repo::list(&pool, &Filter::digest_for("sess-1"))
         .await
         .expect("listing");
     let subjects: Vec<&str> = mine.iter().map(|t| t.subject.as_str()).collect();
@@ -994,7 +936,7 @@ async fn a_session_digest_carries_its_own_work_and_the_pile() {
 
     // A person reading a digest without naming a session still sees everything
     // — that path is `task digest`, for measuring the cost.
-    let everything = repo::list(&pool, &Filter::open_in(vec!["tasks".into()]))
+    let everything = repo::list(&pool, &Filter::default())
         .await
         .expect("listing");
     assert_eq!(everything.len(), 4);
@@ -1014,7 +956,7 @@ async fn starting_a_task_assigned_to_another_session_takes_nothing() {
         &pool,
         NewTask {
             assignee: Some(to_session("sess-1")),
-            ..filed("tasks", "Given to sess-1")
+            ..filed("Given to sess-1")
         },
         &pippijn(),
     )

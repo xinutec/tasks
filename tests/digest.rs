@@ -10,11 +10,10 @@ use chrono::{TimeZone, Utc};
 use tasks::digest::{MAX_BYTES, render};
 use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};
 
-fn task(id: u64, repo: Option<&str>, subject: &str, status: Status, assignee: Assignee) -> Task {
+fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
     let at = Utc.with_ymd_and_hms(2026, 8, 8, 12, 0, 0).unwrap();
     Task {
         id,
-        repo: repo.map(str::to_string),
         subject: subject.to_string(),
         status,
         assignee,
@@ -25,8 +24,8 @@ fn task(id: u64, repo: Option<&str>, subject: &str, status: Status, assignee: As
     }
 }
 
-fn open(id: u64, repo: &str, subject: &str) -> Task {
-    task(id, Some(repo), subject, Status::Open, Assignee::nobody())
+fn open(id: u64, subject: &str) -> Task {
+    task(id, subject, Status::Open, Assignee::nobody())
 }
 
 fn person(id: &str) -> Assignee {
@@ -47,12 +46,8 @@ fn nothing_open_says_nothing_at_all() {
 #[test]
 fn one_line_per_task_and_the_line_is_the_subject() {
     let out = render(&[
-        open(
-            1,
-            "memview",
-            "Stop walking every transcript on the request path",
-        ),
-        open(2, "memview", "The picture button is ugly on the left"),
+        open(1, "Stop walking every transcript on the request path"),
+        open(2, "The picture button is ugly on the left"),
     ]);
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines.len(), 3, "one header and two tasks: {out}");
@@ -64,30 +59,30 @@ fn one_line_per_task_and_the_line_is_the_subject() {
 }
 
 #[test]
-fn one_repo_is_not_named_and_several_are() {
-    let single = render(&[open(1, "memview", "a")]);
-    assert!(!single.contains("memview ("), "{single}");
-
-    let both = render(&[open(1, "memview", "a"), open(2, "tasks", "b")]);
-    assert!(both.contains("across 2 repos"), "{both}");
-    assert!(both.contains("memview (1 open)"), "{both}");
-    assert!(both.contains("tasks (1 open)"), "{both}");
+fn nothing_groups_the_list_and_no_heading_is_spent() {
+    // The repository was dropped in `0004`, and with it the group headings. This
+    // asserts the cost, not the absence of a feature: a heading is a whole line
+    // in the one place that is re-sent on every turn, and re-grouping under some
+    // other key would spend it again.
+    let out = render(&[open(1, "a"), open(2, "b"), open(3, "c")]);
+    assert_eq!(out.lines().count(), 4, "one header and three tasks: {out}");
+    assert!(!out.contains("across"), "{out}");
 }
 
 #[test]
 fn work_in_hand_is_counted_and_marked() {
-    let mut doing = open(2, "memview", "being worked on");
+    let mut doing = open(2, "being worked on");
     doing.status = Status::Doing;
-    let out = render(&[open(1, "memview", "waiting"), doing]);
+    let out = render(&[open(1, "waiting"), doing]);
     assert!(out.contains("1 in progress"), "{out}");
     assert!(out.contains("- [>] **#2** being worked on"), "{out}");
 }
 
 #[test]
 fn a_holder_is_named_and_nobody_is_not() {
-    let mut held = open(2, "memview", "yours");
+    let mut held = open(2, "yours");
     held.assignee = person("pippijn");
-    let out = render(&[open(1, "memview", "in the pile"), held]);
+    let out = render(&[open(1, "in the pile"), held]);
     assert!(out.contains("- [ ] **#1** in the pile\n"), "{out}");
     assert!(out.contains("- [ ] **#2** yours (pippijn)"), "{out}");
     assert!(!out.contains("(nobody)"), "{out}");
@@ -100,7 +95,6 @@ fn the_digest_stays_inside_its_budget_however_many_tasks_there_are() {
         .map(|id| {
             open(
                 id,
-                "memview",
                 "a subject of a length that a real one might plausibly reach",
             )
         })
@@ -130,7 +124,6 @@ fn the_budget_is_what_makes_the_test_above_pass() {
         .map(|id| {
             open(
                 id,
-                "memview",
                 "a subject of a length that a real one might plausibly reach",
             )
         })
@@ -153,7 +146,7 @@ fn the_header_countermands_the_built_in_task_tools() {
     // write into the store that cost 527 kB a turn and is what this replaced.
     // The counter has to be in the digest because the digest is the only thing
     // that is also there every turn.
-    let out = render(&[open(1, "tasks", "Something")]);
+    let out = render(&[open(1, "Something")]);
     let head = out.lines().next().expect("a header");
     assert!(head.contains("TaskCreate"), "{head}");
     assert!(head.contains("task add"), "{head}");
