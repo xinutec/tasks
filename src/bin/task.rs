@@ -18,11 +18,11 @@
 //! is the one thing the history must not contain. This CLI stops before the
 //! round trip and says which of the two halves — token, identity — is missing.
 //!
-//! **Naming a task.** Every command that takes one accepts `79`, `#79` as the
-//! digest prints it, or `recall#79` — what a session called it before the
-//! migration. That last spelling is not a nicety: a built-in number was unique
-//! only within one session, 46% of them had to be renumbered, and old prose
-//! contains no other handle.
+//! **Naming a task.** Every command that takes one accepts `79` or `#79` as the
+//! digest prints it. The `recall#79` spelling — a task by what a session called
+//! it before the migration — went with the columns behind it in
+//! `migrations/0003_drop_origin.sql`, once every reference that needed it had
+//! been rewritten to a live id.
 //!
 //! ```text
 //! task list [--repo R] [--mine] [--done]    what is open
@@ -476,12 +476,6 @@ async fn main() -> Result<()> {
             }
             emit(cli.json, &task, || {
                 println!("{}", line(&task));
-                // Only on `show`, never in a list: this is what somebody checking
-                // whether #79 is *their* #79 needs, and it is dead weight on a line
-                // that is scanned rather than read.
-                if let Some(origin) = task["origin"].as_str() {
-                    println!("  was {origin}");
-                }
                 let body = task["body"].as_str().unwrap_or("").trim();
                 if !body.is_empty() {
                     println!("\n{body}");
@@ -623,23 +617,9 @@ async fn main() -> Result<()> {
 }
 
 /// Change a task, named either way.
-///
-/// An old name costs one extra round trip to resolve rather than a `by/…` PATCH
-/// route: the write surface stays one endpoint keyed on the id, which is the
-/// only thing that is guaranteed unique, and `recall#79` is what somebody types
-/// once when reading old prose — not what a client loops over.
 async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<()> {
     client.writing()?;
-    let id = match id {
-        TaskRef::Id(id) => id,
-        origin => {
-            let req = client.request(reqwest::Method::GET, &origin.path());
-            let task = client.send(req).await?.context("no such task")?;
-            task["id"]
-                .as_u64()
-                .context("the service answered without an id")?
-        }
-    };
+    let id = id.id();
     let req = client
         .request(reqwest::Method::PATCH, &format!("/api/tasks/{id}"))
         .json(&change);

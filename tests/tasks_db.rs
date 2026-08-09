@@ -568,42 +568,6 @@ async fn reopening_a_task_leaves_its_holder_alone() {
 }
 
 #[tokio::test]
-async fn a_migrated_task_is_reachable_by_what_it_used_to_be_called() {
-    // 46% of the 598 imported tasks could not keep their number, because a
-    // built-in number was unique only inside one session. `recall#79` is the
-    // handle old prose still contains, so it has to resolve to something.
-    let pool = common::fresh_db().await;
-    let task = repo::create(
-        &pool,
-        filed("recall", "Came from somewhere else"),
-        &pippijn(),
-    )
-    .await
-    .expect("filing");
-    sqlx::query("UPDATE tasks SET origin_session = 'recall', origin_number = 79 WHERE id = ?")
-        .bind(task.id)
-        .execute(&pool)
-        .await
-        .expect("recording where it came from");
-
-    let found = repo::by_origin(&pool, "recall", 79)
-        .await
-        .expect("looking it up")
-        .expect("a task");
-    assert_eq!(found.task.id, task.id);
-    assert_eq!(found.task.origin.as_deref(), Some("recall#79"));
-
-    // A number that belonged to a different session is a different task, which
-    // is the whole reason the pair is the key rather than the number.
-    assert!(
-        repo::by_origin(&pool, "health", 79)
-            .await
-            .expect("looking it up")
-            .is_none()
-    );
-}
-
-#[tokio::test]
 async fn who_holds_what_counts_the_finished_work_too() {
     // `open` alone says who is busy and nothing about who has done anything: a
     // task leaves every open list the moment it is finished. `0/2` and `0/0`

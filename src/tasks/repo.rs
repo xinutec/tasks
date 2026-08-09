@@ -87,8 +87,6 @@ struct Row {
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
     closed_at: Option<NaiveDateTime>,
-    origin_session: Option<String>,
-    origin_number: Option<u32>,
 }
 
 /// The session zone is pinned to UTC in `db::connect`, so a DB-clock column
@@ -122,16 +120,6 @@ impl Row {
             created_at: utc(self.created_at),
             updated_at: utc(self.updated_at),
             closed_at: self.closed_at.map(utc),
-            // Rendered here rather than stored joined, so the two columns stay
-            // separately queryable and the wire carries one readable thing.
-            origin: match (self.origin_session, self.origin_number) {
-                (Some(session), Some(number)) => Some(format!("{session}#{number}")),
-                // A session with no number, or the other way round, is a
-                // half-written import; say what is known rather than nothing.
-                (Some(session), None) => Some(session),
-                (None, Some(number)) => Some(format!("#{number}")),
-                (None, None) => None,
-            },
         }
     }
 }
@@ -149,8 +137,7 @@ macro_rules! select {
             "SELECT t.id, t.repo, t.subject, t.status, t.assignee_kind, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
             "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
-            "t.created_at, t.updated_at, t.closed_at, ",
-            "t.origin_session, t.origin_number ",
+            "t.created_at, t.updated_at, t.closed_at ",
             "FROM tasks t LEFT JOIN sessions s ON s.id = t.assignee_session",
             $tail
         )
@@ -627,32 +614,6 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 
     tx.commit().await.context("committing a task change")?;
     list_one(pool, id).await
-}
-
-/// Find a task by what it was called before it lived here — `recall`, `79`.
-///
-/// ⚠ **This is not an alias for convenience.** A built-in number was unique only
-/// inside one session, so 46% of the 598 imported tasks could not keep theirs;
-/// `recall#79` is the handle that older prose, older memories and the sessions
-/// themselves still contain, and without this it was a fact printed by
-/// `task show` rather than a way to reach anything.
-///
-/// At most one row can match — the numbers were unique within a session — but
-/// `LIMIT 1` says so rather than trusting it, since nothing in the schema
-/// enforces it for rows written after the import.
-pub async fn by_origin(pool: &MySqlPool, session: &str, number: u64) -> Result<Option<TaskDetail>> {
-    let found: Option<(u64,)> = sqlx::query_as(
-        "SELECT id FROM tasks WHERE origin_session = ? AND origin_number = ? ORDER BY id LIMIT 1",
-    )
-    .bind(session.trim())
-    .bind(number)
-    .fetch_optional(pool)
-    .await
-    .context("looking a task up by where it came from")?;
-    let Some((id,)) = found else {
-        return Ok(None);
-    };
-    get(pool, id).await
 }
 
 /// One task without its prose or history — the read every write does first,

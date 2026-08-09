@@ -1,53 +1,44 @@
-//! How a task may be named, and where each spelling goes.
+//! How a task may be named.
 //!
-//! Worth its own file because the second spelling is load-bearing: 46% of the
-//! 598 imported tasks could not keep their number, so `recall#79` is the only
-//! handle the prose written before the migration contains.
+//! There were two spellings until 2026-08-09: `recall#79` named a task by what
+//! a session called it before the migration, because 178 of the 620 imported
+//! tasks could not keep their number. It went with the columns behind it once
+//! the mapping had been spent — see `migrations/0003_drop_origin.sql`. What is
+//! left is one id space, and the only question is whether the hash is optional.
 
 use tasks::tasks::reference::TaskRef;
 
 #[test]
-fn a_task_can_be_named_three_ways() {
-    assert_eq!("79".parse(), Ok(TaskRef::Id(79)));
-    // What the digest prints on every line of every prompt, so a session
-    // copying one out of its own context is not corrected for it.
-    assert_eq!("#79".parse(), Ok(TaskRef::Id(79)));
-    assert_eq!(
-        "recall#79".parse(),
-        Ok(TaskRef::Origin("recall".into(), 79))
-    );
+fn the_hash_the_digest_prints_is_optional() {
+    assert_eq!("79".parse(), Ok(TaskRef(79)));
+    // The digest puts `#79` on every line of every prompt, so a session copying
+    // one out of its own context must not be corrected for it. This is the
+    // whole reason the type exists rather than a bare `u64` argument.
+    assert_eq!("#79".parse(), Ok(TaskRef(79)));
     // Typed by a person, off a phone or out of a sentence.
-    assert_eq!(
-        " recall #79 ".parse(),
-        Ok(TaskRef::Origin("recall".into(), 79))
-    );
+    assert_eq!(" #79 ".parse(), Ok(TaskRef(79)));
 }
 
 #[test]
 fn a_name_that_is_not_a_task_says_so() {
-    for bad in ["recall", "recall#", "#", "", "79x", "recall#seventy-nine"] {
+    for bad in ["recall", "recall#79", "#", "", "79x", "seventy-nine"] {
         let err = bad.parse::<TaskRef>().expect_err(bad);
-        assert!(err.contains("recall#79"), "{bad:?} said {err:?}");
+        assert!(err.contains("#79"), "{bad:?} said {err:?}");
     }
 }
 
 #[test]
-fn an_old_name_goes_to_the_two_segment_route() {
-    // Never `/api/tasks/recall%2379`: `#` is the fragment delimiter, so an
-    // unescaped one truncates the request to `/api/tasks/recall`, and an escaped
-    // one works only for the callers that remember to escape it.
-    assert_eq!(TaskRef::Id(79).path(), "/api/tasks/79");
-    assert_eq!(
-        TaskRef::Origin("recall".into(), 79).path(),
-        "/api/tasks/by/recall/79"
-    );
+fn an_old_name_is_no_longer_a_name() {
+    // Not an oversight: `recall#79` used to parse, and prose from before the
+    // migration still contains it. It has to FAIL rather than be read as `79`,
+    // which would silently answer with health's task when recall's was meant —
+    // the four-sessions-had-a-`#79` problem the two columns existed to solve.
+    let err = "recall#79".parse::<TaskRef>().expect_err("recall#79");
+    assert!(err.contains("is not a task"), "{err:?}");
 }
 
 #[test]
-fn a_reference_prints_as_it_is_typed() {
-    assert_eq!(TaskRef::Id(79).to_string(), "#79");
-    assert_eq!(
-        TaskRef::Origin("recall".into(), 79).to_string(),
-        "recall#79"
-    );
+fn a_reference_knows_its_url_and_prints_with_the_hash() {
+    assert_eq!(TaskRef(79).path(), "/api/tasks/79");
+    assert_eq!(TaskRef(79).to_string(), "#79");
 }

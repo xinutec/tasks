@@ -41,27 +41,23 @@ against you. It is installed by home-manager and lives in the nix profile — if
 Your old numbers were kept **where they were free**. They were unique only
 inside your own session, and 124 numbers were claimed by more than one — so 178
 of the 620 (29%) had to move; open tasks got first refusal, and 114 of 125 are
-on the number they had. Every migrated task says what it used to be called:
+on the number they had.
 
-```sh
-task show 79
-# - [ ] #79   Exercise the share-sheet upload against Isis  [recall]  (recall)
-#   was recall#79            ← so this is recall's #79, not health's
-```
+⚠ **The `recall#79` spelling is GONE (2026-08-09), and so is the `was` line.**
+It existed to carry you across the migration, Pippijn confirmed every session had
+made it, and a second id space that nothing needs is a second id space to keep
+level. Every command takes `79` or `#79`, and that is now the whole of it.
 
-⚠ **Four sessions had a `#79`.** If a number you remember now shows a subject you
-do not, that is why — and the `was` line is how you tell in one command.
+Nothing was orphaned by the removal: the mapping was spent before the columns
+were dropped. 29 tasks whose bodies carried machine-written `blockedBy` /
+`blocks` numbers in the old space, and 21 further citations in ordinary prose,
+were rewritten to live ids first.
 
-**If a number moved, use the old name — it still works.** Every command that
-takes a task accepts `79`, `#79`, or `recall#79`:
-
-```sh
-task show recall#79       # the one recall called #79, wherever it lives now
-task done health#12
-```
-
-That pair is the permanent handle. The service's own id can be renumbered; what
-a session called it cannot.
+**If you are holding an old number in your own notes**, and `task show <n>` shows
+a subject you do not recognise, that is the four-sessions-had-a-`#79` problem and
+there is no longer a lookup for it. Search instead — `task list --mine --done`
+prints every task you have ever held, and the subject is what you actually
+remember.
 
 ## 2. Check the list looks like yours
 

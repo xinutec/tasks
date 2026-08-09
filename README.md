@@ -148,13 +148,20 @@ installed CLI**: `~/.config/home-manager/switch.sh` re-locks and activates, and
 until it runs every session is holding the previous build. The gate has a row for
 the package, so the flake cannot rot unnoticed between switches.
 
-**Naming a task.** Every command that takes one accepts `79`, `#79` as the digest
-prints it, or `recall#79` — what a session called it before the migration. A
-built-in number was unique only inside one session, so 46% of the 598 imported
-tasks had to be renumbered; the old pair is the handle that never changes, and
-old prose contains no other. `GET /api/tasks/by/{session}/{number}` is the
-endpoint, two path segments rather than an escaped `#`, which is the fragment
-delimiter and would truncate the request.
+**Naming a task.** Every command that takes one accepts `79`, or `#79` as the
+digest prints it — the hash is accepted because the digest puts one on every
+line of every prompt, and a session copying an id out of its own context must
+not be corrected for it.
+
+⚠ **There was a second spelling, and spending it was the work of retiring it.**
+`recall#79` named a task by what a session called it before the migration, held
+resolvable by `origin_session` / `origin_number`, because 178 of the 620
+imported tasks could not keep their number. Pippijn confirmed on 2026-08-09 that
+every session had moved, so the columns went — but only after every reference
+that depended on them was rewritten to a live id: 29 machine-written
+`blockedBy` / `blocks` footers and 21 citations in ordinary prose. Deleting the
+mapping first would have turned all fifty into dead references with nothing
+failing. `migrations/0003_drop_origin.sql` records what was checked.
 
 **A task belongs to whoever is dealing with it, and the service works that out
 rather than waiting to be told.** Three moments infer a holder, all meaning the

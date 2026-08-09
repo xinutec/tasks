@@ -143,22 +143,6 @@ pub async fn detail(
         .ok_or(AppError::NotFound)
 }
 
-/// One task, found by what it was called before the migration — `/tasks/by/recall/79`.
-///
-/// **Two path segments rather than `/tasks/recall%2379`.** A `#` in a URL is the
-/// fragment delimiter, so the natural spelling would have to be escaped by every
-/// caller and would silently truncate to `/tasks/recall` for any that forgot.
-pub async fn by_origin(
-    Access(_): Access,
-    State(app): State<AppState>,
-    Path((session, number)): Path<(String, u64)>,
-) -> Result<Json<TaskDetail>, AppError> {
-    repo::by_origin(&app.db, &session, number)
-        .await?
-        .map(Json)
-        .ok_or(AppError::NotFound)
-}
-
 /// Who holds what — every session, Pippijn, and the pile.
 pub async fn holders(
     Access(_): Access,

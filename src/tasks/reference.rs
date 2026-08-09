@@ -1,48 +1,44 @@
-//! Naming a task: `79`, or what it was called before it lived here.
+//! Naming a task: `79`, or `#79` as the digest prints it.
 //!
-//! ⚠ **Two spellings, because the id is not stable and the other name is.** A
-//! built-in task number was unique only inside one session — four sessions each
-//! had a `#79` — so when the 598 of them moved into one global id space, 46%
-//! could not keep the number they had. `recall#79` is what old prose, old
-//! memories and the sessions' own notes still contain, and `origin_session` +
-//! `origin_number` keep it resolvable for ever.
+//! ⚠ **`#79` and `79` are the same thing, and that is the whole job.** The
+//! digest puts `#79` on every line of every prompt, so a session copying one out
+//! of its own context must not be corrected for the hash it was shown. Parsing
+//! it in one place is what stops each subcommand growing its own opinion.
 //!
-//! This lives in the library rather than in the CLI because the route table does
-//! too: [`TaskRef::path`] is the URL for a reference, and having it beside the
-//! router is what stops the two drifting.
+//! **There used to be a second spelling.** `recall#79` named a task by what it
+//! was called in the CLI's per-session store, resolved through
+//! `origin_session` / `origin_number`, because 178 of the 620 imported tasks
+//! could not keep their number. Those columns were retired in
+//! `migrations/0003_drop_origin.sql` once the mapping had been spent — the
+//! references that depended on it were rewritten to live ids first — so there is
+//! one id space again and nothing to disambiguate.
+//!
+//! This lives in the library rather than in the CLI because [`TaskRef::path`] is
+//! the URL for a reference, and having it beside the router is what stops the
+//! two drifting.
 
 use std::fmt;
 use std::str::FromStr;
 
-/// How a task was named by whoever is asking for it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TaskRef {
-    /// This service's id.
-    Id(u64),
-    /// `recall#79` — a session's name, and its number there.
-    Origin(String, u64),
-}
+/// A task, by this service's id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TaskRef(pub u64);
 
 impl TaskRef {
     /// Where to GET it.
-    ///
-    /// ⚠ **`by/…` is two path segments, never an escaped `#`.** A `#` in a URL
-    /// is the fragment delimiter: unescaped it truncates the request to
-    /// `/api/tasks/recall`, and escaped it works only for callers that remember.
     pub fn path(&self) -> String {
-        match self {
-            TaskRef::Id(id) => format!("/api/tasks/{id}"),
-            TaskRef::Origin(session, number) => format!("/api/tasks/by/{session}/{number}"),
-        }
+        format!("/api/tasks/{}", self.0)
+    }
+
+    /// The id itself, for the paths that build their own URL.
+    pub fn id(&self) -> u64 {
+        self.0
     }
 }
 
 impl fmt::Display for TaskRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TaskRef::Id(id) => write!(f, "#{id}"),
-            TaskRef::Origin(session, number) => write!(f, "{session}#{number}"),
-        }
+        write!(f, "#{}", self.0)
     }
 }
 
@@ -51,21 +47,10 @@ impl FromStr for TaskRef {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
-        // `#79` and `79` are the same thing: the digest prints `#79` on every
-        // line of every prompt, so a session copying one out of its own context
-        // must not be corrected for it.
-        let (session, number) = match s.split_once('#') {
-            Some((session, number)) => (session.trim(), number),
-            None => ("", s),
-        };
-        let number: u64 = number
-            .trim()
+        let number = s.strip_prefix('#').unwrap_or(s).trim();
+        number
             .parse()
-            .map_err(|_| format!("{s:?} is not a task: expected 79, or recall#79"))?;
-        Ok(if session.is_empty() {
-            TaskRef::Id(number)
-        } else {
-            TaskRef::Origin(session.to_string(), number)
-        })
+            .map(TaskRef)
+            .map_err(|_| format!("{s:?} is not a task: expected 79, or #79"))
     }
 }
