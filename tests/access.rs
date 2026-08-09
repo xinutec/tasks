@@ -243,3 +243,52 @@ async fn healthz_answers_without_a_credential() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, "ok");
 }
+
+/// ⚠ **An unknown `/api` path must be a 404, not the page.**
+///
+/// The API is nested under `/api` and the SPA fallback sits on the outer app, so
+/// without a fallback of its own a path that matches no route falls through and
+/// comes back `200 text/html` — the shell, to a caller that asked for JSON.
+/// `spa()` refuses a path whose last segment has a dot, which is what makes a
+/// missing `.woff2` behave; `/api/nonsense` has no dot.
+///
+/// Measured against the live deployment on 2026-08-09: `/api/nonsense` and the
+/// just-retired `/api/tasks/by/recall/79` both answered `200 text/html`. The
+/// CLI's symptom named itself rather than the URL — *"the service answered 200
+/// OK with something this CLI could not read"*.
+#[tokio::test]
+async fn an_api_path_that_is_not_a_route_is_a_404() {
+    let app = app(Some(TOKEN));
+    for path in [
+        "/api/nonsense",
+        // The spelling this service published until d4c6c63, which is how the
+        // hole was found. Old prose and old sessions still contain it.
+        "/api/tasks/by/recall/79",
+        "/api/tasks/1/extra",
+    ] {
+        let (status, body) = send(
+            &app,
+            get(path)
+                .header("Authorization", format!("Bearer {TOKEN}"))
+                .header("X-Session-Id", "sess-1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path} answered {status}");
+        assert!(
+            body.starts_with('{'),
+            "{path} answered with something that is not JSON: {body:.60}"
+        );
+    }
+}
+
+/// A path that does not exist says so even without a credential.
+///
+/// A 401 for a typo sends the reader to check the one thing that was right.
+#[tokio::test]
+async fn an_unknown_api_path_is_not_found_before_it_is_unauthorised() {
+    let app = app(Some(TOKEN));
+    let (status, _) = send(&app, get("/api/nonsense").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

@@ -25,7 +25,20 @@ pub fn router(state: AppState) -> Router {
         .route("/holders", get(api::holders))
         .route("/sessions/{id}", patch(api::rename))
         .route("/repos", get(api::repo_counts))
-        .route("/telemetry", post(telemetry::record));
+        .route("/telemetry", post(telemetry::record))
+        // ⚠ **`/api/*` must never reach the page.** Without this an unknown API
+        // path falls through the nest to the `ServeDir` fallback below and comes
+        // back `200 text/html` — the SPA shell, to a caller that asked for JSON.
+        // It is the same defect the fallback's own comment is about, one level
+        // up: `spa()` refuses a path whose last segment has a dot, and
+        // `/api/nonsense` has none.
+        //
+        // It was true from the start and stayed invisible while every published
+        // path existed. Retiring `/api/tasks/by/{session}/{number}` is what made
+        // it reachable by a spelling the docs had published, and the symptom
+        // pointed at the client: *"the service answered 200 OK with something
+        // this CLI could not read"*.
+        .fallback(api::not_found);
 
     let app = Router::new()
         .route("/login", get(auth::login))

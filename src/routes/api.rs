@@ -15,6 +15,16 @@ use crate::still_open;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Task, TaskDetail};
 
+/// Every `/api` path that is not a route.
+///
+/// Answers as the API rather than as the app: a caller here wants JSON and an
+/// error it can read, not the page. Deliberately *before* the credential check —
+/// there is nothing behind a path that does not exist, and a 401 for a typo
+/// sends the reader to look at their token.
+pub async fn not_found() -> AppError {
+    AppError::NotFound
+}
+
 /// Who the caller is, so the client can draw itself correctly.
 pub async fn me(Access(viewer): Access) -> Json<serde_json::Value> {
     Json(match viewer {
