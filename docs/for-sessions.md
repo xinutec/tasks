@@ -116,8 +116,10 @@ task edit <id> --body -         # rewrite the prose
 ```
 
 ⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
-takes it on and `task start` claims it, the same way `task done` already put your
-name on it. Until 2026-08-09 none of that was true: a holder was recorded when a
+takes it on, and `task start` claims it **out of the pile** — the same way `task
+done` already put your name on it. It never takes one off somebody else: if a
+task is already held, starting it moves the status and nothing else, and taking
+it on properly is `task move <id> me`. Until 2026-08-09 none of that was true: a holder was recorded when a
 task was *closed* and at no other moment, so a session could show three finished
 tasks and `0 open` while it was hours into a fourth. If you want it in the pile
 instead, say `--to nobody` — that is now a decision rather than a default.

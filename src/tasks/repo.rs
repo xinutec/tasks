@@ -569,12 +569,21 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // showed its in-flight work as belonging to nobody. `task start` was already
     // documented as the way a session takes a task on, and it did not do it.
     //
-    // Only on the way IN to `doing`: a task already being worked is left alone,
-    // so a second conversation running `start` on one somebody else has in hand
-    // cannot quietly take it. Moving one from another holder is a real handover
-    // and is what `move` is for.
+    // ⚠ **Out of the PILE only, which is narrower than it first shipped.** The
+    // guard was on the status — claim unless the task was already `doing` — and
+    // that read as safe while being wrong: a task Pippijn had handed to one
+    // conversation, which had not got to it yet, was taken off it by any other
+    // session running `start`, silently. `starting_a_task_assigned_to_another_
+    // session_takes_nothing` is that case, and it failed against the rule the
+    // comment here originally claimed to implement.
+    //
+    // So: a holder is inferred only where there is none. If the task is already
+    // yours there is nothing to move; if it is somebody else's, taking it is a
+    // handover and `move` is the word for that. The `doing` guard stays so that
+    // starting an already-started task still writes no history.
     let starter = (change.status == Some(Status::Doing)
         && before.status != Status::Doing
+        && before.assignee.kind == AssigneeKind::Nobody
         && change.assignee.is_none())
     .then(|| actor_holder(actor));
 

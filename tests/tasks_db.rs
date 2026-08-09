@@ -938,9 +938,9 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
         .collect();
     assert_eq!(moves, vec!["nobody → tasks"]);
 
-    // A second conversation running `start` on one already in hand takes
-    // nothing: the claim rides on the move INTO doing, and there is no move.
-    // Taking work off another session is a handover, which is what `move` is.
+    // A second conversation running `start` on one already held takes nothing:
+    // a holder is inferred only where there is none. Taking work off another
+    // session is a handover, which is what `move` is for.
     let poached = repo::update(
         &pool,
         task.id,
@@ -1034,4 +1034,43 @@ async fn a_session_digest_carries_its_own_work_and_the_pile() {
         .await
         .expect("listing");
     assert_eq!(everything.len(), 4);
+}
+
+/// Starting a task somebody else was given must not take it off them.
+#[tokio::test]
+async fn starting_a_task_assigned_to_another_session_takes_nothing() {
+    let pool = common::fresh_db().await;
+    for (id, name) in [("sess-1", "tasks"), ("sess-2", "memview")] {
+        sessions::touch(&pool, id, Some(name))
+            .await
+            .expect("recording a session");
+    }
+    // Pippijn hands it to one conversation, which has not got to it yet.
+    let task = repo::create(
+        &pool,
+        NewTask {
+            assignee: Some(to_session("sess-1")),
+            ..filed("tasks", "Given to sess-1")
+        },
+        &pippijn(),
+    )
+    .await
+    .expect("filing");
+
+    let started = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &Actor::Session("sess-2".into()),
+    )
+    .await
+    .expect("starting");
+    assert_eq!(
+        started.assignee.id.as_deref(),
+        Some("sess-1"),
+        "another session's unstarted task was taken by starting it"
+    );
 }

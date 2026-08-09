@@ -163,7 +163,7 @@ same thing by it and sharing one function (`actor_holder`):
 | moment | the rule |
 | --- | --- |
 | **filing** | a new task is the filer's, unless the call says where it goes |
-| **starting** | moving one into `doing` claims it, if it was not already being worked |
+| **starting** | moving one into `doing` claims it **out of the pile** — never off another holder |
 | **closing** | `done` and `drop` alike hand it to whoever closed it |
 
 `assignee` is the only place a *list* can say any of this — the history records
