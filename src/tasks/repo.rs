@@ -452,6 +452,39 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
 pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) -> Result<Task> {
     let before = list_one(pool, id).await?;
 
+    // ⚠ **A closed task may not be left in the pile.** The pile means *for
+    // whoever picks it up*, and nobody picks up a finished task; what it
+    // actually produces is a list saying a thing was done by nobody, which is
+    // the one question `assignee` exists to answer. Three tasks reached that
+    // state before the rule existed — #106 closed in the 1h37m between this
+    // service going live and `eaf64c4` adding the finisher, and #629/#630
+    // imported already `done` from a file scheme that recorded no owner. All
+    // three were attributed by hand on 2026-08-09.
+    //
+    // **Only an EXPLICIT `nobody` needs refusing**, which is narrower than it
+    // looks. Closing without naming anybody is already covered: the finisher
+    // below claims it for whoever asked. So there is no need to reason about
+    // the holder a task would end up with after inference — and reasoning about
+    // it here would be wrong, since `change.assignee` is `None` on an ordinary
+    // `task done` and the effective holder still reads as `nobody` at this
+    // point. That version rejects every close there is.
+    let would_be_closed = change
+        .status
+        .map_or(!before.status.is_open(), |status| !status.is_open());
+    if would_be_closed
+        && change
+            .assignee
+            .as_ref()
+            .is_some_and(|a| a.kind == AssigneeKind::Nobody)
+    {
+        return Err(AppError::BadRequest(
+            "a closed task cannot be handed to nobody: the pile is for work to pick up, and a \
+             finished task with no holder reads as done by nobody in every list it appears in. \
+             Close it and let it be yours, or name somebody"
+                .into(),
+        ));
+    }
+
     let mut tx = pool.begin().await.context("opening a transaction")?;
 
     if let Some(subject) = &change.subject {

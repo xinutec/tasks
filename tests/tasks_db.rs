@@ -980,3 +980,125 @@ async fn starting_a_task_assigned_to_another_session_takes_nothing() {
         "another session's unstarted task was taken by starting it"
     );
 }
+
+#[tokio::test]
+async fn a_closed_task_cannot_be_handed_to_nobody() {
+    // The one live path to the state three old tasks were found in: an explicit
+    // `--to nobody` beats the finisher rule by design, because a caller naming a
+    // destination is more specific than inferring one from who is asking. For
+    // every other destination that is right; for the pile it produced "done by
+    // nobody", which is what `assignee` exists to prevent saying.
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", None)
+        .await
+        .expect("a session");
+    let actor = Actor::Session("sess-1".into());
+
+    let task = repo::create(&pool, filed("Something to finish"), &actor)
+        .await
+        .expect("filing");
+
+    let refused = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            assignee: Some(Assignee::nobody()),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await;
+    assert!(refused.is_err(), "closing into the pile was allowed");
+
+    // And it changed nothing: the refusal happens before the transaction, so a
+    // rejected close must not have moved the status either.
+    let after = repo::get(&pool, task.id)
+        .await
+        .expect("reading")
+        .expect("a task");
+    assert_eq!(after.task.status, Status::Open, "the status moved anyway");
+
+    // The ordinary close still works and still attributes.
+    repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("an ordinary close");
+    let closed = repo::get(&pool, task.id)
+        .await
+        .expect("reading")
+        .expect("a task");
+    assert_eq!(closed.task.assignee.id.as_deref(), Some("sess-1"));
+}
+
+#[tokio::test]
+async fn a_closed_task_cannot_be_moved_back_into_the_pile() {
+    // The second way in, and the reason the guard is on the RESULTING status
+    // rather than on the status being changed: `task move <closed-id> nobody`
+    // touches no status at all.
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", None)
+        .await
+        .expect("a session");
+    let actor = Actor::Session("sess-1".into());
+
+    let task = repo::create(&pool, filed("Something finished"), &actor)
+        .await
+        .expect("filing");
+    repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("closing");
+
+    let refused = repo::update(
+        &pool,
+        task.id,
+        Change {
+            assignee: Some(Assignee::nobody()),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await;
+    assert!(refused.is_err(), "a finished task went back into the pile");
+}
+
+#[tokio::test]
+async fn an_open_task_may_still_be_put_in_the_pile() {
+    // The guard must not reach ordinary handover — putting work back for
+    // whoever picks it up is the pile's whole purpose.
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", None)
+        .await
+        .expect("a session");
+    let actor = Actor::Session("sess-1".into());
+
+    let task = repo::create(&pool, filed("Not for me after all"), &actor)
+        .await
+        .expect("filing");
+    repo::update(
+        &pool,
+        task.id,
+        Change {
+            assignee: Some(Assignee::nobody()),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("putting an open task back in the pile");
+}
