@@ -103,6 +103,16 @@ pub struct ListQuery {
     done: bool,
     session: Option<String>,
     person: Option<String>,
+    /// Widen `session` to *and the ones nobody holds*.
+    ///
+    /// Asked for rather than assumed, because the two questions are different
+    /// and both are wanted: "what am I holding" is a plate, and "what could I
+    /// pick up" is a plate plus the pile. `--mine` is the first; the CLI's bare
+    /// `task list` is the second, which is the digest's own rule and the reason
+    /// this parameter exists at all. Ignored without `session`, exactly as
+    /// [`Filter::or_unheld`] is — on its own it would mean every task there is.
+    #[serde(default)]
+    pile: bool,
 }
 
 /// Tasks matching a filter.
@@ -115,9 +125,7 @@ pub async fn list(
         include_closed: q.done,
         session: q.session,
         person: q.person,
-        // `--mine` means mine. Widening it to the pile is the digest's rule and
-        // is about what a turn costs; a list is asked a question and answers it.
-        or_unheld: false,
+        or_unheld: q.pile,
     };
     Ok(Json(repo::list(&app.db, &filter).await?))
 }

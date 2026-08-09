@@ -12,6 +12,13 @@
 //! So these go through HTTP. `tests/access.rs` drives the router with a lazy
 //! pool because none of its requests reach the database; these do, so they take
 //! the real one.
+//!
+//! `/api/tasks` is here for the same reason and not a different one. `task
+//! list` defaults to the caller's own work plus the pile, and it gets there by
+//! sending `pile=true`; a route that dropped the parameter would answer with a
+//! session's bare plate, the pile would go quiet, and the five unit tests in
+//! `src/bin/task.rs` — which only check what the CLI *sends* — would all still
+//! pass.
 
 mod common;
 
@@ -212,4 +219,79 @@ async fn a_person_naming_no_session_still_sees_everything() {
     ] {
         assert!(digest.contains(subject), "{subject} missing:\n{digest}");
     }
+}
+
+/// The subjects `/api/tasks` answers with, for an arbitrary query string.
+async fn list_as_session(app: &axum::Router, session: &str, query: &str) -> Vec<String> {
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/tasks?{query}"))
+                .method("GET")
+                .header("Authorization", format!("Bearer {TOKEN}"))
+                .header("X-Session-Id", session)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("the router answered");
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(res.into_body(), 256 * 1024)
+        .await
+        .expect("a body");
+    serde_json::from_slice::<Vec<serde_json::Value>>(&body)
+        .expect("a list of tasks")
+        .into_iter()
+        .map(|t| t["subject"].as_str().expect("a subject").to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn the_list_route_honours_the_pile_parameter() {
+    // What a bare `task list` sends. If the route ignores `pile`, this returns
+    // one task instead of two and a session stops being able to see work left
+    // for whichever conversation is around — silently, since a shorter list
+    // reads as less work rather than as a broken query.
+    let pool = common::fresh_db().await;
+    seed(&pool).await;
+    let app = app(pool);
+
+    let mine_and_pile = list_as_session(&app, "sess-1", "session=sess-1&pile=true").await;
+    assert!(mine_and_pile.iter().any(|s| s == "MINE to do"));
+    assert!(
+        mine_and_pile
+            .iter()
+            .any(|s| s == "PILE, for whoever picks it up"),
+        "the pile fell out of a bare `task list`: {mine_and_pile:?}"
+    );
+    assert!(
+        !mine_and_pile.iter().any(|s| s.contains("ANOTHER")),
+        "another session's work: {mine_and_pile:?}"
+    );
+}
+
+#[tokio::test]
+async fn mine_stays_strictly_mine() {
+    // The narrower question has to keep answering narrowly: `--mine` sends no
+    // `pile`, and the default for the parameter is what enforces that.
+    let pool = common::fresh_db().await;
+    seed(&pool).await;
+    let app = app(pool);
+
+    let mine = list_as_session(&app, "sess-1", "session=sess-1").await;
+    assert_eq!(mine, vec!["MINE to do".to_string()], "not strictly mine");
+}
+
+#[tokio::test]
+async fn all_is_still_reachable() {
+    // `--all` sends no session at all. It is the one way left to ask what the
+    // fleet is doing, so it must not be narrowed by the credential — which
+    // names a session on every request the CLI makes.
+    let pool = common::fresh_db().await;
+    seed(&pool).await;
+    let app = app(pool);
+
+    let everything = list_as_session(&app, "sess-1", "").await;
+    assert_eq!(everything.len(), 4, "{everything:?}");
 }

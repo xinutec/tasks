@@ -60,8 +60,15 @@ whichever conversation is around rather than to a named one, so a digest narrowe
 to strictly its own would make work Pippijn left for anybody invisible to
 everybody. It is global now that there is no repo to scope it to — 3 unheld of
 134 open when that was measured, which is what makes it affordable. Looking
-across holders is a thing you ask for: `task list` for every open task,
+across holders is a thing you ask for: `task list --all` for every open task,
 `task sessions` for who is carrying what.
+
+⚠ **The CLI's default is the same selection, as of 2026-08-09.** `task list`
+used to mean every open task there is, which put the cost the digest refuses
+behind the one command a session runs to decide what to do next — 135 lines and
+12,804 bytes, against one for the session that ran it. It now answers the
+digest's question: your own, and the pile. `--mine` drops the pile, `--all` is
+the old behaviour, and both are named because all three are real questions.
 
 ⚠ **What changed is what happens to a finished task.** The file scheme *deleted*
 it, because keeping it is what turned 48 live items into 366, and git recorded the
@@ -116,7 +123,7 @@ made dropping the repository in `0004` a deletion rather than a redesign.
 ## The CLI
 
 ```sh
-task list [--mine] [--done]               # what is open
+task list [--all|--mine] [--done]         # yours and the pile; wider; narrower
 task show <id> [--body]                   # one task, its prose and its history
 task sessions                             # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim

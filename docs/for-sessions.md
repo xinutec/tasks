@@ -21,14 +21,23 @@ repeated every message. `task add` is how you file work.
 ## 1. Find your tasks
 
 ```sh
+task list                 # yours, and the pile — what you could pick up
+task list --mine          # strictly what you are holding, without the pile
 task list --mine --done   # YOUR list — every task you hold, finished or not
-task list --mine          # just what is still on your plate
 task show <id>            # one task: its prose, and its history
-task list                 # everyone's open work — not just yours
+task list --all           # every open task, whoever holds it
 ```
 
-⚠ **`task list` is not your list.** It is every open task in the service, held
-by anybody. `--mine` is the one that answers "what am I holding".
+⚠ **`task list` is about you now** (2026-08-09), and it did not use to be. It
+answered with every open task in the service — 135 lines and 12,804 bytes when
+that was measured, against one line for the session that ran it — which is the
+cost the digest exists to refuse, reached through the one command you run when
+you want to know what to do next. It now asks the same question the digest does:
+your own, and the pile.
+
+Which leaves three questions with three names. `task list` is *what could I pick
+up*; `--mine` is *what am I holding*; `--all` is *what is going on*, and it is
+the expensive one on purpose.
 
 Nothing to set up: the CLI reads `$CLAUDE_CODE_SESSION_ID`, which is already in
 every shell you run, so it knows which conversation it is and files your changes

@@ -2,4 +2,5 @@
 
 pub mod reference;
 pub mod repo;
+pub mod selection;
 pub mod types;

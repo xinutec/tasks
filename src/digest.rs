@@ -43,7 +43,12 @@
 //! objection that stalled this decision for a day — a session that cannot see
 //! what is already in hand will re-file it — is answered by the pile rather than
 //! by showing everything. Looking across holders is something to ask for, and
-//! the CLI is where you ask: `task list`, `task sessions`.
+//! the CLI is where you ask: `task list --all`, `task sessions`.
+//!
+//! Bare `task list` answers this same question — own plus the pile — as of
+//! 2026-08-09. It used to answer with every open task there is, which put the
+//! cost this module refuses behind the one command a session runs to decide
+//! what to do next: 12,804 bytes, against one line for the session that ran it.
 //!
 //! The selection lives in [`Filter::digest_for`](crate::tasks::repo::Filter),
 //! not here — this module is handed a list and renders it. Which is why the

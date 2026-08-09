@@ -25,7 +25,7 @@
 //! been rewritten to a live id.
 //!
 //! ```text
-//! task list [--mine] [--done]              what is open
+//! task list [--all|--mine] [--done]       yours and the pile; or wider, or narrower
 //! task show <id>                            one task, its prose and its history
 //! task add <subject> [--body -] [--to me|pippijn|<session>|nobody]
 //! task start <id> / task done <id> [--to W] move it along
@@ -43,6 +43,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
 use tasks::tasks::reference::TaskRef;
+use tasks::tasks::selection::list_query;
 
 /// Where the service lives. The VPN name, because that is the only place it is.
 const DEFAULT_URL: &str = "https://tasks.xinutec.org";
@@ -74,10 +75,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// What is open.
+    /// What is open — yours and the pile, unless asked otherwise.
     List {
-        /// Only what this session is holding.
+        /// Every open task, whoever is holding it.
         #[arg(long)]
+        all: bool,
+        /// Strictly what this session holds, without the pile.
+        #[arg(long, conflicts_with = "all")]
         mine: bool,
         /// Include finished tasks.
         #[arg(long)]
@@ -420,18 +424,8 @@ async fn main() -> Result<()> {
     client.identified()?;
 
     match cli.command {
-        Command::List { mine, done } => {
-            let mut query: Vec<(String, String)> = Vec::new();
-            if done {
-                query.push(("done".into(), "true".into()));
-            }
-            if mine {
-                let session = client
-                    .session
-                    .clone()
-                    .context("--mine needs a session id (--session, or $TASKS_SESSION)")?;
-                query.push(("session".into(), session));
-            }
+        Command::List { all, mine, done } => {
+            let query = list_query(all, mine, done, client.session.as_deref())?;
             let req = client
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
