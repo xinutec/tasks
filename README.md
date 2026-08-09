@@ -108,7 +108,7 @@ made dropping the repository in `0004` a deletion rather than a redesign.
 
 | route | what |
 | --- | --- |
-| `/` | the open list, grouped by repository, filtered by holder |
+| `/` | the open list, in id order, filtered by holder |
 | `/t/:id` | one task: its prose, its status, who holds it, its history |
 | `/new` | file one |
 | `/who` | who holds what: `open/total` per session, for the person, and the pile |
@@ -116,16 +116,16 @@ made dropping the repository in `0004` a deletion rather than a redesign.
 ## The CLI
 
 ```sh
-task list [--repo R] [--mine] [--done]    # what is open
+task list [--mine] [--done]               # what is open
 task show <id> [--body]                   # one task, its prose and its history
 task sessions                             # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
-task add "<subject>" [--repo R] [--body -] [--to me|pippijn|<session>|nobody]
+task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody]
 task start <id> / task done <id> [--to W] # move it along
 task drop <id>                            # close it without doing it
 task move <id> me|pippijn|<session>|nobody  # hand it over
 task edit <id> [--subject S] [--body -]   # change the words
-task digest [--repo R]                    # exactly what a prompt receives
+task digest                               # exactly what a prompt receives
 task rename <name>                        # tell the service what I call myself
 ```
 
