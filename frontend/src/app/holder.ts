@@ -51,29 +51,120 @@ export function sessionLabel(session: { id: string; name?: string | null }): str
   return holderLabel({ kind: 'session', id: session.id, name: session.name });
 }
 
-/** The three buckets the list filters by, and what each means. */
-export type Who = 'all' | 'mine' | 'sessions' | 'pile';
+/** The four buckets the list filters by, and what each means. */
+export type Bucket = 'all' | 'mine' | 'sessions' | 'pile';
 
-export const WHO_LABEL: Record<Who, string> = {
+export const BUCKETS: Bucket[] = ['all', 'mine', 'sessions', 'pile'];
+
+export const WHO_LABEL: Record<Bucket, string> = {
   all: 'everything',
   mine: 'mine',
   sessions: 'with a session',
   pile: 'in the pile',
 };
 
-/** Whether a task belongs in a bucket. `me` is the signed-in person's id. */
+/**
+ * What the list is filtered to: one of the buckets, or ONE named holder.
+ *
+ * ⚠ **The single-holder form is the whole of #657.** `with a session` means
+ * every session at once — around a hundred rows with the holder in a chip, to
+ * be read off by eye — so the app could say `hardware 6/31` on `/who` and had
+ * no way at all to show you which six. The backend has answered this since
+ * `0001` (`GET /api/tasks?session=<id>`, which is what `task list --mine
+ * --session <id>` spends); nothing in the app asked.
+ *
+ * **Prefixed, rather than bare ids.** `session:<id>` and `person:<id>` cannot
+ * collide with a bucket word, and a bare id could: `pippijn` is a person today,
+ * and nothing stops a session from being named or identified as `mine` or
+ * `all`. The prefix also makes the URL say what it means when read aloud.
+ *
+ * There is no `nobody:` — the pile is a bucket already, and two spellings for
+ * one selection is how they drift apart.
+ *
+ * ⚠ **Parsed, not asserted.** This was a string union — `Bucket |
+ * \`session:${string}\`` — with the query parameter cast into it, and
+ * `no-unsafe-type-assertion` was right to refuse: `?who=garbage` would have
+ * been *typed* as a valid selection and fallen through the switch to
+ * `undefined`, which filters nothing and draws an empty list. A shape the
+ * compiler can check end to end costs one parse at the edge and makes
+ * "anything unrecognised is everything" a behaviour with a test rather than an
+ * accident of a cast.
+ */
+export type Who =
+  | { kind: 'bucket'; bucket: Bucket }
+  | { kind: 'session'; id: string }
+  | { kind: 'person'; id: string };
+
+/** The default, and what an unreadable `?who=` falls back to. */
+export const EVERYTHING: Who = { kind: 'bucket', bucket: 'all' };
+
+/** `raw` as a bucket, or nothing. A `find` rather than an `includes` + cast. */
+function asBucket(raw: string): Bucket | undefined {
+  return BUCKETS.find((bucket) => bucket === raw);
+}
+
+/**
+ * Read `?who=`. Total by construction: every string is a selection, and one
+ * nobody meant is everything rather than nothing.
+ */
+export function parseWho(raw: string | null | undefined): Who {
+  if (!raw) return EVERYTHING;
+  const bucket = asBucket(raw);
+  if (bucket) return { kind: 'bucket', bucket };
+  for (const kind of ['session', 'person'] as const) {
+    const id = raw.startsWith(`${kind}:`) ? raw.slice(kind.length + 1) : '';
+    // An empty id would match no holder, so the screen would show an empty list
+    // under a chip with no name in it — worse than ignoring the parameter.
+    if (id) return { kind, id };
+  }
+  return EVERYTHING;
+}
+
+/** The `?who=` value for a selection. `null` for the default, to keep it out
+ *  of the URL entirely. */
+export function whoParam(who: Who): string | null {
+  switch (who.kind) {
+    case 'bucket':
+      return who.bucket === 'all' ? null : who.bucket;
+    case 'session':
+      return `session:${who.id}`;
+    case 'person':
+      return `person:${who.id}`;
+  }
+}
+
+/** The selection that shows one holder's work and nobody else's. */
+export function focusOn(assignee: Assignee): Who {
+  switch (assignee.kind) {
+    case 'nobody':
+      return { kind: 'bucket', bucket: 'pile' };
+    case 'person':
+      return assignee.id ? { kind: 'person', id: assignee.id } : EVERYTHING;
+    case 'session':
+      return assignee.id ? { kind: 'session', id: assignee.id } : EVERYTHING;
+  }
+}
+
+/** Whether a task belongs in a selection. `me` is the signed-in person's id. */
 export function inBucket(assignee: Assignee, who: Who, me: string | null): boolean {
-  switch (who) {
-    case 'all':
-      return true;
-    case 'mine':
-      // Compared against the signed-in id rather than hard-coding `pippijn`:
-      // the allow-list is configuration, and a view that assumes a username is
-      // one that breaks silently the day it changes.
-      return assignee.kind === 'person' && (me === null || assignee.id === me);
-    case 'sessions':
-      return assignee.kind === 'session';
-    case 'pile':
-      return assignee.kind === 'nobody';
+  switch (who.kind) {
+    case 'session':
+      return assignee.kind === 'session' && assignee.id === who.id;
+    case 'person':
+      return assignee.kind === 'person' && assignee.id === who.id;
+    case 'bucket':
+      switch (who.bucket) {
+        case 'all':
+          return true;
+        case 'mine':
+          // Compared against the signed-in id rather than hard-coding
+          // `pippijn`: the allow-list is configuration, and a view that assumes
+          // a username is one that breaks silently the day it changes.
+          return assignee.kind === 'person' && (me === null || assignee.id === me);
+        case 'sessions':
+          return assignee.kind === 'session';
+        case 'pile':
+          return assignee.kind === 'nobody';
+      }
   }
 }

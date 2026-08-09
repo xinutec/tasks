@@ -1,8 +1,9 @@
 import { Component, computed, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { RouterLink } from '@angular/router';
 
-import { said } from './holder';
+import { focusOn, said, whoParam } from './holder';
 import { TaskStore } from './task-store';
 
 /**
@@ -24,7 +25,7 @@ import { TaskStore } from './task-store';
   selector: 'app-who-view',
   templateUrl: './who-view.html',
   styleUrl: './who-view.scss',
-  imports: [MatIconModule, MatProgressBarModule],
+  imports: [RouterLink, MatIconModule, MatProgressBarModule],
 })
 export class WhoView {
   private store = inject(TaskStore);
@@ -41,6 +42,8 @@ export class WhoView {
       // handle for `task move`, and it is 36 characters of uuid otherwise.
       handle: holder.kind === 'session' && said(holder.name) ? (holder.id ?? null) : null,
       done: holder.total - holder.open,
+      // Where the row goes. The counts were the end of the road until #657.
+      focus: whoParam(focusOn({ kind: holder.kind, id: holder.id })),
     })),
   );
 

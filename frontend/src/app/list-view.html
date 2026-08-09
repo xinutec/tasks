@@ -11,13 +11,31 @@
   </header>
 
   <nav class="filters" aria-label="Filters">
+    <!-- ⚠ **Its own row, not a fifth chip.** One named holder, arrived at from
+         /who. It draws a chip at all because otherwise none of the four buckets
+         is lit and the filter is invisible — "Nothing here" would read as no
+         work existing rather than as none for this holder. But sharing the
+         bucket row put it PAST the right edge at phone width: the row is
+         `overflow-x: auto` so it never wraps, and the one element that explains
+         why the list is short was reachable only by scrolling sideways, which
+         is the same as absent. Seen in `ui-snapshots/who-focused.png`, not
+         predicted. First, because it is the answer to what you are looking at.
+         Tapping it clears. -->
+    @if (focused(); as holder) {
+      <div class="row focus" role="group" aria-label="Showing one holder">
+        <button mat-button class="on" (click)="clearFocus()" aria-pressed="true">
+          <mat-icon>close</mat-icon>
+          {{ holder }}
+        </button>
+      </div>
+    }
     <div class="row" role="group" aria-label="Whose">
       @for (bucket of buckets; track bucket) {
         <button
           mat-button
-          [class.on]="who() === bucket"
-          (click)="pickWho(bucket)"
-          [attr.aria-pressed]="who() === bucket"
+          [class.on]="isOn(bucket)"
+          (click)="pickBucket(bucket)"
+          [attr.aria-pressed]="isOn(bucket)"
         >
           {{ whoLabel[bucket] }}
         </button>

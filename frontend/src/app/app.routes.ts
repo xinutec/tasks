@@ -8,7 +8,8 @@ import { WhoView } from './who-view';
 /**
  * Routes for the SPA — a real table (fleet convention):
  *
- *   /         → the open list, filtered by holder (?who=)
+ *   /         → the open list, filtered by holder: ?who=all|mine|sessions|pile,
+ *               or ?who=session:<id> / ?who=person:<id> for exactly one
  *   /t/:id    → one task: its prose, its status, who holds it, its history
  *   /new      → file one
  *   /who      → who holds what: open/total per session, per person, and the pile

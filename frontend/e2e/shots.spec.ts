@@ -91,6 +91,21 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('heading', { name: 'Who has what' }).waitFor();
   await shot(page, 'who', true);
 
+  // #657: the row is the link, and the list it reaches has to SAY which holder
+  // it is showing — none of the four buckets is lit on arrival, so without the
+  // holder's own chip the filter is invisible and an empty result reads as no
+  // work existing. Captured by clicking rather than by visiting the URL, so the
+  // picture is evidence the link exists and points where it says.
+  await page.getByRole('link', { name: /memview/ }).click();
+  await page.getByRole('button', { name: /memview/ }).waitFor();
+  await shot(page, 'who-focused', true);
+
+  // The same screen for a session that never named itself: 36 characters of
+  // uuid in a chip that also has to keep its close icon reachable.
+  await page.goto('/who');
+  await page.getByRole('link', { name: new RegExp(SESSIONS[1].id.slice(0, 8)) }).click();
+  await shot(page, 'who-focused-unnamed', true);
+
   await page.goto('/new');
   await page.getByRole('heading', { name: 'File a task' }).waitFor();
   await shot(page, 'new', true);

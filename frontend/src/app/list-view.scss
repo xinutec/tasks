@@ -31,6 +31,23 @@
     scrollbar-width: none;
   }
 
+  // The focused holder's own row. It must never scroll out of sight the way it
+  // did when it shared the bucket row — this chip is the only thing on screen
+  // saying why the list is short.
+  //
+  // ⚠ **A whole uuid fits**, which is what the snapshot establishes rather than
+  // any rule here: a session that never named itself shows all 36 characters at
+  // phone width with its close icon beside them, in
+  // `ui-snapshots/who-focused-unnamed.png`. The first attempt reached into
+  // `.mat-mdc-button-touch-target` with `::ng-deep` to clip an overflow that
+  // does not occur, and dev-lint refused it twice over — private Material DOM,
+  // and piercing encapsulation. Were a longer label ever to appear, this clips
+  // the tail and keeps the icon, which is FIRST in the chip, so the filter stays
+  // clearable at any width.
+  .row.focus {
+    overflow-x: hidden;
+  }
+
   button {
     flex: 0 0 auto;
     &.on {

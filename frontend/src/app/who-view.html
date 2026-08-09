@@ -13,19 +13,23 @@
   <ul class="holders">
     @for (row of rows(); track row.kind + (row.id ?? '')) {
       <li [class.quiet]="row.open === 0">
-        <mat-icon aria-hidden="true">
-          {{ row.kind === 'person' ? 'person' : row.kind === 'nobody' ? 'inbox' : 'smart_toy' }}
-        </mat-icon>
-        <span class="who">
-          <span class="name">{{ row.label }}</span>
-          @if (row.handle) {
-            <span class="handle">{{ row.handle }}</span>
-          }
-        </span>
-        <span class="count">
-          <span class="open">{{ row.open }}</span
-          ><span class="of">/{{ row.total }}</span>
-        </span>
+        <!-- The count was the end of the road until #657: this screen could say
+             `hardware 6/31` and there was nowhere to go to see which six. -->
+        <a [routerLink]="['/']" [queryParams]="{ who: row.focus }">
+          <mat-icon aria-hidden="true">
+            {{ row.kind === 'person' ? 'person' : row.kind === 'nobody' ? 'inbox' : 'smart_toy' }}
+          </mat-icon>
+          <span class="who">
+            <span class="name">{{ row.label }}</span>
+            @if (row.handle) {
+              <span class="handle">{{ row.handle }}</span>
+            }
+          </span>
+          <span class="count">
+            <span class="open">{{ row.open }}</span
+            ><span class="of">/{{ row.total }}</span>
+          </span>
+        </a>
       </li>
     }
   </ul>
