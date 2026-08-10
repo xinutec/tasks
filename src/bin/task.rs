@@ -212,11 +212,34 @@ fn session_id() -> Option<String> {
         })
 }
 
+/// What Claude Code is calling this conversation, right now.
+///
+/// ⚠ **This is why a session no longer has to name itself.** The name is on
+/// this disk already — the CLI writes it into the transcript and appends another
+/// whenever it changes — so asking a conversation to type `task rename` was
+/// asking it to do a computer's job, and the one holding the most open work had
+/// never got round to it. See [`tasks::agent_name`] for the shapes and the
+/// measurements.
+///
+/// Silent on every failure. No `HOME`, no transcript, a CLI that has changed the
+/// line: the service keeps whatever name it already had, which is exactly the
+/// behaviour that existed before this.
+fn called_now(session: &str) -> Option<String> {
+    let home = std::env::var("HOME").ok()?;
+    let projects = std::path::Path::new(&home).join(".claude").join("projects");
+    tasks::agent_name::from_projects(&projects, session)
+}
+
 struct Client {
     http: reqwest::Client,
     base: String,
     token: Option<String>,
     session: Option<String>,
+    /// What Claude Code calls this conversation, when its transcript says.
+    ///
+    /// Resolved once per command rather than per request: it is a bounded read
+    /// of a local file, and a second command is a second process anyway.
+    called: Option<String>,
 }
 
 impl Client {
@@ -227,6 +250,12 @@ impl Client {
         }
         if let Some(session) = &self.session {
             req = req.header("X-Session-Id", session);
+        }
+        // Sent on every request, including reads: a session that only ever
+        // looks at its list still gets named, and a rename in Claude Code
+        // reaches the service on the next command without anybody typing it.
+        if let Some(called) = &self.called {
+            req = req.header(tasks::access::SESSION_NAME_HEADER, called);
         }
         req
     }
@@ -464,6 +493,7 @@ fn emit(json: bool, value: &Value, human: impl FnOnce()) {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let session = cli.session.clone().or_else(session_id);
     let client = Client {
         http: reqwest::Client::builder()
             .build()
@@ -475,7 +505,8 @@ async fn main() -> Result<()> {
             .trim_end_matches('/')
             .to_string(),
         token: token(),
-        session: cli.session.or_else(session_id),
+        called: session.as_deref().and_then(called_now),
+        session,
     };
     client.identified()?;
 
@@ -653,6 +684,22 @@ async fn main() -> Result<()> {
         Command::Rename { name } => {
             client.writing()?;
             let session = client.session.clone().expect("writing() checked it");
+            // ⚠ Refused rather than accepted-and-reverted. Every request this
+            // CLI makes carries the name Claude Code is using, and the service
+            // takes the newer one — so a rename to something else would print
+            // its success line and be gone by the next command. That is the
+            // exact shape this repository has now fixed three times, and the
+            // remedy is to say where the lever actually is.
+            if let Some(called) = &client.called
+                && called != &name
+            {
+                bail!(
+                    "Claude Code calls this conversation `{called}`, and that is what \
+                     the service is told on every command — a rename here would be \
+                     replaced by the next one. Rename the conversation itself, and \
+                     this follows on its own."
+                );
+            }
             let req = client
                 .request(reqwest::Method::PATCH, &format!("/api/sessions/{session}"))
                 .json(&json!({ "name": name }));

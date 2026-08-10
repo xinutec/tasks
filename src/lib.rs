@@ -25,6 +25,7 @@
 //! *query*, not by deletion: nothing injected ever selects a done row.
 
 pub mod access;
+pub mod agent_name;
 pub mod config;
 pub mod db;
 pub mod digest;

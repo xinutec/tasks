@@ -6,7 +6,7 @@ use axum::response::IntoResponse;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::access::{Access, Viewer};
+use crate::access::{Access, SeenAs, Viewer};
 use crate::digest;
 use crate::error::AppError;
 use crate::sessions;
@@ -22,6 +22,21 @@ use crate::tasks::types::{Task, TaskDetail, Updated};
 /// sends the reader to look at their token.
 pub async fn not_found() -> AppError {
     AppError::NotFound
+}
+
+/// The name to record, which is a name only when the caller is naming itself.
+///
+/// ⚠ **The digest is the one place these can come apart.** A person may read a
+/// session's digest by passing `?session=`, and their browser is not that
+/// conversation — so the header they are not sending must not become that
+/// session's name, and a header they *are* sending must not either. Same
+/// reasoning as the line above it: a caller cannot mark another session as
+/// alive, and it cannot rename one here either.
+fn own_name<'a>(viewer: &Viewer, called: &'a Option<String>) -> Option<&'a str> {
+    match viewer {
+        Viewer::Session(_) => called.as_deref(),
+        Viewer::Owner(_) => None,
+    }
 }
 
 /// Who the caller is, so the client can draw itself correctly.
@@ -53,6 +68,7 @@ pub struct DigestQuery {
 /// produce the same eight lines.
 pub async fn digest(
     Access(viewer): Access,
+    SeenAs(called): SeenAs,
     State(app): State<AppState>,
     Query(q): Query<DigestQuery>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -63,7 +79,7 @@ pub async fn digest(
         Viewer::Owner(_) => q.session.clone(),
     };
     if let Some(id) = &session {
-        sessions::touch(&app.db, id, None).await?;
+        sessions::touch(&app.db, id, own_name(&viewer, &called)).await?;
     }
     // What a session is shown: its own open tasks and the pile — not the ones
     // another conversation is holding.
@@ -153,12 +169,13 @@ pub async fn holders(
 /// File a task.
 pub async fn create(
     Access(viewer): Access,
+    SeenAs(called): SeenAs,
     State(app): State<AppState>,
     Json(new): Json<NewTask>,
 ) -> Result<Json<Task>, AppError> {
     let actor = viewer.actor();
     if let Viewer::Session(id) = &viewer {
-        sessions::touch(&app.db, id, None).await?;
+        sessions::touch(&app.db, id, called.as_deref()).await?;
     }
     Ok(Json(repo::create(&app.db, new, &actor).await?))
 }
@@ -167,13 +184,14 @@ pub async fn create(
 /// is left alone.
 pub async fn update(
     Access(viewer): Access,
+    SeenAs(called): SeenAs,
     State(app): State<AppState>,
     Path(id): Path<u64>,
     Json(change): Json<Change>,
 ) -> Result<Json<Updated>, AppError> {
     let actor = viewer.actor();
     if let Viewer::Session(session) = &viewer {
-        sessions::touch(&app.db, session, None).await?;
+        sessions::touch(&app.db, session, called.as_deref()).await?;
     }
     Ok(Json(repo::update(&app.db, id, change, &actor).await?))
 }

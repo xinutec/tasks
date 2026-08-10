@@ -33,8 +33,13 @@
               <!-- WHICH conversation, which the row was saying until the form
                    replaced it. It matters most exactly here: an unnamed
                    session's whole label is this uuid, so without it the screen
-                   asks for a name and does not say whose. -->
-              <mat-hint>{{ row.id }}</mat-hint>
+                   asks for a name and does not say whose.
+
+                   And what it is worth: since 2026-08-10 the name comes from
+                   what Claude Code calls the conversation, sent by the CLI on
+                   every command, so a name set here lasts until that session
+                   next runs one. Saying so beats a form that appears to work. -->
+              <mat-hint>{{ row.id }} — replaced when this session next runs a command</mat-hint>
             </mat-form-field>
             <button mat-icon-button type="button" (click)="cancelRename()" aria-label="Cancel">
               <mat-icon>close</mat-icon>

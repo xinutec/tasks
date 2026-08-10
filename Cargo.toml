@@ -47,6 +47,11 @@ reqwest = { version = "0.13", default-features = false, features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# For scanning the tail of a transcript. Already in the tree under sqlx and
+# reqwest; naming it here buys `memmem::rfind`, which is what makes a miss cheap
+# — a hand-rolled `windows().rposition()` costs 39 ms on a mebibyte when the
+# needle is absent, and being absent is the ordinary case for one of the two.
+memchr = "2"
 comrak = "0"
 chrono = { version = "0.4", default-features = false, features = [
     "clock",

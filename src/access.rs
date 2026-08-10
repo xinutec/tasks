@@ -32,6 +32,38 @@ use crate::tasks::types::Actor;
 /// Header naming which conversation an agent request is on behalf of.
 pub const SESSION_HEADER: &str = "X-Session-Id";
 
+/// Header carrying what Claude Code calls that conversation.
+pub const SESSION_NAME_HEADER: &str = "X-Session-Name";
+
+/// A name a caller reports for *itself*, read from its own transcript.
+///
+/// ⚠ **Deliberately not part of [`Viewer`].** The identity is the id and it
+/// comes from the credential; this is an attribute arriving beside it, and
+/// keeping the two apart is what makes the rule easy to state: a name is only
+/// ever applied to the row of the session that sent it. Folding it into
+/// `Viewer::Session` would put a client-supplied string inside the thing this
+/// module exists to say cannot be client-supplied.
+///
+/// The worst a lying caller achieves is renaming itself, which `task rename`
+/// already offers it.
+pub struct SeenAs(pub Option<String>);
+
+impl<S: Send + Sync> FromRequestParts<S> for SeenAs {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(SeenAs(
+            parts
+                .headers
+                .get(SESSION_NAME_HEADER)
+                .and_then(|v| v.to_str().ok())
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && s.chars().count() <= 40)
+                .map(str::to_string),
+        ))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Viewer {
     Owner(UserSession),

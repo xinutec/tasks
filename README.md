@@ -113,10 +113,29 @@ nothing anywhere else — nothing injected selects a closed row of either kind �
 and there is deliberately no *reason* field beside it, because a reason is prose
 and the body is where prose goes.
 
-⚠ **A session's id is its identity and its name is an attribute.** A session
-renames itself as its job changes and pushes the new name here; that is an
-`UPDATE` of one column, and every task assigned to it stays assigned. Making the
-name the key would have re-pointed the whole list on a rename.
+⚠ **A session's id is its identity and its name is an attribute.** A rename is
+an `UPDATE` of one column and every task assigned to that session stays
+assigned; making the name the key would have re-pointed the whole list.
+
+⚠ **That is about storage, and it was allowed to answer a question it does not
+address: where the name COMES from.** From it, "so the session pushes the name"
+was taken to follow, and it does not. Until 2026-08-10 `sessions.name` was
+written by `task rename` alone, so a conversation that never typed it was a uuid
+for ever — including the one holding twenty-nine open tasks, which Claude Code
+had been calling `memview` all along. The CLI writes
+`{"type":"agent-name","agentName":"…","sessionId":"…"}` into the transcript and
+appends another on every rename, so the answer was already on the disk the CLI
+runs on. It now reads it and sends it with every request (`src/agent_name.rs`),
+and the column is a cache of that rather than a self-report.
+
+**Derived beats stored, and that was measured rather than assumed:** of the
+fourteen sessions the service knew, thirteen had a stored name and all thirteen
+matched what is derived. None disagreed, and the fourteenth was the one with
+none. A stored column is still needed — a session whose transcript is
+unreachable must render, and history rows are written at render time on purpose
+— so this fills it, and `task rename` survives for a conversation the CLI has
+not named. It refuses when there is a name to derive, because the next command
+would overwrite it.
 
 ⚠ **The id is global.** The file scheme numbered per repo and its own hook
 documented the cost: *"a bare `#4` means nothing when two repos both have one"*.

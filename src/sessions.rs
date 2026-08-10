@@ -1,9 +1,15 @@
 //! The conversations work can be handed to.
 //!
 //! ⚠ **The CLI's session id is the identity; the name is an attribute.** A
-//! session renames itself as its job changes — Pippijn's own note: it happens,
-//! rarely, and the rename arrives here as an update. Everything that points at a
-//! session points at the id, so a rename touches one column and no task moves.
+//! session is renamed as its job changes, and that arrives here as an update.
+//! Everything that points at a session points at the id, so a rename touches one
+//! column and no task moves.
+//!
+//! ⚠ **The name is no longer something a session has to tell us.** It is read
+//! from the conversation's own transcript by the CLI and sent on every request
+//! — see [`crate::agent_name`] — so this column is a cache of what Claude Code
+//! calls a conversation rather than a self-report, and a session that never ran
+//! `task rename` is not a uuid for ever. [`touch`] is where the two meet.
 //!
 //! A row is created by the first thing a session does, not by a registration
 //! step: a session that has to be enrolled before it can be given work is a

@@ -295,3 +295,126 @@ async fn all_is_still_reachable() {
     let everything = list_as_session(&app, "sess-1", "").await;
     assert_eq!(everything.len(), 4, "{everything:?}");
 }
+
+/// A request names the session that sent it, without anybody typing it.
+///
+/// ⚠ **The header is the whole feature, and one line in each handler is what
+/// uses it.** `sessions::touch(&app.db, id, None)` was the shape everywhere
+/// until 2026-08-10, and it still compiles: drop the argument back to `None` and
+/// every other test in this repository passes while every session goes back to
+/// being a uuid. That is the same edit-one-line-fail-nothing shape as the filter
+/// above, so it is tested through HTTP for the same reason.
+mod naming {
+    use super::*;
+
+    async fn digest_called(app: &axum::Router, session: &str, called: Option<&str>) {
+        let mut req = Request::builder()
+            .uri("/api/digest")
+            .method("GET")
+            .header("Authorization", format!("Bearer {TOKEN}"))
+            .header("X-Session-Id", session);
+        if let Some(called) = called {
+            req = req.header("X-Session-Name", called);
+        }
+        let res = app
+            .clone()
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .expect("the router answered");
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    async fn stored_name(pool: &MySqlPool, session: &str) -> Option<String> {
+        sessions::list(pool)
+            .await
+            .expect("the session list")
+            .into_iter()
+            .find(|s| s.id == session)
+            .and_then(|s| s.name)
+    }
+
+    #[tokio::test]
+    async fn a_session_is_named_by_the_request_it_sends() {
+        let pool = common::fresh_db().await;
+        let app = app(pool.clone());
+
+        digest_called(&app, "sess-named", Some("memview")).await;
+        assert_eq!(
+            stored_name(&pool, "sess-named").await.as_deref(),
+            Some("memview"),
+            "the session stayed a uuid though its request said what it is called"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_later_name_replaces_an_earlier_one() {
+        // A conversation is renamed as its job changes, and the transcript's
+        // newest line is the answer — so the service has to take the newer one
+        // rather than keep the first thing it was ever told.
+        let pool = common::fresh_db().await;
+        let app = app(pool.clone());
+
+        digest_called(&app, "sess-renamed", Some("scanner")).await;
+        digest_called(&app, "sess-renamed", Some("observe")).await;
+        assert_eq!(
+            stored_name(&pool, "sess-renamed").await.as_deref(),
+            Some("observe"),
+            "a rename in Claude Code did not reach the service"
+        );
+    }
+
+    #[tokio::test]
+    async fn saying_nothing_keeps_the_name_a_session_has() {
+        // The absent header is the common case, not an error: an older CLI, a
+        // transcript that cannot be read, a session started outside Claude Code.
+        // Blanking the name on those would empty the column on the next prompt.
+        let pool = common::fresh_db().await;
+        let app = app(pool.clone());
+
+        digest_called(&app, "sess-quiet", Some("recall")).await;
+        digest_called(&app, "sess-quiet", None).await;
+        assert_eq!(
+            stored_name(&pool, "sess-quiet").await.as_deref(),
+            Some("recall"),
+            "a request that said nothing erased the name"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_person_reading_a_digest_cannot_name_the_session() {
+        // Pippijn's browser can pass `?session=`, and it is not that
+        // conversation. Whatever header it carries is about itself.
+        let pool = common::fresh_db().await;
+        let app = app(pool.clone());
+        sessions::touch(&pool, "sess-watched", Some("health"))
+            .await
+            .expect("a named session");
+
+        let cookie = create_session(
+            SECRET,
+            &UserSession {
+                user_id: "pippijn".into(),
+                display_name: "Pippijn".into(),
+            },
+        );
+        let res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/digest?session=sess-watched")
+                    .method("GET")
+                    .header("Cookie", format!("session={cookie}"))
+                    .header("X-Session-Name", "not-its-name")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("the router answered");
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(
+            stored_name(&pool, "sess-watched").await.as_deref(),
+            Some("health"),
+            "a reader renamed the session it was reading"
+        );
+    }
+}

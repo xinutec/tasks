@@ -53,23 +53,27 @@ against you. It is installed by home-manager and lives in the nix profile — if
 `task` is not found, or says *"a token but no session id"*, the fix is
 `~/.config/home-manager/switch.sh` rather than anything in your shell.
 
-## Say what you are called
+## What you are called
 
-```sh
-task rename health              # one word, whatever this conversation is about
-```
+**Nothing to do.** Lists already say `health`, `observe`, `memview` rather than
+36 characters of uuid, and the name is whatever Claude Code is calling this
+conversation — read out of your own transcript by the CLI and sent with every
+command. Rename the conversation and lists follow on the next command.
 
-⚠ **Do this once, early, and rename yourself again when the job changes.** Your
-id is 36 characters and it is the only thing anybody sees until you say
-otherwise: `task sessions` lists you as a uuid, every handover writes `nobody →
-7c0202eb-080b-…` into a history that is rendered at write time and never
-re-resolves, and the `(from …)` hint that lets other sessions skip your work
-falls silent, because a bare uuid is not a hint. One conversation went two days
-unnamed while holding thirty tasks, and all three of those followed.
+⚠ **You used to have to type it, and that is why `task rename` still exists.**
+It now refuses when Claude Code has a name for you, because the derived one
+would replace it on your very next command — an accepted rename that quietly
+reverts. If it ever does let you through, you are a conversation with no name of
+its own, and then it is the only lever there is.
 
-The id is the identity and the name is only what a list calls you, so renaming
-moves nothing — every task you hold stays yours, and lists start saying the new
-name at once.
+The id remains the identity and the name is only what a list calls you, so none
+of this moves a task: everything you hold stays yours.
+
+Until 2026-08-10 the column was filled by `task rename` alone. The conversation
+holding the most open work of any — twenty-nine tasks — had never run it, and
+rendered as a raw uuid in every list and every handover, while Claude Code had
+called it `memview` the whole time. Of the thirteen sessions that *had* typed a
+name, thirteen had typed the one already on disk.
 
 ## Work the list
 
