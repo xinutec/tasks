@@ -91,8 +91,21 @@ export class ListView {
     ),
   );
 
+  /**
+   * A row draws ONE of a holder and a filer, never both.
+   *
+   * ⚠ **The filer fills the space a pile task leaves empty**, and that is the
+   * whole of its cost — no new column, and no second chip beside a name. Who is
+   * carrying a task is the more useful thing wherever there is an answer, so the
+   * filer is drawn only where there is not: exactly the row a session scanning
+   * the pile has to decide about.
+   */
   readonly rows = computed(() =>
-    this.shown().map((task) => ({ task, holder: holderLabel(task.assignee) })),
+    this.shown().map((task) => ({
+      task,
+      holder: holderLabel(task.assignee),
+      filer: task.assignee.kind === 'nobody' ? (task.filed_by ?? null) : null,
+    })),
   );
 
   readonly doing = computed(() => this.shown().filter((t) => t.status === 'doing').length);

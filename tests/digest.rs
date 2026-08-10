@@ -18,6 +18,7 @@ fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
         status,
         assignee,
         detailed: false,
+        filed_by: None,
         created_at: at,
         updated_at: at,
         closed_at: None,
@@ -135,6 +136,29 @@ fn the_budget_is_what_makes_the_test_above_pass() {
     assert!(
         unbudgeted > MAX_BYTES * 8,
         "the fixture is too small to prove anything: {unbudgeted} bytes"
+    );
+}
+
+/// The filer never reaches a prompt.
+///
+/// ⚠ **`filed_by` was added so a session can rule a pile task out without
+/// opening it — in a LIST, which is fetched when somebody has just asked.** The
+/// digest is not that; it is the per-turn cost, and most open tasks are in the
+/// pile, so a word on each of them is a per-task charge levied on every session
+/// forever. That is the exact shape this file exists to refuse, and it would
+/// arrive wearing a good argument, which is why the guard is a test rather than
+/// a comment.
+#[test]
+fn the_digest_never_says_who_filed_a_task() {
+    let mut task = open(1, "Left for whoever picks it up");
+    let silent = render(std::slice::from_ref(&task));
+    task.filed_by = Some("observe".into());
+    let told = render(std::slice::from_ref(&task));
+    assert_eq!(
+        told,
+        silent,
+        "the filer reached a prompt, at {} bytes a turn",
+        told.len() - silent.len()
     );
 }
 

@@ -74,6 +74,9 @@ struct Row {
     /// the wire to answer a boolean — the mistake this whole service exists to
     /// avoid, in miniature.
     detailed: i8,
+    /// The filing session's current name, or `NULL` where there is nothing to
+    /// say — see [`Task::filed_by`].
+    filed_by: Option<String>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
     closed_at: Option<NaiveDateTime>,
@@ -106,6 +109,7 @@ impl Row {
             status: self.status,
             assignee,
             detailed: self.detailed != 0,
+            filed_by: self.filed_by,
             created_at: utc(self.created_at),
             updated_at: utc(self.updated_at),
             closed_at: self.closed_at.map(utc),
@@ -126,6 +130,14 @@ macro_rules! select {
             "SELECT t.id, t.subject, t.status, t.assignee_kind, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
             "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
+            // Correlated rather than joined: a task has one `created` event, but
+            // a join that ever saw two would silently DUPLICATE the task in
+            // every list — a list is the one thing here that must not gain rows.
+            // `LIMIT 1` makes that impossible to reach rather than unlikely.
+            // Covered by `idx_task_events_task (task_id, at)`, so no migration.
+            "(SELECT f.name FROM task_events c JOIN sessions f ON f.id = c.actor_id ",
+            "WHERE c.task_id = t.id AND c.kind = 'created' AND c.actor_kind = 'session' ",
+            "ORDER BY c.id LIMIT 1) AS filed_by, ",
             "t.created_at, t.updated_at, t.closed_at ",
             "FROM tasks t LEFT JOIN sessions s ON s.id = t.assignee_session",
             $tail

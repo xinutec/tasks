@@ -62,6 +62,8 @@ export const TASKS = [
     subject: 'Stop walking every transcript on the request path',
     status: 'open',
     assignee: { kind: 'nobody' },
+    // In the pile and says where it came from — the row `filed_by` exists for.
+    filed_by: 'health',
     detailed: true,
     created_at: '2026-08-05T09:00:00Z',
     updated_at: '2026-08-05T09:00:00Z',
@@ -72,6 +74,9 @@ export const TASKS = [
       'Abstractly evaluate what the agents run, across languages, into one effect language, keeping the undetermined subjects counted rather than dropped, so a gap is a number and never a silence',
     status: 'doing',
     assignee: { kind: 'session', id: SESSIONS[0].id, name: 'memview' },
+    // Held AND filed by somebody else. The holder wins: this row must not draw
+    // two names, and who is carrying it is the more useful one.
+    filed_by: 'dev-lint',
     detailed: true,
     created_at: '2026-08-05T09:00:00Z',
     updated_at: '2026-08-08T09:00:00Z',
@@ -94,6 +99,18 @@ export const TASKS = [
     detailed: true,
     created_at: '2026-08-06T09:00:00Z',
     updated_at: '2026-08-06T09:00:00Z',
+  },
+  {
+    id: 128,
+    // The other pile row, deliberately beside the one that speaks: Pippijn and
+    // unnamed sessions leave nothing to say, and "not said" has to look like
+    // silence rather than like a missing value.
+    subject: 'Left for whoever picks it up, by somebody with no name to give',
+    status: 'open',
+    assignee: { kind: 'nobody' },
+    detailed: false,
+    created_at: '2026-08-07T09:00:00Z',
+    updated_at: '2026-08-07T09:00:00Z',
   },
   {
     id: 131,

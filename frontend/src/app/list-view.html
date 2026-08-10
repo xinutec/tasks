@@ -60,6 +60,11 @@
               <span class="id">#{{ row.task.id }}</span>
               @if (row.task.assignee.kind !== 'nobody') {
                 <span class="holder">{{ row.holder }}</span>
+              } @else if (row.filer) {
+                <!-- Where a holder would be, because a pile row is the one that
+                     leaves that space empty. "from" is carrying real weight in
+                     one word: this is not who HAS it, it is who left it. -->
+                <span class="filer">from {{ row.filer }}</span>
               }
               @if (row.task.detailed) {
                 <mat-icon class="has-body" aria-label="has notes">notes</mat-icon>

@@ -128,6 +128,18 @@
     white-space: nowrap;
   }
 
+  // Deliberately NOT the holder's shape. A filled pill reads as somebody having
+  // the task, which is the one thing a pile row must not say — so this is plain
+  // text, dimmer, and capped the way a long name needs.
+  .filer {
+    font-style: italic;
+    opacity: 0.75;
+    max-width: 14ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .has-body {
     font-size: 16px;
     width: 16px;

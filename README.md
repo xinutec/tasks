@@ -198,6 +198,24 @@ on the same argument backwards: who decided a thing was not worth doing belongs
 in a list too, and the status beside the name tells the two apart. An explicit
 assignee in the same change always wins, and reopening leaves the holder alone.
 
+**A pile row says who filed it, and that is the whole of what replaced the repo
+column.** `filed_by` is the filing session's name, read out of `task_events` —
+there is nothing to set and nothing that can drift, and it was known for 112 of
+the 139 open tasks the day it was added. It is drawn only where there is no
+holder, in the space a pile row leaves empty, and as plain text rather than the
+holder's pill: a chip would say somebody has the task, which is the one thing
+that row must not say.
+
+⚠ **A hint, not a filter, and not in the digest.** Dropping the repo column
+removed two things at once and only one of them was wrong. *Which sessions
+should be shown this* hid work and is gone for good; *where does this work live*
+is what a session needs to rule a task out, and without it that cost 2,732 bytes
+of `task show` against 548 for seeing the whole pile. The digest stays silent
+because most open tasks are in the pile, so a word on each is a per-task charge
+on every session on every turn — `the_digest_never_says_who_filed_a_task` is the
+guard, because that argument will come back wearing a good suit. And the filer is
+not always the place: #683 was filed by the tasks session about memview.
+
 ⚠ **`doing` and `nobody` together is a real state, not a leftover.** A session
 that stops work deliberately hands the task back without closing it — the
 question is still open, the approach is not — so the status is testimony that

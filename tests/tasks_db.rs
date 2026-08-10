@@ -968,6 +968,102 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
     );
 }
 
+/// A task in the pile says which session filed it, so a session can rule it out
+/// without opening it.
+///
+/// ⚠ **The cost this removes is paid by every session that LOOKS, not by the one
+/// that does the work.** Seeing the whole pile is 548 bytes a turn; deciding
+/// whether one line of it is actionable meant reading the task — 2,732 bytes for
+/// #19 — to learn it is observe work and belongs to a checkout the reader was
+/// not in. `task show` has always answered this, at the bottom, in the history.
+///
+/// It is not the repo column coming back. That was a filter and it hid work;
+/// this is a fact `task_events` already holds, it gates nothing, and where there
+/// is nothing to say it says nothing.
+#[tokio::test]
+async fn a_pile_task_says_which_session_filed_it() {
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", Some("observe"))
+        .await
+        .expect("recording a session");
+    sessions::touch(&pool, "sess-2", None)
+        .await
+        .expect("recording a session");
+
+    // Filed by a named session and left for whoever picks it up: the case this
+    // exists for.
+    let pile = repo::create(
+        &pool,
+        unclaimed("Left for whoever"),
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("filing");
+    // A session that has not named itself has nothing to contribute: a
+    // 36-character uuid is not a hint, and printing one would be worse than the
+    // silence it replaces.
+    let anon = repo::create(
+        &pool,
+        unclaimed("From a session with no name"),
+        &Actor::Session("sess-2".into()),
+    )
+    .await
+    .expect("filing");
+    // Pippijn is not a place. He files work for whoever is around, and where it
+    // lives is exactly what he is not saying.
+    let his = repo::create(&pool, unclaimed("Filed by the person"), &pippijn())
+        .await
+        .expect("filing");
+    // Held work carries it too. What changes is whether a list draws it — the
+    // holder is the more useful thing to show when there is one.
+    let held = repo::create(
+        &pool,
+        filed("Mine already"),
+        &Actor::Session("sess-1".into()),
+    )
+    .await
+    .expect("filing");
+
+    let listed = repo::list(&pool, &Filter::default())
+        .await
+        .expect("listing");
+    let filer = |id: u64| {
+        listed
+            .iter()
+            .find(|t| t.id == id)
+            .expect("a row")
+            .filed_by
+            .clone()
+    };
+    assert_eq!(
+        filer(pile.id).as_deref(),
+        Some("observe"),
+        "a pile task still says nothing about where the work lives"
+    );
+    assert_eq!(filer(anon.id), None, "a bare uuid was offered as a hint");
+    assert_eq!(filer(his.id), None, "the person was reported as a place");
+    assert_eq!(filer(held.id).as_deref(), Some("observe"));
+
+    // Renaming resolves through the join, so one conversation is called one
+    // thing everywhere at once — the same rule the holder chip follows.
+    sessions::touch(&pool, "sess-1", Some("observe-2"))
+        .await
+        .expect("renaming");
+    let after = repo::list(&pool, &Filter::default())
+        .await
+        .expect("listing");
+    assert_eq!(
+        after
+            .iter()
+            .find(|t| t.id == pile.id)
+            .expect("a row")
+            .filed_by
+            .as_deref(),
+        Some("observe-2"),
+        "a renamed session kept its old name on tasks it had filed"
+    );
+}
+
 /// What a session is shown, and what it is not.
 ///
 /// ⚠ **The digest is the only thing that costs anything per turn**, so who it

@@ -363,6 +363,14 @@ fn body(arg: &str) -> Result<String> {
 /// One task as one line — the same shape the digest injects, so what a session
 /// reads in a list and what it is handed in a prompt cannot look like two
 /// different systems.
+///
+/// ⚠ **One deliberate difference, and it is the only one: a pile row says who
+/// filed it.** The digest stays silent there and must — it is what every
+/// session pays for on every turn, and `src/digest.rs` refuses a column of
+/// holders for exactly this reason. A list is fetched when somebody has just
+/// asked what to pick up, and that is the moment the answer is worth its bytes.
+/// So: seeing the pile stays free, and deciding costs one command rather than
+/// opening a task (548 bytes against 2,732, measured on #19).
 fn line(task: &Value) -> String {
     let marker = match task["status"].as_str().unwrap_or("open") {
         "doing" => "- [>]",
@@ -382,6 +390,8 @@ fn line(task: &Value) -> String {
             .or_else(|| holder["id"].as_str())
             .unwrap_or("?");
         out.push_str(&format!("  ({who})"));
+    } else if let Some(from) = task["filed_by"].as_str() {
+        out.push_str(&format!("  (from {from})"));
     }
     out
 }

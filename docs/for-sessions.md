@@ -71,6 +71,14 @@ task was *closed* and at no other moment, so a session could show three finished
 tasks and `0 open` while it was hours into a fourth. If you want it in the pile
 instead, say `--to nobody` — that is now a decision rather than a default.
 
+⚠ **A pile line ending in `(from health)` is telling you where the work lives.**
+That is the session that filed it, and it is there so you can rule a task out
+without opening it — most of the pile is somebody else's subject matter, and
+before this you had to spend a `task show` to find that out. Treat it as a hint:
+it is silent when Pippijn filed it or the filer never named itself, and it is
+wrong when one conversation files work for another, which the subject usually
+gives away. It is in `task list` and not in your prompt, deliberately.
+
 ⚠ **A task in the pile can be `- [>]`, and it is yours to take.** Somebody
 started it and handed it back without closing it — the question is still open,
 the approach is not — so the status is saying work happened, not that anybody is

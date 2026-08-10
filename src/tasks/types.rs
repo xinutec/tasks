@@ -245,6 +245,28 @@ pub struct Task {
     /// one-line reminder has none, and offering to open an empty sheet is worse
     /// than not offering.
     pub detailed: bool,
+    /// What the session that filed it calls itself — `observe`, `health`,
+    /// `dev-lint`. Absent when Pippijn filed it, or when the filing session had
+    /// not named itself.
+    ///
+    /// ⚠ **A hint about where the work lives, and deliberately not a filter.**
+    /// The repo column was retired in `0004` because a session spans checkouts
+    /// and *which repo is this in* had no single answer. That removed two
+    /// different things at once, and only one of them was wrong: *which sessions
+    /// should be shown this* was a filter and it hid work, while *where does
+    /// this work live* is a hint, and without it a session scanning the pile
+    /// pays to open a task before it can learn the answer is no — 548 bytes to
+    /// see the whole pile against 2,732 to read one line of it (#19, measured
+    /// 2026-08-09).
+    ///
+    /// **A fact rather than a field**: `task_events` already records who filed
+    /// every task, so there is nothing to set and nothing to keep true. It was
+    /// known for 112 of the 139 open tasks the day this was added, and the names
+    /// really are the project words. Resolved through the join like a holder's,
+    /// so a session that renames itself is called the same thing everywhere at
+    /// once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filed_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
