@@ -106,6 +106,16 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('link', { name: new RegExp(SESSIONS[1].id.slice(0, 8)) }).click();
   await shot(page, 'who-focused-unnamed', true);
 
+  // Naming a conversation, on the row that most needs it: the unnamed session,
+  // whose label is 36 characters of uuid. The row BECOMES the form, so this is
+  // the picture that says whether a field, a cancel and a save fit across a
+  // phone beside nothing else.
+  await page.goto('/who');
+  await page.getByRole('heading', { name: 'Who has what' }).waitFor();
+  await page.getByRole('button', { name: new RegExp(`Name ${SESSIONS[1].id.slice(0, 8)}`) }).click();
+  await page.getByRole('textbox').waitFor();
+  await shot(page, 'who-renaming', true);
+
   await page.goto('/new');
   await page.getByRole('heading', { name: 'File a task' }).waitFor();
   await shot(page, 'new', true);

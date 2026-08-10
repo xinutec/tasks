@@ -13,26 +13,83 @@
   <ul class="holders">
     @for (row of rows(); track row.kind + (row.id ?? '')) {
       <li [class.quiet]="row.open === 0">
-        <!-- The count was the end of the road until #657: this screen could say
-             `hardware 6/31` and there was nowhere to go to see which six. -->
-        <a [routerLink]="['/']" [queryParams]="{ who: row.focus }">
-          <mat-icon aria-hidden="true">
-            {{ row.kind === 'person' ? 'person' : row.kind === 'nobody' ? 'inbox' : 'smart_toy' }}
-          </mat-icon>
-          <span class="who">
-            <span class="name">{{ row.label }}</span>
-            @if (row.handle) {
-              <span class="handle">{{ row.handle }}</span>
-            }
-          </span>
-          <span class="count">
-            <span class="open">{{ row.open }}</span
-            ><span class="of">/{{ row.total }}</span>
-          </span>
-        </a>
+        @if (renaming() === row.id) {
+          <!-- The row becomes the form rather than growing a second one: the
+               name is what is being changed, so it is what should be under the
+               cursor, in the place it will end up. -->
+          <form class="rename" (ngSubmit)="saveRename(row.id ?? '')">
+            <mat-icon aria-hidden="true">smart_toy</mat-icon>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Name this conversation</mat-label>
+              <input
+                matInput
+                name="name"
+                [ngModel]="draft()"
+                (ngModelChange)="draft.set($event)"
+                [disabled]="saving()"
+                autocomplete="off"
+                cdkFocusInitial
+              />
+              <!-- WHICH conversation, which the row was saying until the form
+                   replaced it. It matters most exactly here: an unnamed
+                   session's whole label is this uuid, so without it the screen
+                   asks for a name and does not say whose. -->
+              <mat-hint>{{ row.id }}</mat-hint>
+            </mat-form-field>
+            <button mat-icon-button type="button" (click)="cancelRename()" aria-label="Cancel">
+              <mat-icon>close</mat-icon>
+            </button>
+            <!-- Disabled on blank because the service refuses it: a name that
+                 trims to nothing would be a write reporting success and keeping
+                 the old one. -->
+            <button
+              mat-icon-button
+              type="submit"
+              [disabled]="saving() || !draft().trim()"
+              aria-label="Save the name"
+            >
+              <mat-icon>check</mat-icon>
+            </button>
+          </form>
+        } @else {
+          <!-- The count was the end of the road until #657: this screen could say
+               `hardware 6/31` and there was nowhere to go to see which six. -->
+          <a [routerLink]="['/']" [queryParams]="{ who: row.focus }">
+            <mat-icon aria-hidden="true">
+              {{ row.kind === 'person' ? 'person' : row.kind === 'nobody' ? 'inbox' : 'smart_toy' }}
+            </mat-icon>
+            <span class="who">
+              <span class="name">{{ row.label }}</span>
+              @if (row.handle) {
+                <span class="handle">{{ row.handle }}</span>
+              }
+            </span>
+            <span class="count">
+              <span class="open">{{ row.open }}</span
+              ><span class="of">/{{ row.total }}</span>
+            </span>
+          </a>
+          <!-- Outside the anchor, because a button inside a link is a tap that
+               does two things. Sessions only: Pippijn and the pile are not
+               conversations and have no name to give. -->
+          @if (row.kind === 'session' && row.id) {
+            <button
+              mat-icon-button
+              class="edit"
+              (click)="startRename(row.id, row.name ?? null)"
+              [attr.aria-label]="'Name ' + row.label"
+            >
+              <mat-icon>edit</mat-icon>
+            </button>
+          }
+        }
       </li>
     }
   </ul>
+
+  @if (failed(); as why) {
+    <p class="failed">{{ why }}</p>
+  }
 
   <!-- What is left out is said, because a list that silently omits rows reads
        as a complete one: a session row exists for every conversation that has

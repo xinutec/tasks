@@ -21,6 +21,11 @@
   padding: 0;
 
   li {
+    // The row gained a second child when naming arrived, so the `li` is now the
+    // one that lays them side by side. The anchor keeps its own flex — see the
+    // note below — and takes the space the button leaves.
+    display: flex;
+    align-items: center;
     border-bottom: 1px solid var(--mat-sys-outline-variant);
 
     // A session holding nothing is still worth a row — it says who exists —
@@ -43,10 +48,45 @@
     padding: 10px 4px;
     color: inherit;
     text-decoration: none;
+    // Takes what the edit button leaves, and `min-width: 0` so a long name is
+    // clipped rather than pushing the button off the right edge.
+    flex: 1 1 auto;
+    min-width: 0;
 
     &:hover,
     &:focus-visible {
       background: var(--mat-sys-surface-container-high);
+    }
+  }
+
+  .edit {
+    flex: 0 0 auto;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  // Naming replaces the row rather than sitting beside it, so it gets the full
+  // width — a name field squeezed next to a count is a field you cannot read
+  // what you typed in.
+  .rename {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 0;
+
+    mat-form-field {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    // The id under the field, at the size the row's own handle uses. One line:
+    // a two-line hint overflows Material's subscript slot onto whatever is
+    // below, which is a defect this app has already shipped once.
+    mat-hint {
+      font: var(--mat-sys-label-small);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 
@@ -102,6 +142,15 @@
 .key {
   font: var(--mat-sys-body-medium);
   color: var(--mat-sys-on-surface-variant);
+}
+
+// Under the list rather than inside the row: the row is already a form, and a
+// message that displaces the field pushes what you typed out from under the
+// cursor.
+.failed {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-error);
+  margin-top: 12px;
 }
 
 .key {

@@ -208,6 +208,21 @@ pub async fn rename(
     {
         return Err(AppError::Forbidden);
     }
-    sessions::touch(&app.db, &id, Some(&body.name)).await?;
+    // ⚠ **Blank is refused rather than passed on.** `touch` reads an empty name
+    // as *no name given* — it trims and filters, and its `COALESCE(VALUES(name),
+    // name)` then keeps whatever was there. That is correct for a touch, which
+    // runs on every request and must never wipe a name; here it made the route
+    // answer 204 to a write that changed nothing. Somebody clearing the field
+    // means to clear it, and has to be told that is not on offer.
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(AppError::BadRequest(
+            "a session's name cannot be blank: the id is the identity and the name is what a \
+             list calls it, so an empty one reads as a conversation called \"\". Leave it \
+             unnamed, or give it a word"
+                .into(),
+        ));
+    }
+    sessions::touch(&app.db, &id, Some(name)).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

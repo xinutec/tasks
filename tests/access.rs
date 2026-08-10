@@ -234,6 +234,39 @@ async fn a_session_may_not_rename_another() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
+/// A blank rename is refused rather than accepted and ignored.
+///
+/// ⚠ **`sessions::touch` treats an empty name as "no name given"** — it trims,
+/// filters, and the UPSERT's `COALESCE(VALUES(name), name)` then keeps whatever
+/// was there. That is right for a touch, which happens on every request and must
+/// not wipe a name; it is wrong for a rename, where it made the route answer
+/// `204 No Content` to a write that changed nothing. Blank is refused here so
+/// that a caller clearing the field is told, rather than shown success and the
+/// old name.
+#[tokio::test]
+async fn a_blank_rename_is_refused_rather_than_silently_ignored() {
+    let app = app(Some(TOKEN));
+    for blank in ["", "   ", "\t\n"] {
+        let (status, _) = send(
+            &app,
+            Request::builder()
+                .uri("/api/sessions/sess-1")
+                .method("PATCH")
+                .header("Authorization", format!("Bearer {TOKEN}"))
+                .header("X-Session-Id", "sess-1")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::json!({ "name": blank }).to_string()))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "a rename to {blank:?} was accepted"
+        );
+    }
+}
+
 #[tokio::test]
 async fn healthz_answers_without_a_credential() {
     // kubelet has none, and a probe behind the wall is a pod that never
