@@ -52,7 +52,24 @@ const DEFAULT_URL: &str = "https://tasks.xinutec.org";
 #[derive(Parser)]
 #[command(
     name = "task",
-    about = "The work Claude sessions and Pippijn hand between each other"
+    about = "The work Claude sessions and Pippijn hand between each other",
+    long_about = "The work Claude sessions and Pippijn hand between each other.
+
+Two facts decide how to use this, and neither is guessable from the commands:
+
+  * A SESSION NEVER ENDS. Conversations go quiet and come back; there is no
+    terminal state and nothing here goes stale because nobody is at the keyboard.
+    Handing work to a conversation with no live process is QUEUEING it, not
+    stranding it, and needs no apology.
+
+  * A HOLDER'S OPEN TASKS ARE ITS FUTURE WORK, not what it is doing now. Thirty
+    open against a session is a backlog addressed to that conversation, not
+    thirty things in flight. `- [>]` is the mark for work actually in hand.
+
+So the question to ask before handing something over is WHOSE SUBJECT IT IS, and
+never who is online. Preferring whoever is awake would pile every task onto
+whichever conversation happened to be running, which is the opposite of what a
+list of addressed work is for."
 )]
 struct Cli {
     /// Base URL of the service. Defaults to $TASKS_URL, then the VPN name.
@@ -160,6 +177,18 @@ enum Command {
     Reopen { id: TaskRef },
     /// Hand a task over: `me` (this conversation), `pippijn`, `nobody`, or a
     /// session id.
+    ///
+    /// ⚠ **Handing work to a quiet conversation is queueing, not stranding.** A
+    /// session never ends — it goes offline and comes back — so there is no such
+    /// thing as giving a task to one that has "gone", and its open list is the
+    /// work waiting for it rather than work it is doing. Pick the holder by
+    /// whose subject it is; whether anybody is at that keyboard now is not a
+    /// property of the task and does not belong in the decision.
+    ///
+    /// `nobody` is for work that genuinely suits whichever conversation is
+    /// around next. It is not the safe default for "I am not sure they are
+    /// still there" — the pile is a handover channel, not a lost-property
+    /// office, and it costs every session's prompt rather than one.
     Move { id: TaskRef, to: To },
     /// Change a task's words.
     Edit {

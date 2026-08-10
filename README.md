@@ -161,6 +161,23 @@ cleared plate still says who cleared it, and a session that dropped its whole
 list decided something. `task sessions --all` is every row, which is how a
 brand-new conversation's id is found in order to hand it work.
 
+⚠ **There is deliberately no liveness anywhere here, and there must not be.** A
+session never ends — conversations go quiet and come back — so a task addressed
+to one with no live process is *queued*, not stranded, and its open list is the
+work waiting for it rather than work in flight. `- [>]` is the only mark that
+means in hand.
+
+Neither fact was written down for the life of the project, and on 2026-08-10 a
+session that had been using the tool all day inferred the opposite: it measured
+which conversations had live processes (5 of 12), and filed a ticket arguing that
+assigning to an offline one "silently reduces visibility", proposing a liveness
+column and a warning on `move`. Both would have trained every session to prefer
+whoever is online over whoever owns the work, which is the opposite of what an
+addressed list is for. That ticket is #713, dropped. **The remedy is stating the
+model, not warning about the consequence** — so it is now in `task --help`, in
+`move --help`, and in `docs/for-sessions.md`, and a liveness signal should be
+refused if it is proposed again.
+
 ## The CLI
 
 `docs/for-sessions.md` is this same surface written for the reader who uses it

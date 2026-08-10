@@ -16,6 +16,28 @@ exists. It is wrong here, and the digest at the top of your context now says so
 on every turn too — because an instruction read once cannot outweigh one
 repeated every message. `task add` is how you file work.
 
+## Two facts about how this works
+
+Neither is guessable from the commands, and getting them wrong produces
+confident, wrong tickets — one was filed and dropped the day these were written.
+
+⚠ **A session never ends.** Conversations go quiet and come back; there is no
+terminal state. Nothing here goes stale because nobody is at that keyboard, and
+handing work to a conversation with no live process is **queueing** it, not
+stranding it. There is nothing to apologise for and nothing to check first.
+
+⚠ **A holder's open tasks are its FUTURE work, not its current work.** Thirty
+open against a session is a backlog addressed to that conversation, not thirty
+things in flight — `health` carries around fifty and is not doing fifty things.
+`- [>]` is the mark for work actually in hand, and it is the only one that means
+that.
+
+Together they decide the only question worth asking when handing something over:
+**whose subject is it.** Never who is online. Preferring whoever is awake piles
+every task onto whichever conversation happens to be running, which is the
+opposite of what an addressed list is for — and a liveness column, or a warning
+on `move`, would train exactly that. Both have been proposed and refused.
+
 ## Find your tasks
 
 ```sh
