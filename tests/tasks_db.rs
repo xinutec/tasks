@@ -524,13 +524,19 @@ async fn reopening_a_task_leaves_its_holder_alone() {
 #[tokio::test]
 async fn who_holds_what_counts_the_finished_work_too() {
     // `open` alone says who is busy and nothing about who has done anything: a
-    // task leaves every open list the moment it is finished. `0/2` and `0/0`
-    // are a session that has cleared its plate and one that never had one.
+    // task leaves every open list the moment it is finished, so `0/1` is a
+    // session that has cleared its plate and reads quite differently from one
+    // that never had one.
     let pool = common::fresh_db().await;
     sessions::touch(&pool, "sess-1", Some("recall"))
         .await
         .expect("recording a session");
-    sessions::touch(&pool, "sess-2", Some("idle"))
+    sessions::touch(&pool, "sess-2", Some("cleared"))
+        .await
+        .expect("recording a session");
+    // Touched and nothing more, which is what a row is created by: asking for a
+    // digest. Every conversation ever started has one.
+    sessions::touch(&pool, "sess-3", Some("never held anything"))
         .await
         .expect("recording a session");
 
@@ -566,6 +572,23 @@ async fn who_holds_what_counts_the_finished_work_too() {
             .expect("finishing");
         }
     }
+    // One that sess-2 finished, so it has a history and an empty plate.
+    let cleared = repo::create(&pool, filed("Cleared"), &pippijn())
+        .await
+        .expect("filing");
+    repo::update(
+        &pool,
+        cleared.id,
+        Change {
+            status: Some(Status::Done),
+            assignee: Some(to_session("sess-2")),
+            ..Default::default()
+        },
+        &pippijn(),
+    )
+    .await
+    .expect("finishing");
+
     // One for the person, one left in the pile.
     let mine = repo::create(&pool, filed("Mine"), &pippijn())
         .await
@@ -595,8 +618,28 @@ async fn who_holds_what_counts_the_finished_work_too() {
 
     let busy = find("session", Some("sess-1"));
     assert_eq!((busy.open, busy.total), (1, 3));
-    let idle = find("session", Some("sess-2"));
-    assert_eq!((idle.open, idle.total), (0, 0));
+    let cleared = find("session", Some("sess-2"));
+    assert_eq!((cleared.open, cleared.total), (0, 1));
+
+    // ⚠ **A session that has never been given anything is not a holder.** A row
+    // exists for every conversation that has ever asked for a digest, which is
+    // every conversation there has ever been — 717 of them two days after the
+    // cutover, of which 14 had held anything at all. Listing the rest buries
+    // the answer under its own bookkeeping, on a page meant to be read on a
+    // phone, and it is the same everything-by-default this service was built to
+    // refuse. They are still *sessions*, and `sessions::list` still has them.
+    assert!(
+        !holders
+            .iter()
+            .any(|h| h.id.as_deref() == Some("sess-3") && h.kind == "session"),
+        "a session that never held anything is in the answer"
+    );
+    let known = sessions::list(&pool).await.expect("listing sessions");
+    assert!(
+        known.iter().any(|s| s.id == "sess-3"),
+        "and it is not reachable anywhere else either"
+    );
+
     let person = find("person", Some("pippijn"));
     assert_eq!((person.open, person.total), (1, 1));
     let pile = find("nobody", None);

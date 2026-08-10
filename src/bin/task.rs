@@ -140,8 +140,15 @@ enum Command {
     },
     /// Exactly what a prompt receives — for checking the cost, not for reading.
     Digest,
-    /// Who holds what: every session, Pippijn, and the pile — open/total each.
-    Sessions,
+    /// Who holds what: each session that has, Pippijn, and the pile — open/total.
+    Sessions {
+        /// Every conversation there has ever been, including those that have
+        /// never been given anything — which is most of them, since a row is
+        /// created by a session's first prompt. This is where a brand-new
+        /// conversation's id can be found to hand it work.
+        #[arg(long)]
+        all: bool,
+    },
     /// Tell the service what this session now calls itself.
     Rename { name: String },
 }
@@ -211,7 +218,17 @@ impl Client {
     }
 
     async fn send(&self, req: reqwest::RequestBuilder) -> Result<Option<Value>> {
-        let res = req.send().await.context("reaching the tasks service")?;
+        // Built rather than sent, so the method can be read: anything that is
+        // not a GET has changed the list, and the prompt hook is holding an
+        // answer from before it. Central here rather than in each command,
+        // because the one that forgets is the one that files a duplicate.
+        let req = req.build().context("building the request")?;
+        let wrote = req.method() != reqwest::Method::GET;
+        let res = self
+            .http
+            .execute(req)
+            .await
+            .context("reaching the tasks service")?;
         let status = res.status();
         let body = res.text().await.unwrap_or_default();
         if !status.is_success() {
@@ -224,6 +241,9 @@ impl Client {
                 Err(_) => body,
             };
             bail!("{status}: {said}");
+        }
+        if wrote {
+            self.forget_cached_digest();
         }
         if body.trim().is_empty() {
             return Ok(None);
@@ -244,6 +264,18 @@ impl Client {
             bail!("{status}: {body}");
         }
         Ok(body)
+    }
+
+    /// Drop the prompt hook's copy, so the next prompt shows what just changed.
+    ///
+    /// Silent on every failure, including no `HOME`: this runs after a write
+    /// that has already succeeded, and the cost of missing it is that one
+    /// prompt is up to a minute behind.
+    fn forget_cached_digest(&self) {
+        let (Some(session), Ok(home)) = (&self.session, std::env::var("HOME")) else {
+            return;
+        };
+        tasks::hook::forget_digest(std::path::Path::new(&home), session);
     }
 
     /// Refuse before the round trip when this CLI holds half a credential.
@@ -566,21 +598,38 @@ async fn main() -> Result<()> {
             eprintln!("\n({bytes} bytes)");
         }
 
-        Command::Sessions => {
-            let req = client.request(reqwest::Method::GET, "/api/holders");
-            let holders = client.send(req).await?.unwrap_or(json!([]));
-            emit(cli.json, &holders, || {
-                for holder in holders.as_array().cloned().unwrap_or_default() {
+        Command::Sessions { all } => {
+            // Two questions, two routes. `/api/holders` is who is carrying what
+            // and leaves out the conversations that have never carried
+            // anything; `/api/sessions` is every row there is, which is every
+            // conversation that has ever run — 717 against 14 when this was
+            // split. The second answers "what is this new session's id", and
+            // nothing else, which is why it is asked for rather than given.
+            let path = if all { "/api/sessions" } else { "/api/holders" };
+            let req = client.request(reqwest::Method::GET, path);
+            let rows = client.send(req).await?.unwrap_or(json!([]));
+            emit(cli.json, &rows, || {
+                for holder in rows.as_array().cloned().unwrap_or_default() {
                     // `open/total`, not `open`: a bare 0 reads as an idle session,
                     // and `0/56` is one that has cleared its plate. The id is the
                     // handle for `task move`, so it stays in the line even though
                     // the name is what is read.
+                    //
+                    // A session row has no history to report, so `--all` prints
+                    // the open count alone rather than `3/0`, which would say
+                    // the session had never finished anything.
+                    let plate = match holder["total"].as_i64() {
+                        Some(total) => format!(
+                            "{:>3}/{:<4} open",
+                            holder["open"].as_i64().unwrap_or(0),
+                            total
+                        ),
+                        None => format!("{:>3} open", holder["open"].as_i64().unwrap_or(0)),
+                    };
                     println!(
-                        "{:<40} {:<24} {:>3}/{:<4} open",
+                        "{:<40} {:<24} {plate}",
                         holder["id"].as_str().unwrap_or(""),
                         holder["name"].as_str().unwrap_or("—"),
-                        holder["open"].as_i64().unwrap_or(0),
-                        holder["total"].as_i64().unwrap_or(0),
                     );
                 }
             });

@@ -29,6 +29,7 @@ pub mod config;
 pub mod db;
 pub mod digest;
 pub mod error;
+pub mod hook;
 pub mod nextcloud;
 pub mod routes;
 pub mod session;

@@ -7,7 +7,7 @@
 //! every turn, and nothing anywhere said so.
 
 use chrono::{TimeZone, Utc};
-use tasks::digest::{MAX_BYTES, render};
+use tasks::digest::{MAX_BYTES, PILE_LINES, render};
 use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};
 
 fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
@@ -35,6 +35,19 @@ fn person(id: &str) -> Assignee {
         id: Some(id.to_string()),
         name: Some(id.to_string()),
     }
+}
+
+fn held(id: u64, subject: &str, by: &str) -> Task {
+    task(
+        id,
+        subject,
+        Status::Open,
+        Assignee {
+            kind: AssigneeKind::Session,
+            id: Some(by.to_string()),
+            name: Some(by.to_string()),
+        },
+    )
 }
 
 #[test]
@@ -89,14 +102,107 @@ fn a_holder_is_named_and_nobody_is_not() {
     assert!(!out.contains("(nobody)"), "{out}");
 }
 
+/// The pile is the one part of a digest that nothing else bounds.
+///
+/// ⚠ **[`MAX_BYTES`] is not this guard.** It is a runaway stop at 25 kB — some
+/// two hundred lines in every conversation before it says a word — and it is
+/// per session, which is the wrong denominator for the pile: an unheld task is
+/// charged to *every* session on *every* turn, so one filed line costs as many
+/// prompts as there are live conversations. The affordability argument in
+/// `README.md` was measured at *3 unheld of 134 open*, and it is conditional on
+/// a number nothing was keeping down — two days after the cutover the recall
+/// session's digest was 5 pile lines against its own 3.
+#[test]
+fn the_pile_is_bounded_however_long_it_gets() {
+    let long: Vec<Task> = (1..=40)
+        .map(|id| open(id, "left for whoever picks it up"))
+        .collect();
+    let out = render(&long);
+    let shown = out.lines().filter(|l| l.starts_with("- [")).count();
+    assert_eq!(shown, PILE_LINES, "the pile was recited in full:\n{out}");
+    assert!(out.contains("35 more in the pile"), "{out}");
+    // Still counted, so the header does not under-report the work there is.
+    assert!(out.starts_with("40 open task(s)"), "{out}");
+}
+
+/// Ablation for the test above: without the cap the same input is 40 lines,
+/// every one of them in every conversation.
+#[test]
+fn the_cap_is_what_makes_the_test_above_pass() {
+    // The same forty subjects, held instead of piled: all forty render, so the
+    // fixture is large enough to have been capped and the cap is what stopped
+    // it above rather than the byte budget or the fixture's own size.
+    let mine: Vec<Task> = (1..=40).map(|id| held(id, "mine", "recall")).collect();
+    let out = render(&mine);
+    assert_eq!(
+        out.lines().filter(|l| l.starts_with("- [")).count(),
+        40,
+        "the cap is not the pile's: it hid work in hand\n{out}"
+    );
+}
+
+/// The cap is the pile's alone.
+///
+/// A session is accountable for what it holds, and a plate that quietly stops
+/// listing is how a task is forgotten by the one conversation that agreed to do
+/// it. Growth there is a backlog to work off — `task list --mine` says how much
+/// — not a cost to spread over everybody else.
+#[test]
+fn what_a_session_holds_is_never_hidden_by_the_pile() {
+    let mut tasks: Vec<Task> = (1..=30).map(|id| open(id, "in the pile")).collect();
+    tasks.extend((100..=120).map(|id| held(id, "on my plate", "recall")));
+    let out = render(&tasks);
+    for id in 100..=120 {
+        assert!(
+            out.contains(&format!("**#{id}**")),
+            "own task {id} was hidden:\n{out}"
+        );
+    }
+}
+
+#[test]
+fn a_pile_short_enough_to_read_is_shown_whole() {
+    let out = render(&[open(1, "a"), open(2, "b"), open(3, "c")]);
+    assert!(!out.contains("in the pile"), "a notice for nothing: {out}");
+    assert_eq!(out.lines().count(), 4, "{out}");
+}
+
+/// The order is the id, and the cap does not reshuffle it.
+///
+/// Own-first was the obvious way to write the cap and is not what this does:
+/// grouping is a line spent to say what the holder already says, and `render`
+/// promises one flat list.
+#[test]
+fn the_cap_keeps_the_list_in_id_order() {
+    let mut tasks: Vec<Task> = vec![held(2, "mine", "recall"), held(9, "mine", "recall")];
+    tasks.extend((1..=8).filter(|id| *id != 2).map(|id| open(id, "pile")));
+    tasks.sort_by_key(|t| t.id);
+    let out = render(&tasks);
+    let ids: Vec<u64> = out
+        .lines()
+        .filter_map(|l| l.split("**#").nth(1))
+        .filter_map(|l| l.split("**").next())
+        .filter_map(|l| l.parse().ok())
+        .collect();
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    assert_eq!(ids, sorted, "the cap reordered the list:\n{out}");
+    assert!(ids.contains(&9), "a held task fell off the end:\n{out}");
+}
+
 /// The property the whole service exists to hold.
 #[test]
 fn the_digest_stays_inside_its_budget_however_many_tasks_there_are() {
+    // Held, not piled: the pile has its own cap now, and a fixture that trips
+    // that one first would leave the byte budget unexercised while still
+    // passing. This budget is the guard on a session's OWN plate, which is the
+    // half nothing else bounds.
     let many: Vec<Task> = (1..=4000)
         .map(|id| {
-            open(
+            held(
                 id,
                 "a subject of a length that a real one might plausibly reach",
+                "recall",
             )
         })
         .collect();
@@ -123,9 +229,10 @@ fn the_digest_stays_inside_its_budget_however_many_tasks_there_are() {
 fn the_budget_is_what_makes_the_test_above_pass() {
     let many: Vec<Task> = (1..=4000)
         .map(|id| {
-            open(
+            held(
                 id,
                 "a subject of a length that a real one might plausibly reach",
+                "recall",
             )
         })
         .collect();

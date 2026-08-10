@@ -26,6 +26,12 @@ task show <id>            # one task: its prose, and its history
 task list --all           # every open task, whoever holds it
 ```
 
+⚠ **Your prompt shows at most five of the pile.** Past that it says how many
+more there are, and `task list` is where you see them. Everything *you* hold is
+always there — the cap is the pile's alone, because an unheld task is in every
+conversation's prompt at once and yours are only in yours. So a short pile in
+your context is not evidence that the pile is short.
+
 ⚠ **`task list` is about you now** (2026-08-09), and it did not use to be. It
 answered with every open task in the service — 135 lines and 12,804 bytes when
 that was measured, against one line for the session that ran it — which is the
@@ -145,9 +151,19 @@ your prompt; the CLI is blunter and reports `reaching the tasks service` with th
 cause under it. Check the VPN first — that is the usual answer. Nothing is lost
 either way: the list is on isis, not in your context.
 
-`task sessions` shows who holds what — every session, Pippijn and the pile, as
-`open/total`. The same thing is at <https://tasks.xinutec.org> for Pippijn, which
-is why a task's subject is written to be read by somebody who is not you.
+That cache does **not** hide your own writes: `task add`, `task done` and every
+other change drop it, so the next prompt shows what you just did. If you file
+something and it is missing from your next digest, that is a real absence and
+worth looking at rather than a minute of staleness.
+
+`task sessions` shows who holds what — every session that has ever held
+anything, Pippijn and the pile, as `open/total`. It is **not** every conversation
+there is: a row exists for each one that has ever asked for a digest, so at the
+time of writing 717 existed and 14 had held a task. `task sessions --all` is the
+whole table, and the reason to want it is to find the id of a conversation that
+has never been given anything, so you can hand it something. The same thing is at
+<https://tasks.xinutec.org> for Pippijn, which is why a task's subject is written
+to be read by somebody who is not you.
 
 `task --help` is the authority on the commands. `README.md` beside this file is
 the authority on why any of it is shaped this way.

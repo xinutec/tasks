@@ -116,17 +116,38 @@ macro_rules! tally {
     };
 }
 
-/// Who holds what: every session, Pippijn, and the pile.
+/// Who holds what: every session that has held something, Pippijn, and the pile.
 ///
 /// Three queries rather than one union, because the three groups are counted
 /// from different columns — `assignee_session`, `assignee_person`, and the
 /// absence of both. Ordered by what is open, most first, since the question
 /// this answers is "who is loaded"; ties go to the larger history.
+///
+/// ⚠ **A session that has never been given a task is not a holder, and is left
+/// out.** A row here is created by the first thing a conversation does — which
+/// is asking for a digest, on its first prompt — so the table holds every
+/// conversation that has ever run: **717 two days after the cutover, of which
+/// 14 had ever held anything**. Answering with all of them buries the fourteen
+/// under seven hundred `0/0` lines, on a screen meant to be read on a phone and
+/// in the one CLI command whose whole job is to say who is carrying what. That
+/// is the same everything-by-default `task list` was narrowed for the day
+/// before.
+///
+/// The predicate is *has ever been assigned a task*, not *has anything open*:
+/// [`Holder::total`] exists precisely so a cleared plate still says who cleared
+/// it, and a session that dropped its whole list decided something and should
+/// be seen to have. `list` is still every session known, which is what
+/// `task sessions --all` asks for.
 pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
+    // `COUNT(t.id)` over the left join is *ever assigned anything*, and it is
+    // deliberately not spelled with the status vocabulary: "has a history" is a
+    // different question from "is open", and `still_open!` is the only place
+    // the second one is allowed to be said.
+    //
     // dev-lint: allow-sqlx — a `concat!`ed literal assembled by `tally!`, not a
     // string built at runtime; the only interpolation is another macro.
-    let sessions: Vec<(String, Option<String>, i64, i64)> = sqlx::query_as(tally!(
-        "s.id, s.name, ",
+    let sessions: Vec<(String, Option<String>, i64, i64, i64)> = sqlx::query_as(tally!(
+        "s.id, s.name, CAST(COUNT(t.id) AS SIGNED) AS ever, ",
         "FROM sessions s LEFT JOIN tasks t ON t.assignee_session = s.id GROUP BY s.id, s.name"
     ))
     .fetch_all(pool)
@@ -135,7 +156,8 @@ pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
 
     let mut out: Vec<Holder> = sessions
         .into_iter()
-        .map(|(id, name, open, done)| Holder {
+        .filter(|(_, _, ever, _, _)| *ever > 0)
+        .map(|(id, name, _, open, done)| Holder {
             kind: "session".into(),
             id: Some(id),
             name,

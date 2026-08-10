@@ -58,10 +58,22 @@ session in the wrong repo was invisible to the receiver, and `task edit` had no
 The pile stays, and that is the part worth stating: it is how a task is handed to
 whichever conversation is around rather than to a named one, so a digest narrowed
 to strictly its own would make work Pippijn left for anybody invisible to
-everybody. It is global now that there is no repo to scope it to — 3 unheld of
-134 open when that was measured, which is what makes it affordable. Looking
-across holders is a thing you ask for: `task list --all` for every open task,
-`task sessions` for who is carrying what.
+everybody. Looking across holders is a thing you ask for: `task list --all` for
+every open task, `task sessions` for who is carrying what.
+
+⚠ **The pile is capped in the digest at `PILE_LINES`, because it is the one part
+with a different denominator.** A task a session holds is in one conversation's
+prompt; an unheld one is in *every* conversation's, on every turn — so a single
+line left for whoever picks it up costs as many prompts as there are live
+sessions. This was first argued as affordable from *3 unheld of 134 open*, and
+that is a **condition** rather than a property: two days after the cutover the
+recall session's digest carried 5 pile lines against its own 3, with nothing
+keeping the number down. `MAX_BYTES` is not that guard — it stops a runaway at
+some two hundred lines, per session, which the pile would reach only after weeks
+of being ruinous. Past the cap the digest says how many more are in the pile and
+names `task list`, which is the handover intact and the cost bounded. What a session
+*holds* is never capped: growth there is a backlog for that conversation to work
+off, not a charge on everybody else.
 
 ⚠ **The CLI's default is the same selection, as of 2026-08-09.** `task list`
 used to mean every open task there is, which put the cost the digest refuses
@@ -120,6 +132,16 @@ made dropping the repository in `0004` a deletion rather than a redesign.
 | `/new` | file one |
 | `/who` | who holds what: `open/total` per session, for the person, and the pile |
 
+⚠ **`/who` and `task sessions` answer with *holders*, not with every session
+row.** A row exists for every conversation that has ever asked for a digest,
+which is every conversation that has ever run: **717 of them two days after the
+cutover, of which 14 had ever held anything**. Answering with all of them buries
+the fourteen under seven hundred `0/0` lines on a screen meant for a phone. The
+predicate is *has ever been assigned a task*, not *has anything open* — a
+cleared plate still says who cleared it, and a session that dropped its whole
+list decided something. `task sessions --all` is every row, which is how a
+brand-new conversation's id is found in order to hand it work.
+
 ## The CLI
 
 `docs/for-sessions.md` is this same surface written for the reader who uses it
@@ -130,7 +152,7 @@ and which of them a session gets wrong.
 ```sh
 task list [--all|--mine] [--done]         # yours and the pile; wider; narrower
 task show <id> [--body]                   # one task, its prose and its history
-task sessions                             # who holds what, as open/total
+task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
 task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody]
 task start <id> / task done <id> [--to W] # move it along
@@ -153,6 +175,15 @@ conversation's id into its own history. There is no anonymous mode for reads
 either — the service needs both halves of the credential to answer at all — so a
 bare token gets a 401 that names the missing half rather than the generic one
 that once read as a bad token.
+
+**A write drops the prompt hook's cached digest** (`src/hook.rs`, and
+`~/.cache/claude-tasks/<session>.txt` at the other end). The hook reads that file
+before the network and treats anything under a minute as current, which is right
+for reading and wrong for the moment after a write: a session that files a task
+and is then shown a digest without it has been given a reason to file it twice —
+the one mistake the pile's visibility exists to prevent. Every non-`GET` clears
+it, centrally in `Client::send` rather than per command, and silently, because
+the write has already succeeded and the cost of missing it is one stale prompt.
 
 ### Installing it
 

@@ -62,17 +62,60 @@ use crate::tasks::types::{AssigneeKind, Status, Task};
 /// measured 2.5 kB index, and still 6% of one built-in reminder.
 pub const MAX_BYTES: usize = 25_000;
 
+/// How many unheld tasks a digest recites before it starts counting them.
+///
+/// ⚠ **The pile has a different denominator from everything else here, and
+/// that is the whole reason for this constant.** A task a session holds is in
+/// one conversation's prompt; an unheld one is in *every* conversation's, on
+/// every turn, because the pile is global and is shown to all of them. So one
+/// line left for whoever picks it up costs as many prompts as there are live
+/// sessions — fourteen, when this was written — and nothing in the system was
+/// pushing back on that. [`MAX_BYTES`] is not the guard: it is a runaway stop
+/// at some two hundred lines, per session, which the pile would reach only
+/// after having been ruinous for weeks.
+///
+/// `README.md` argues the pile is affordable, and the measurement it argues
+/// from is *3 unheld of 134 open*. That is a **condition**, not a property —
+/// two days after the cutover the recall session's digest carried 5 pile lines
+/// against its own 3, with nothing anywhere keeping the number down. This is
+/// what keeps it true.
+///
+/// Five, because the pile is a handover channel rather than a backlog: enough
+/// to notice that something is waiting and take it, and past that it is a list
+/// to browse when you have asked for it. Growing this is spending every
+/// conversation's context to save one `task list`.
+pub const PILE_LINES: usize = 5;
+
 /// Render the index for a set of tasks, already filtered to the open ones.
 ///
 /// One flat list, in id order. This grouped by repository until `0004`, and the
 /// grouping is not worth reinstating under another key: the header cost a line
 /// per group on every turn to tell a reader something the subject already says.
+/// The pile cap does not reshuffle it either — the tasks that survive the cap
+/// stay where their ids put them, interleaved with the session's own.
 pub fn render(tasks: &[Task]) -> String {
     if tasks.is_empty() {
         return String::new();
     }
 
     let doing = tasks.iter().filter(|t| t.status == Status::Doing).count();
+
+    // The pile, trimmed. Counted in id order, so what survives is the oldest
+    // of it: a task nobody has taken in a fortnight is the one at risk of being
+    // forgotten, and the newest is the one whoever filed it still remembers.
+    let mut piled = 0usize;
+    let mut pile_hidden = 0usize;
+    let mut selected: Vec<&Task> = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        if task.assignee.kind == AssigneeKind::Nobody {
+            piled += 1;
+            if piled > PILE_LINES {
+                pile_hidden += 1;
+                continue;
+            }
+        }
+        selected.push(task);
+    }
 
     let mut head = format!("{} open task(s)", tasks.len());
     if doing > 0 {
@@ -101,7 +144,7 @@ pub fn render(tasks: &[Task]) -> String {
     let mut bytes = out[0].len();
     let mut omitted = 0usize;
 
-    for task in tasks {
+    for task in selected {
         if omitted > 0 {
             omitted += 1;
             continue;
@@ -117,6 +160,12 @@ pub fn render(tasks: &[Task]) -> String {
         out.push(line);
     }
 
+    // Two notices, never merged: they are different failures with different
+    // remedies. The budget means a session's own plate has grown into content;
+    // the pile means work is piling up that nobody has taken.
+    if pile_hidden > 0 {
+        out.push(format!("⚠ {pile_hidden} more in the pile — `task list`."));
+    }
     if omitted > 0 {
         out.push(format!(
             "⚠ {omitted} more open task(s) not shown: this index is over its {MAX_BYTES}-byte \
