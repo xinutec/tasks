@@ -53,6 +53,24 @@ against you. It is installed by home-manager and lives in the nix profile — if
 `task` is not found, or says *"a token but no session id"*, the fix is
 `~/.config/home-manager/switch.sh` rather than anything in your shell.
 
+## Say what you are called
+
+```sh
+task rename health              # one word, whatever this conversation is about
+```
+
+⚠ **Do this once, early, and rename yourself again when the job changes.** Your
+id is 36 characters and it is the only thing anybody sees until you say
+otherwise: `task sessions` lists you as a uuid, every handover writes `nobody →
+7c0202eb-080b-…` into a history that is rendered at write time and never
+re-resolves, and the `(from …)` hint that lets other sessions skip your work
+falls silent, because a bare uuid is not a hint. One conversation went two days
+unnamed while holding thirty tasks, and all three of those followed.
+
+The id is the identity and the name is only what a list calls you, so renaming
+moves nothing — every task you hold stays yours, and lists start saying the new
+name at once.
+
 ## Work the list
 
 ```sh
@@ -73,10 +91,12 @@ task edit <id> --body -         # rewrite the prose
 takes it on, and `task start` claims it **out of the pile** — the same way `task
 done` already put your name on it. It never takes one off somebody else: if a
 task is already held, starting it moves the status and nothing else, and taking
-it on properly is `task move <id> me`. Until 2026-08-09 none of that was true: a holder was recorded when a
-task was *closed* and at no other moment, so a session could show three finished
-tasks and `0 open` while it was hours into a fourth. If you want it in the pile
-instead, say `--to nobody` — that is now a decision rather than a default.
+it on properly is `task move <id> me`. If you want it in the pile instead, say
+`--to nobody` — that is a decision rather than a default.
+
+Until 2026-08-09 none of that was true: a holder was recorded when a task was
+*closed* and at no other moment, so a session could show three finished tasks and
+`0 open` while it was hours into a fourth.
 
 ⚠ **A pile line ending in `(from health)` is telling you where the work lives.**
 That is the session that filed it, and it is there so you can rule a task out
@@ -84,7 +104,13 @@ without opening it — most of the pile is somebody else's subject matter, and
 before this you had to spend a `task show` to find that out. Treat it as a hint:
 it is silent when Pippijn filed it or the filer never named itself, and it is
 wrong when one conversation files work for another, which the subject usually
-gives away. It is in `task list` and not in your prompt, deliberately.
+gives away. `filed_by` is in `task list` and deliberately not in your prompt.
+
+⚠ **Two parentheticals, and they are not the same thing.** `(from health)` is
+who *filed* it and appears only on a pile line; a bare `(coach)` is who *holds*
+it, and that one does reach your prompt. In your own digest the bare one is
+always your own name — the pile has no holder — so it is what tells your work
+apart from the work going spare.
 
 ⚠ **A task in the pile can be `- [>]`, and it is yours to take.** Somebody
 started it and handed it back without closing it — the question is still open,
@@ -168,3 +194,7 @@ to be read by somebody who is not you.
 
 `task --help` is the authority on the commands. `README.md` beside this file is
 the authority on why any of it is shaped this way.
+
+**One command is deliberately not here: `task digest`.** It prints exactly what
+your prompt receives, and it exists for measuring that cost — not for reading.
+Running it to catch up on your work spends the bytes twice.
