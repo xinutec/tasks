@@ -59,6 +59,7 @@ against you. It is installed by home-manager and lives in the nix profile — if
 task start <id>                 # you have picked it up  (shows as - [>])
 task done <id>                  # finished
 task drop <id>                  # closed WITHOUT doing it (shows as - [-])
+task reopen <id>                # back to open — it keeps its holder
 task move <id> me               # take it — `me` is YOU, this conversation
 task move <id> pippijn          # hand it to Pippijn
 task move <id> <session-id>     # hand it to another conversation

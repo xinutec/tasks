@@ -157,6 +157,7 @@ task sessions [--all]                     # who holds what, as open/total
 task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody]
 task start <id> / task done <id> [--to W] # move it along
 task drop <id>                            # close it without doing it
+task reopen <id>                          # back to open; it keeps its holder
 task move <id> me|pippijn|<session>|nobody  # hand it over
 task edit <id> [--subject S] [--body -]   # change the words
 task digest                               # exactly what a prompt receives

@@ -30,6 +30,7 @@
 //! task add <subject> [--body -] [--to me|pippijn|<session>|nobody]
 //! task start <id> / task done <id> [--to W] move it along
 //! task drop <id>                            close it without doing it
+//! task reopen <id>                          put it back to open
 //! task move <id> me|pippijn|<session>|nobody  hand it over
 //! task edit <id> [--subject S] [--body -]   change the words
 //! task digest                              exactly what a prompt receives
@@ -126,6 +127,19 @@ enum Command {
     /// credited with having done it. If why it went matters, write it — `task
     /// edit <id> --body -` — because that is prose and there is no field for it.
     Drop { id: TaskRef },
+    /// Put a closed or started task back to open.
+    ///
+    /// The fourth status had three verbs. `done` and `drop` close a task and
+    /// `start` moves it along; nothing came back, so un-closing one meant a
+    /// hand-rolled PATCH — or dropping and refiling it, which throws the history
+    /// away. #700.
+    ///
+    /// ⚠ **It leaves the holder alone**, which is the service's rule and not
+    /// this command's: whoever last had it is a better guess than nobody. So
+    /// reopening something you finished puts it back on your own plate rather
+    /// than in the pile — `task move <id> nobody` is how it goes back for
+    /// whoever picks it up.
+    Reopen { id: TaskRef },
     /// Hand a task over: `me` (this conversation), `pippijn`, `nobody`, or a
     /// session id.
     Move { id: TaskRef, to: To },
@@ -547,6 +561,7 @@ async fn main() -> Result<()> {
         Command::Drop { id } => {
             patch(&client, cli.json, id, json!({ "status": "dropped" })).await?
         }
+        Command::Reopen { id } => patch(&client, cli.json, id, json!({ "status": "open" })).await?,
         Command::Move { id, to } => {
             patch(
                 &client,
