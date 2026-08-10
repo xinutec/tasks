@@ -161,6 +161,20 @@ long as the task is open. Everything else goes in the body, which is read only
 when somebody opens the task. The service refuses a subject that is really a
 body, and says so.
 
+⚠ **Put where it stands in the subject when it fits, and lead the body with it
+when it does not.** A body is written in the order things happened, so the
+current conclusion ends up last — measured 2026-08-10 across every task with a
+body: #704's verdict sat 98% down its 132 lines, #697's entire plan for a new
+machine was the closing paragraph of a ticket about copying a disk. Both cost a
+reader the whole thing to find the one part that was still true. The good
+example is #431, whose subject is *"gap 1 CLOSED, LEAN_DAY exact on 35/35 in
+shadow — the `on` path is what is left"*: everybody reads that for free, on
+every turn, without opening anything.
+
+So: **the present tense at the top, the history under it.** Whoever opens this
+next wants to know where it stands, not how it got here — and the second
+question is only asked once the first is answered.
+
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
 every list afterwards says who did it — pass `--to pippijn` (or anyone) in the
 same breath if it should go somewhere else instead. `task drop` does the same,

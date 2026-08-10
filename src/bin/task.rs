@@ -200,6 +200,14 @@ enum Command {
     /// office, and it costs every session's prompt rather than one.
     Move { id: TaskRef, to: To },
     /// Change a task's words.
+    ///
+    /// ⚠ **Rewriting is the moment to put the conclusion back on top.** A body
+    /// grows in the order things happened, so what is still true sinks to the
+    /// bottom: measured across every task with one, #704's verdict sat 98% down
+    /// its 132 lines and #697's plan for a new machine was the last paragraph of
+    /// a ticket about copying a disk. Lead with where it stands; the history
+    /// goes under it. Better still, put the state in `--subject`, which is the
+    /// only part anybody reads without opening the task.
     Edit {
         id: TaskRef,
         #[arg(long)]
