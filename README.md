@@ -278,6 +278,23 @@ tallies, and none of them would have failed. `still_open!` is now the only place
 that vocabulary appears in SQL, and `a_dropped_task_is_not_open_anywhere` is what
 holds the Rust and the SQL halves together.
 
+**A write answers with what it moved.** `PATCH /api/tasks/{id}` returns the task
+plus `changed`: the `task_events` kinds it wrote — `status`, `assigned`,
+`edited` — empty when it wrote none. The CLI prints *nothing changed — it was
+already like that* under the task line.
+
+⚠ **Reported, not refused, and the distinction is the whole design.** Three
+defects in one day were writes that answered exactly like writes that had
+worked: `start` on a task already `doing` in the pile (`07df813`), a rename to a
+blank name (`0cf49a5`), closing into the pile (`98157f4`). Each was found by
+reproducing it against a scratch task, because success and no-op were
+indistinguishable. But a no-op is *often correct* — starting a task already
+yours is meant to be quiet — so refusing them would trade a silent success for a
+spurious failure. The event rows are the answer rather than a second list kept
+level by hand: a write that records no history changed nothing, by definition.
+`a_write_that_moves_nothing_says_so` holds both halves, and it is why a body
+write now compares before it records.
+
 **`--json` on any read command prints what the service answered, verbatim**, and
 `task show <id> --body` prints the stored markdown alone. Both exist so a claim
 about the data can be *checked* rather than parsed out of a human format with a

@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
-use crate::tasks::types::{Task, TaskDetail};
+use crate::tasks::types::{Task, TaskDetail, Updated};
 
 /// Every `/api` path that is not a route.
 ///
@@ -170,7 +170,7 @@ pub async fn update(
     State(app): State<AppState>,
     Path(id): Path<u64>,
     Json(change): Json<Change>,
-) -> Result<Json<Task>, AppError> {
+) -> Result<Json<Updated>, AppError> {
     let actor = viewer.actor();
     if let Viewer::Session(session) = &viewer {
         sessions::touch(&app.db, session, None).await?;

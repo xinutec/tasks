@@ -273,6 +273,31 @@ pub struct Task {
     pub closed_at: Option<DateTime<Utc>>,
 }
 
+/// A task after a write, and what the write actually moved.
+///
+/// ⚠ **An empty `changed` means the call did nothing, and saying so is the whole
+/// point.** Three defects in one day were writes that answered exactly like a
+/// write that had worked: `start` on a task already `doing` in the pile, a
+/// rename to a blank name, and closing into the pile. Each was found by
+/// reproducing it against a scratch task, because success and no-op were
+/// indistinguishable to the caller.
+///
+/// **Reported rather than refused.** A no-op is often correct — `start` on a
+/// task already yours is meant to be quiet, and refusing it would trade a silent
+/// success for a spurious failure. What was missing was never the refusal; it
+/// was the sentence.
+///
+/// The vocabulary is `task_events`' own — `status`, `assigned`, `edited` — so
+/// what a write reports and what the history records cannot drift into two
+/// spellings of the same event.
+#[derive(Debug, Clone, Serialize)]
+pub struct Updated {
+    #[serde(flatten)]
+    pub task: Task,
+    /// The event kinds written, in the order written.
+    pub changed: Vec<&'static str>,
+}
+
 /// One task with its prose and its history — what opening a task returns.
 #[derive(Debug, Clone, Serialize)]
 pub struct TaskDetail {

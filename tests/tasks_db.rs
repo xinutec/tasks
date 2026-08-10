@@ -163,7 +163,8 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         &pippijn(),
     )
     .await
-    .expect("handing over");
+    .expect("handing over")
+    .task;
     assert_eq!(held.assignee.kind, AssigneeKind::Session);
     assert_eq!(held.assignee.id.as_deref(), Some("sess-1"));
     // Resolved through the join, so a list draws a name without a second query.
@@ -179,7 +180,8 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         &Actor::Session("sess-1".into()),
     )
     .await
-    .expect("handing back");
+    .expect("handing back")
+    .task;
     assert_eq!(back.assignee.kind, AssigneeKind::Person);
 
     let detail = repo::get(&pool, task.id)
@@ -448,7 +450,8 @@ async fn finishing_a_task_records_who_finished_it() {
         &Actor::Session("sess-1".into()),
     )
     .await
-    .expect("finishing");
+    .expect("finishing")
+    .task;
 
     assert_eq!(done.assignee.kind, AssigneeKind::Session);
     assert_eq!(done.assignee.id.as_deref(), Some("sess-1"));
@@ -475,7 +478,8 @@ async fn saying_where_a_finished_task_goes_beats_inferring_it() {
         &Actor::Session("sess-1".into()),
     )
     .await
-    .expect("finishing");
+    .expect("finishing")
+    .task;
 
     assert_eq!(done.assignee.kind, AssigneeKind::Person);
     assert_eq!(done.assignee.id.as_deref(), Some("pippijn"));
@@ -514,7 +518,8 @@ async fn reopening_a_task_leaves_its_holder_alone() {
         &pippijn(),
     )
     .await
-    .expect("reopening");
+    .expect("reopening")
+    .task;
 
     // Whoever last had it is a better guess than nobody, and reopening is not
     // a claim on the work.
@@ -798,7 +803,8 @@ async fn dropping_a_task_credits_nobody_with_doing_it() {
         &Actor::Session("sess-1".into()),
     )
     .await
-    .expect("dropping");
+    .expect("dropping")
+    .task;
     assert_eq!(dropped.status, Status::Dropped);
     assert_eq!(dropped.assignee.id.as_deref(), Some("sess-1"));
 
@@ -826,7 +832,8 @@ async fn dropping_a_task_credits_nobody_with_doing_it() {
         &pippijn(),
     )
     .await
-    .expect("reopening");
+    .expect("reopening")
+    .task;
     assert_eq!(reopened.assignee.id.as_deref(), Some("sess-1"));
     assert!(
         reopened.closed_at.is_none(),
@@ -866,7 +873,8 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
         &Actor::Session("sess-1".into()),
     )
     .await
-    .expect("starting");
+    .expect("starting")
+    .task;
     assert_eq!(started.status, Status::Doing);
     assert_eq!(started.assignee.kind, AssigneeKind::Session);
     assert_eq!(started.assignee.id.as_deref(), Some("sess-1"));
@@ -900,7 +908,8 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
         &Actor::Session("sess-2".into()),
     )
     .await
-    .expect("starting again");
+    .expect("starting again")
+    .task;
     assert_eq!(
         poached.assignee.id.as_deref(),
         Some("sess-1"),
@@ -973,7 +982,8 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
         &Actor::Session("sess-1".into()),
     )
     .await
-    .expect("releasing");
+    .expect("releasing")
+    .task;
     assert_eq!(
         released.status,
         Status::Doing,
@@ -993,7 +1003,8 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
         &Actor::Session("sess-2".into()),
     )
     .await
-    .expect("taking it on");
+    .expect("taking it on")
+    .task;
     assert_eq!(
         taken.assignee.id.as_deref(),
         Some("sess-2"),
@@ -1008,6 +1019,127 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
         kinds(&pool, task.id).await,
         vec!["created", "status", "assigned", "assigned", "assigned"],
         "taking a doing task on wrote the wrong history"
+    );
+}
+
+/// A write says what it moved, and a write that moved nothing says that.
+///
+/// ⚠ **Three defects in one day were writes that answered exactly like a write
+/// that had worked** — `start` on a task already `doing` in the pile, a rename
+/// to a blank name, closing into the pile. Every one was found by reproducing it
+/// against a scratch task, because the caller could not tell success from
+/// nothing-happened.
+///
+/// **Reported, not refused.** The second `start` here is a legitimate no-op and
+/// must keep succeeding: refusing it would trade a silent success for a spurious
+/// failure. What was missing was the sentence, not the error.
+#[tokio::test]
+async fn a_write_that_moves_nothing_says_so() {
+    let pool = common::fresh_db().await;
+    sessions::touch(&pool, "sess-1", Some("tasks"))
+        .await
+        .expect("a session");
+    let actor = Actor::Session("sess-1".into());
+    let task = repo::create(&pool, filed("Mine to do"), &actor)
+        .await
+        .expect("filing");
+
+    let started = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("starting");
+    assert_eq!(
+        started.changed,
+        vec!["status"],
+        "a real change named the wrong thing"
+    );
+
+    // The same call again moves nothing. It still succeeds, and it still answers
+    // with the task — what changes is that it admits to having done nothing.
+    let again = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Doing),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("starting again");
+    assert!(
+        again.changed.is_empty(),
+        "a second start reported {:?}",
+        again.changed
+    );
+    assert_eq!(again.task.status, Status::Doing);
+
+    // Handing a task to whoever is already holding it: the same.
+    let same = repo::update(
+        &pool,
+        task.id,
+        Change {
+            assignee: Some(to_session("sess-1")),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("moving");
+    assert!(
+        same.changed.is_empty(),
+        "moving a task to its own holder reported {:?}",
+        same.changed
+    );
+
+    // A body that is the text already there is not an edit. Unconditional until
+    // this test existed, which put an `edited` in the history for saving a body
+    // nobody had touched.
+    let reworded = repo::update(
+        &pool,
+        task.id,
+        Change {
+            body: Some(String::new()),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("saving the same body");
+    assert!(
+        reworded.changed.is_empty(),
+        "saving an unchanged body reported {:?}",
+        reworded.changed
+    );
+
+    // Two axes at once, in the order the history records them.
+    let closed = repo::update(
+        &pool,
+        task.id,
+        Change {
+            status: Some(Status::Done),
+            assignee: Some(to_person()),
+            ..Default::default()
+        },
+        &actor,
+    )
+    .await
+    .expect("closing");
+    assert_eq!(closed.changed, vec!["status", "assigned"]);
+
+    // And what a write reports is what the history holds: one vocabulary, so the
+    // two cannot drift into different spellings of the same event.
+    assert_eq!(
+        kinds(&pool, task.id).await,
+        vec!["created", "assigned", "status", "status", "assigned"],
+        "the reported changes and the recorded ones disagree"
     );
 }
 
@@ -1201,7 +1333,8 @@ async fn starting_a_task_assigned_to_another_session_takes_nothing() {
         &Actor::Session("sess-2".into()),
     )
     .await
-    .expect("starting");
+    .expect("starting")
+    .task;
     assert_eq!(
         started.assignee.id.as_deref(),
         Some("sess-1"),

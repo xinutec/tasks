@@ -48,6 +48,18 @@ export interface Task {
   closed_at?: string | null;
 }
 
+/**
+ * A task after a write, and what the write actually moved.
+ *
+ * `changed` holds the `task_events` kinds written — `status`, `assigned`,
+ * `edited` — and is empty when the call moved nothing. A no-op is often the
+ * right answer, so it is reported rather than refused; what it must not do is
+ * answer exactly like a write that worked.
+ */
+export interface Updated extends Task {
+  changed: string[];
+}
+
 export interface TaskEvent {
   at: string;
   kind: string;

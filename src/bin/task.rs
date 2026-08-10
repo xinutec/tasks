@@ -649,6 +649,17 @@ async fn main() -> Result<()> {
 }
 
 /// Change a task, named either way.
+///
+/// ⚠ **A write that moved nothing says so**, because until 2026-08-10 it printed
+/// a line identical to the one a real change produces. `task start` on a task
+/// already `doing` in the pile claimed nobody and looked like it had worked;
+/// so did a rename to a blank name, and closing into the pile. Each was found
+/// by reproducing it on a scratch task rather than by the caller noticing.
+///
+/// It is a note, not an error: a no-op is often the right answer — starting a
+/// task already yours is meant to be quiet — and a non-zero exit would turn a
+/// silent success into a spurious failure. The service reports which
+/// `task_events` it wrote; empty means none.
 async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<()> {
     client.writing()?;
     let id = id.id();
@@ -656,6 +667,11 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
         .request(reqwest::Method::PATCH, &format!("/api/tasks/{id}"))
         .json(&change);
     let task = client.send(req).await?.context("no task came back")?;
-    emit(json, &task, || println!("{}", line(&task)));
+    emit(json, &task, || {
+        println!("{}", line(&task));
+        if task["changed"].as_array().is_some_and(|c| c.is_empty()) {
+            println!("nothing changed — it was already like that");
+        }
+    });
     Ok(())
 }

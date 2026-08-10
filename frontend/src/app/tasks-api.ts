@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Change, Holder, Me, NewTask, Session, Task, TaskDetail } from './models';
+import { Change, Holder, Me, NewTask, Session, Task, TaskDetail, Updated } from './models';
 
 /** Thin client over the tasks backend. Same-origin in prod; via the dev proxy
  *  (proxy.conf.json) in `ng serve`. The session cookie rides along. */
@@ -32,8 +32,8 @@ export class TasksApi {
   }
 
   /** A genuine partial update: send only what is changing. */
-  change(id: number, change: Change): Observable<Task> {
-    return this.http.patch<Task>(`/api/tasks/${id}`, change);
+  change(id: number, change: Change): Observable<Updated> {
+    return this.http.patch<Updated>(`/api/tasks/${id}`, change);
   }
 
   sessions(): Observable<Session[]> {

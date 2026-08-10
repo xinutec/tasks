@@ -12,7 +12,7 @@ use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 use crate::error::AppError;
 use crate::still_open;
 use crate::tasks::types::{
-    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Status, Task, TaskDetail,
+    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Status, Task, TaskDetail, Updated,
 };
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -461,7 +461,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
 /// no event: a client that PUTs the whole object on every keystroke would
 /// otherwise fill the history with `open → open`, and a history full of
 /// non-events is one nobody reads.
-pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) -> Result<Task> {
+pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) -> Result<Updated> {
     let before = list_one(pool, id).await?;
 
     // ⚠ **A closed task may not be left in the pile.** The pile means *for
@@ -499,6 +499,12 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
 
+    // What actually moved. Pushed beside each `record`, because the event rows
+    // ARE the answer — a write that writes no history changed nothing — and two
+    // lists that have to be kept level by hand would drift the first time an
+    // axis was added.
+    let mut changed: Vec<&'static str> = Vec::new();
+
     if let Some(subject) = &change.subject {
         let subject = check_subject(subject)?;
         if subject != before.subject {
@@ -509,17 +515,32 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 .await
                 .context("changing a subject")?;
             record(&mut tx, id, actor, "edited", Some(subject)).await?;
+            changed.push("edited");
         }
     }
 
+    // ⚠ **Compared first, like the subject beside it.** This branch used to write
+    // and record unconditionally, which put an `edited` in the history for
+    // saving a body somebody had not touched — and, once a write began
+    // REPORTING what it moved, would have made it claim an edit that never
+    // happened. The extra read is on the write path only; it never touches the
+    // digest, which is the one thing charged per turn.
     if let Some(body) = &change.body {
-        sqlx::query("UPDATE tasks SET body = ? WHERE id = ?")
-            .bind(body)
+        let current: Option<(String,)> = sqlx::query_as("SELECT body FROM tasks WHERE id = ?")
             .bind(id)
-            .execute(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await
-            .context("changing a body")?;
-        record(&mut tx, id, actor, "edited", Some("body".into())).await?;
+            .context("reading a body before changing it")?;
+        if current.map(|(b,)| b).as_deref() != Some(body.as_str()) {
+            sqlx::query("UPDATE tasks SET body = ? WHERE id = ?")
+                .bind(body)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .context("changing a body")?;
+            record(&mut tx, id, actor, "edited", Some("body".into())).await?;
+            changed.push("edited");
+        }
     }
 
     if let Some(status) = change.status
@@ -546,6 +567,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             Some(format!("{} → {}", before.status, status)),
         )
         .await?;
+        changed.push("status");
     }
 
     // Closing a task makes the closer its holder.
@@ -642,11 +664,15 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 Some(format!("{} → {to}", before.assignee.label())),
             )
             .await?;
+            changed.push("assigned");
         }
     }
 
     tx.commit().await.context("committing a task change")?;
-    list_one(pool, id).await
+    Ok(Updated {
+        task: list_one(pool, id).await?,
+        changed,
+    })
 }
 
 /// One task without its prose or history — the read every write does first,
