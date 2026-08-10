@@ -13,7 +13,15 @@
 //! | --- | --- | --- |
 //! | (bare) | what could I pick up | my own, and the pile |
 //! | `--mine` | what am I holding | my own, strictly |
+//! | `--pile` | what is going spare | the unheld, strictly |
 //! | `--all` | what is going on | every holder |
+//!
+//! ⚠ **`--pile` is here because its absence was answered by guesswork.** It was
+//! the one question with no name, so a session hand-filtered `--all --json`,
+//! invented a `session` field that does not exist, and reported **137** tasks in
+//! the pile when there were **5** — a number that reached Pippijn before anybody
+//! caught it. A missing view is not neutral: it is answered anyway, by whoever
+//! needs it, without the tests this file has.
 //!
 //! The bare form deliberately matches [`Filter::digest_for`](super::repo::Filter)
 //! rather than `--mine`: the pile is the handover channel, and a session that
@@ -38,6 +46,7 @@ use anyhow::{Context, Result};
 pub fn list_query(
     all: bool,
     mine: bool,
+    pile: bool,
     done: bool,
     session: Option<&str>,
 ) -> Result<Vec<(String, String)>> {
@@ -46,6 +55,14 @@ pub fn list_query(
         query.push(("done".into(), "true".into()));
     }
     if all {
+        return Ok(query);
+    }
+    // Before the session clauses and without one: the pile has no holder, so
+    // sending an id alongside would ask for the intersection of two disjoint
+    // sets. Needs no session id at all, which is also what makes it the one
+    // list a person can ask for the same way a session does.
+    if pile {
+        query.push(("unheld".into(), "true".into()));
         return Ok(query);
     }
     if mine {

@@ -40,6 +40,20 @@ pub struct Filter {
     /// conversation is around. Ignored unless `session` is set: on its own it
     /// would mean "held tasks, plus the pile", which is every task there is.
     pub or_unheld: bool,
+    /// Strictly the tasks nobody holds — the pile, and nothing else.
+    ///
+    /// ⚠ **The narrow twin of [`or_unheld`](Self::or_unheld), and not the same
+    /// question.** That one widens a session's own plate to include the pile;
+    /// this one asks what is going spare. Both existed as ideas from the start
+    /// and only the widening one was built, so "what is in the pile" had to be
+    /// answered by filtering `--all` by hand — which on 2026-08-10 reported 137
+    /// unheld tasks when there were 5, because the guesser invented a `session`
+    /// field that does not exist and matched every row without one.
+    ///
+    /// Wins over the other two when set: a caller asking for the pile is not
+    /// asking about a holder, so a session id alongside it is ignored rather
+    /// than intersected — an intersection would always be empty.
+    pub unheld: bool,
 }
 
 impl Filter {
@@ -156,7 +170,12 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     if !filter.include_closed {
         query.push(concat!(" AND ", still_open!("t.status")));
     }
-    if let Some(session) = &filter.session {
+    // Before the holder clauses, and exclusive of them: "what is going spare"
+    // has no holder to narrow by, and intersecting the two would always answer
+    // nothing at all.
+    if filter.unheld {
+        query.push(" AND t.assignee_kind = 'nobody'");
+    } else if let Some(session) = &filter.session {
         query.push(" AND ((t.assignee_kind = 'session' AND t.assignee_session = ");
         query.push_bind(session);
         query.push(")");
@@ -165,7 +184,9 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         }
         query.push(")");
     }
-    if let Some(person) = &filter.person {
+    if !filter.unheld
+        && let Some(person) = &filter.person
+    {
         query.push(" AND t.assignee_kind = 'person' AND t.assignee_person = ");
         query.push_bind(person);
     }

@@ -129,6 +129,13 @@ pub struct ListQuery {
     /// [`Filter::or_unheld`] is — on its own it would mean every task there is.
     #[serde(default)]
     pile: bool,
+    /// Strictly the tasks nobody holds. Wins over `session` and `person`.
+    ///
+    /// The narrow twin of `pile`, which *widens*. Both names are on the wire
+    /// because both questions are asked, and telling them apart in one word is
+    /// what the CLI's `--pile` spends its own flag on.
+    #[serde(default)]
+    unheld: bool,
 }
 
 /// Tasks matching a filter.
@@ -142,6 +149,7 @@ pub async fn list(
         session: q.session,
         person: q.person,
         or_unheld: q.pile,
+        unheld: q.unheld,
     };
     Ok(Json(repo::list(&app.db, &filter).await?))
 }

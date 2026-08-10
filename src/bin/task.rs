@@ -25,7 +25,7 @@
 //! been rewritten to a live id.
 //!
 //! ```text
-//! task list [--all|--mine] [--done]       yours and the pile; or wider, or narrower
+//! task list [--all|--mine|--pile] [--done] yours and the pile; wider; narrower; spare
 //! task show <id>                            one task, its prose and its history
 //! task add <subject> [--body -] [--to me|pippijn|<session>|nobody]
 //! task start <id> / task done <id> [--to W] move it along
@@ -64,6 +64,18 @@ struct Cli {
     session: Option<String>,
     /// Print what the service answered, verbatim, instead of the human format.
     ///
+    /// A task is `{id, subject, status, assignee, detailed, filed_by,
+    /// created_at, updated_at, closed_at}`. `status` is one of `open`, `doing`,
+    /// `done`, `dropped`. THE HOLDER IS `assignee`, an object — `{kind, id,
+    /// name}` with `kind` one of `session`, `person`, `nobody` — and there is no
+    /// top-level `session` field.
+    ///
+    /// ⚠ **That last sentence is here because guessing it cost a wrong answer.**
+    /// A session filtering `--all --json` by hand assumed `session` and reported
+    /// 137 tasks in the pile against a real 5, since every row lacks a field
+    /// that does not exist. `--pile` now answers that question directly; this
+    /// says what the shape is for the questions that have no flag.
+    ///
     /// ⚠ **The service's JSON, reprinted — not rebuilt here.** A second
     /// serialisation in this binary would be a second shape to keep level with
     /// the API by hand, and the whole value of the flag is that a script can
@@ -84,6 +96,12 @@ enum Command {
         /// Strictly what this session holds, without the pile.
         #[arg(long, conflicts_with = "all")]
         mine: bool,
+        /// Strictly what nobody holds: the pile, and what is going spare.
+        ///
+        /// Your prompt shows at most five of these, so this is where the rest
+        /// are. Needs no session id — the pile belongs to no conversation.
+        #[arg(long, conflicts_with_all = ["all", "mine"])]
+        pile: bool,
         /// Include finished tasks.
         #[arg(long)]
         done: bool,
@@ -511,8 +529,13 @@ async fn main() -> Result<()> {
     client.identified()?;
 
     match cli.command {
-        Command::List { all, mine, done } => {
-            let query = list_query(all, mine, done, client.session.as_deref())?;
+        Command::List {
+            all,
+            mine,
+            pile,
+            done,
+        } => {
+            let query = list_query(all, mine, pile, done, client.session.as_deref())?;
             let req = client
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
@@ -520,7 +543,17 @@ async fn main() -> Result<()> {
             emit(cli.json, &tasks, || {
                 let tasks = tasks.as_array().cloned().unwrap_or_default();
                 if tasks.is_empty() {
-                    println!("nothing open");
+                    // Which question came back empty, because the three read
+                    // very differently: an empty pile is the fleet keeping up,
+                    // and an empty plate is this session having nothing to do.
+                    println!(
+                        "{}",
+                        if pile {
+                            "the pile is empty"
+                        } else {
+                            "nothing open"
+                        }
+                    );
                 }
                 for task in &tasks {
                     println!("{}", line(task));

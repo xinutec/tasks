@@ -169,7 +169,7 @@ section says what the commands are; that one says which question each answers,
 and which of them a session gets wrong.
 
 ```sh
-task list [--all|--mine] [--done]         # yours and the pile; wider; narrower
+task list [--all|--mine|--pile] [--done]  # yours and the pile; wider; narrower; spare
 task show <id> [--body]                   # one task, its prose and its history
 task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
@@ -322,6 +322,20 @@ regex — which is what the check that verified the migration had to do, until t
 health session pointed out that `wc -l` on both sides proves only the count. The JSON is reprinted rather than rebuilt here, so there is one documented
 shape rather than two kept level by hand. `task digest` refuses `--json`: it
 answers in text/plain deliberately, being exactly what a prompt receives.
+
+⚠ **The shape is now written down in `--help`, because it was being guessed.** A
+task is `{id, subject, status, assignee, detailed, filed_by, created_at,
+updated_at, closed_at}`; the holder is `assignee`, an object of `{kind, id,
+name}` with `kind` one of `session`/`person`/`nobody`, and there is no top-level
+`session` field. A session hand-filtering `--all --json` assumed there was,
+matched every row that lacked it, and reported **137** tasks in the pile against
+a real **5** — to Pippijn, before anybody checked. A flag whose help documents
+its own provenance at length and never says what it returns is half a flag.
+
+**`--pile` exists for the same reason**: that question had no name, so it was
+answered by hand. `pile=true` on the wire *widens* a session's plate to include
+the unheld; `unheld=true` *narrows* to them. Both are parameters because both are
+real questions, and the CLI spends a flag on telling them apart.
 
 `task digest` prints the byte count on stderr. That number is the per-turn cost of
 the whole system, and it is the one worth watching.

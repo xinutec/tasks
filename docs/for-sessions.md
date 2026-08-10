@@ -21,6 +21,7 @@ repeated every message. `task add` is how you file work.
 ```sh
 task list                 # yours, and the pile — what you could pick up
 task list --mine          # strictly what you are holding, without the pile
+task list --pile          # strictly what NOBODY holds — what is going spare
 task list --mine --done   # YOUR list — every task you hold, finished or not
 task show <id>            # one task: its prose, and its history
 task list --all           # every open task, whoever holds it
@@ -39,9 +40,15 @@ cost the digest exists to refuse, reached through the one command you run when
 you want to know what to do next. It now asks the same question the digest does:
 your own, and the pile.
 
-Which leaves three questions with three names. `task list` is *what could I pick
-up*; `--mine` is *what am I holding*; `--all` is *what is going on*, and it is
-the expensive one on purpose.
+Which leaves four questions with four names. `task list` is *what could I pick
+up*; `--mine` is *what am I holding*; `--pile` is *what is going spare*; `--all`
+is *what is going on*, and it is the expensive one on purpose.
+
+⚠ **`--pile` is the one to reach for when your prompt says "N more in the
+pile".** That notice is all the digest will ever say about them — five lines is
+the cap — so this is where the rest are. Do not answer it by filtering `--all
+--json` yourself: a session did, guessed at a `session` field that does not
+exist, and reported 137 tasks going spare when there were 5.
 
 `--json` on any read command prints what the service answered, verbatim, and
 `task show <id> --body` prints the stored markdown alone — so a claim about the

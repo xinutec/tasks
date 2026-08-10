@@ -418,3 +418,135 @@ mod naming {
         );
     }
 }
+
+/// The pile, asked for on its own, through the route that answers it.
+///
+/// ⚠ **Paired with `tests/selection.rs` deliberately.** Those pin that the CLI
+/// SENDS `unheld=true`; a route that parsed it and dropped it on the floor would
+/// leave all four of them green while `task --pile` answered with every task
+/// there is — which is the shape that produced this ticket in the first place:
+/// a filter believed rather than checked, reporting 137 where there were 5.
+mod pile {
+    use super::*;
+
+    async fn pile_list(app: &axum::Router, query: &str) -> Vec<String> {
+        pile_tasks(app, query)
+            .await
+            .into_iter()
+            .map(|t| t["subject"].as_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    /// ⚠ **Ids are not predictable across the suite.** `fresh_db` does not reset
+    /// the counter, so the fourth task filed here is `#4` only in whichever test
+    /// runs first — which passed alone and failed in the run, once.
+    async fn pile_tasks(app: &axum::Router, query: &str) -> Vec<serde_json::Value> {
+        let res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/tasks?{query}"))
+                    .method("GET")
+                    .header("Authorization", format!("Bearer {TOKEN}"))
+                    .header("X-Session-Id", "sess-1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("the router answered");
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 256 * 1024)
+            .await
+            .expect("a body");
+        serde_json::from_slice::<Vec<serde_json::Value>>(&body).expect("a task array")
+    }
+
+    #[tokio::test]
+    async fn the_route_answers_with_the_unheld_and_nothing_else() {
+        let pool = common::fresh_db().await;
+        seed(&pool).await;
+        let app = app(pool);
+
+        let pile = pile_list(&app, "unheld=true").await;
+        assert_eq!(
+            pile,
+            vec!["PILE, for whoever picks it up".to_string()],
+            "the pile answer carried held work: {pile:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_session_id_does_not_narrow_the_pile_to_nothing() {
+        // The CLI does not send one, but the parameter is public and a caller
+        // may. Intersecting would answer with an empty list, which reads as an
+        // empty pile — a wrong answer that looks like a fine one.
+        let pool = common::fresh_db().await;
+        seed(&pool).await;
+        let app = app(pool);
+
+        let pile = pile_list(&app, "unheld=true&session=sess-1").await;
+        assert_eq!(
+            pile,
+            vec!["PILE, for whoever picks it up".to_string()],
+            "a holder narrowed a question that has no holder: {pile:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_pile_is_not_what_a_bare_list_widens_to() {
+        // `pile=true` widens to own-plus-unheld; `unheld=true` narrows to the
+        // unheld. Confusing the two is exactly the miscount this closes.
+        let pool = common::fresh_db().await;
+        seed(&pool).await;
+        let app = app(pool);
+
+        let widened = pile_list(&app, "session=sess-1&pile=true").await;
+        let narrowed = pile_list(&app, "unheld=true").await;
+        assert!(widened.iter().any(|s| s == "MINE to do"), "{widened:?}");
+        assert!(
+            !narrowed.iter().any(|s| s == "MINE to do"),
+            "the narrow question answered with the caller's own work: {narrowed:?}"
+        );
+    }
+
+    /// The pile is open work by construction, and `--done` cannot widen it.
+    ///
+    /// ⚠ **Not a quirk of this query — a consequence of another rule.** Closing
+    /// a task into the pile is refused outright ("a finished task with no holder
+    /// reads as done by nobody"), so `closed AND unheld` is a state the service
+    /// will not store. `--pile --done` therefore answers the same as `--pile`,
+    /// and an empty pile stays empty however it is asked. Written after
+    /// asserting the opposite and being told so by the service.
+    #[tokio::test]
+    async fn the_pile_never_holds_closed_work_however_it_is_asked() {
+        let pool = common::fresh_db().await;
+        seed(&pool).await;
+        let app = app(pool.clone());
+        let piled = pile_tasks(&app, "unheld=true").await;
+        assert_eq!(piled.len(), 1, "the fixture");
+        let id = piled[0]["id"].as_u64().expect("an id");
+
+        // Closing it takes it on — the only way a pile task can close — so the
+        // pile empties by the task gaining a holder rather than by hiding.
+        repo::update(
+            &pool,
+            id,
+            repo::Change {
+                status: Some(tasks::tasks::types::Status::Dropped),
+                ..Default::default()
+            },
+            &Actor::Person("pippijn".into()),
+        )
+        .await
+        .expect("dropping it");
+
+        assert!(
+            pile_list(&app, "unheld=true").await.is_empty(),
+            "a closed task stayed in the pile"
+        );
+        assert!(
+            pile_list(&app, "unheld=true&done=true").await.is_empty(),
+            "--done resurrected work that left the pile by being closed"
+        );
+    }
+}
