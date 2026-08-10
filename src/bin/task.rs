@@ -183,8 +183,9 @@ enum Command {
     /// 2026-08-10 only the id was accepted, so this tool's own output was not
     /// valid input to it and a handover meant grepping `task sessions` first.
     /// A name that matches nothing, or matches two conversations, is refused
-    /// rather than guessed — names are reused, and an unknown id is accepted by
-    /// the service and holds the task somewhere nobody is looking.
+    /// rather than guessed — names are reused, and the service's own answer to
+    /// an id it does not know is a 500 reading `moving a task`, which says
+    /// nothing about what was wrong with it.
     ///
     /// ⚠ **Handing work to a quiet conversation is queueing, not stranding.** A
     /// session never ends — it goes offline and comes back — so there is no such
