@@ -43,6 +43,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
+use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
 use tasks::tasks::selection::list_query;
 
@@ -176,7 +177,14 @@ enum Command {
     /// whoever picks it up.
     Reopen { id: TaskRef },
     /// Hand a task over: `me` (this conversation), `pippijn`, `nobody`, or a
-    /// session id.
+    /// session — **by name or by id**, whichever you have.
+    ///
+    /// `task move 42 observe` works, because every list prints the name. Until
+    /// 2026-08-10 only the id was accepted, so this tool's own output was not
+    /// valid input to it and a handover meant grepping `task sessions` first.
+    /// A name that matches nothing, or matches two conversations, is refused
+    /// rather than guessed — names are reused, and an unknown id is accepted by
+    /// the service and holds the task somewhere nobody is looking.
     ///
     /// ⚠ **Handing work to a quiet conversation is queueing, not stranding.** A
     /// session never ends — it goes offline and comes back — so there is no such
@@ -356,6 +364,62 @@ impl Client {
         Ok(body)
     }
 
+    /// Turn what somebody typed after `move` into a session id.
+    ///
+    /// ⚠ **Every place this tool PRINTS a holder, it prints the name** — `(coach)`,
+    /// `(observe)` — and until 2026-08-10 the only thing it ACCEPTED was a
+    /// 36-character id. Its own output was not valid input to it, so handing over
+    /// five tasks meant first running `task sessions | grep` to translate three
+    /// names into uuids, and pasting them.
+    ///
+    /// ⚠ **It refuses rather than falling through to "probably an id".** The
+    /// write itself would not land — a foreign key stands behind
+    /// `assignee_session` — but it fails as a 500 whose whole message is
+    /// `moving a task`, which sends the reader to look at the service. Refusing
+    /// here answers the actual question, with the names to hand.
+    async fn resolve(&self, to: To) -> Result<To> {
+        let To::Session(typed) = &to else {
+            return Ok(to);
+        };
+        // Holders first: it is the short list, and handing work to a
+        // conversation that already carries some is the ordinary case.
+        let mut known = known_sessions(
+            &self
+                .send(self.request(reqwest::Method::GET, "/api/holders"))
+                .await?
+                .unwrap_or(json!([])),
+        );
+        if !known.iter().any(|(id, name)| matches(id, name, typed)) {
+            // Every row there is — 717 against 14 when that was split — asked
+            // for only when the cheap list did not answer.
+            known = known_sessions(
+                &self
+                    .send(self.request(reqwest::Method::GET, "/api/sessions"))
+                    .await?
+                    .unwrap_or(json!([])),
+            );
+        }
+        let pairs: Vec<(&str, Option<&str>)> = known
+            .iter()
+            .map(|(id, name)| (id.as_str(), name.as_deref()))
+            .collect();
+        match holder::resolve(pairs, typed) {
+            Holder::Session(id) => Ok(To::Session(id)),
+            Holder::Unknown(names) => bail!(
+                "no session called `{typed}`, and it is not an id this service knows. \
+                 Assigning it anyway would hand the task to a conversation that is not \
+                 there, which leaves every list but `--all`. Known: {}",
+                names.join(", ")
+            ),
+            Holder::Ambiguous(ids) => bail!(
+                "`{typed}` is the name of {} conversations, so this would guess: {}. \
+                 Give the id instead — `task sessions` prints both.",
+                ids.len(),
+                ids.join(", ")
+            ),
+        }
+    }
+
     /// Drop the prompt hook's copy, so the next prompt shows what just changed.
     ///
     /// Silent on every failure, including no `HOME`: this runs after a write
@@ -440,6 +504,11 @@ enum To {
     Me,
     /// The person, by name.
     Person,
+    /// A conversation, by its id **or by its name**.
+    ///
+    /// Which of the two is not decided here: telling them apart needs the
+    /// service, and this is a `FromStr`. [`Client::resolve`] settles it before
+    /// anything is sent.
     Session(String),
 }
 
@@ -468,6 +537,25 @@ fn assignee(to: &To, me: &str) -> Value {
         To::Person => json!({ "kind": "person", "id": "pippijn" }),
         To::Session(id) => json!({ "kind": "session", "id": id }),
     }
+}
+
+/// Whether a row answers to what somebody typed, as an id or as a name.
+fn matches(id: &str, name: &Option<String>, typed: &str) -> bool {
+    id == typed || name.as_deref() == Some(typed)
+}
+
+/// One row of `/api/holders` or `/api/sessions`, reduced to what naming needs.
+fn known_sessions(rows: &Value) -> Vec<(String, Option<String>)> {
+    rows.as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .filter(|row| row["kind"] != "person" && row["kind"] != "nobody")
+        .filter_map(|row| {
+            let id = row["id"].as_str()?.to_string();
+            Some((id, row["name"].as_str().map(str::to_string)))
+        })
+        .collect()
 }
 
 /// A `--body` value, with `-` meaning stdin.
@@ -633,8 +721,9 @@ async fn main() -> Result<()> {
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
-            if let Some(to) = &to {
-                payload["assignee"] = assignee(to, client.me()?);
+            if let Some(to) = to {
+                let to = client.resolve(to).await?;
+                payload["assignee"] = assignee(&to, client.me()?);
             }
             let req = client
                 .request(reqwest::Method::POST, "/api/tasks")
@@ -646,8 +735,9 @@ async fn main() -> Result<()> {
         Command::Start { id } => patch(&client, cli.json, id, json!({ "status": "doing" })).await?,
         Command::Done { id, to } => {
             let mut change = json!({ "status": "done" });
-            if let Some(to) = &to {
-                change["assignee"] = assignee(to, client.me()?);
+            if let Some(to) = to {
+                let to = client.resolve(to).await?;
+                change["assignee"] = assignee(&to, client.me()?);
             }
             patch(&client, cli.json, id, change).await?
         }
@@ -656,6 +746,7 @@ async fn main() -> Result<()> {
         }
         Command::Reopen { id } => patch(&client, cli.json, id, json!({ "status": "open" })).await?,
         Command::Move { id, to } => {
+            let to = client.resolve(to).await?;
             patch(
                 &client,
                 cli.json,
