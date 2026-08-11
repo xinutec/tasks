@@ -1,0 +1,36 @@
+-- When a task has to be done by, where something outside decides.
+--
+-- Asked for by Pippijn 2026-08-11, immediately after the first full ranking pass
+-- found the gap. #260 — *retire the Fitbit Web API before Sep 2026* — was ranked
+-- `P0`, and it does not pass the `P0` test as written: nothing about it is
+-- accruing hourly. It fails all at once, on a date somebody else chose, and
+-- until now there was nowhere to write that date down. The rank had to carry an
+-- argument the column could not hold.
+--
+-- ⚠ **DATE, not DATETIME.** A deadline is a day: *before Sep 2026*, *by the 14th*.
+-- Storing a time would invent a precision nobody stated and then force every
+-- reader to pick a timezone to compare in — and the one thing this column must
+-- never do is disagree with itself about which day it is.
+--
+-- ⚠ **NULL is the ordinary case and is not "no rush".** Almost nothing has a
+-- deadline. As with `priority`, a default would have every existing row assert
+-- something nobody said.
+--
+-- ⚠ **It does NOT reorder anything, deliberately.** `repo::list` sorts by
+-- priority then id and that stays the only sort in the service. A deadline is
+-- evidence for a rank, not a competing answer to *what next*: if something being
+-- due changes the order, the rank is what should change, by somebody who knows
+-- how long it will take — which is the one thing not recorded anywhere. Silently
+-- floating a `P4` above a `P1` because a date is near would override a human
+-- decision with an arithmetic one.
+--
+-- What it does instead is show, on every line that has one, and shout when the
+-- day has passed. Overdue is a fact and needs no threshold; "due soon" would
+-- need one, so there is no such notice.
+--
+-- The one CONSTRAINT is the deadline twin of the priority rule in
+-- `blocking_is_consistent`: a task cannot be due before the thing it is waiting
+-- for. Not expressible as a CHECK — it reaches another row — so it lives beside
+-- its twin, where it can name the other task.
+ALTER TABLE tasks
+    ADD COLUMN due DATE NULL AFTER priority;

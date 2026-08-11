@@ -202,6 +202,18 @@ fn line(task: &Task) -> String {
     // not in every prompt. Costs nothing on the tasks that are not waiting,
     // which is nearly all of them, and on the ones that are it answers the
     // question a reader would otherwise open the task to ask.
+    // ⚠ **The date itself, not a countdown.** A countdown would be recomputed
+    // against whatever "now" the renderer had, and this line is cached for
+    // sixty seconds and read minutes later. A date is the same fact whenever it
+    // is read. OVERDUE is shouted because it is a fact that has changed state
+    // and nothing else on the line would say so.
+    if let Some(due) = task.due {
+        if task.overdue {
+            line.push_str(&format!(" OVERDUE {due}"));
+        } else {
+            line.push_str(&format!(" due {due}"));
+        }
+    }
     if task.blocked {
         let on: Vec<String> = task.blocked_on.iter().map(|id| format!("#{id}")).collect();
         line.push_str(&format!(" ⛔{}", on.join(",")));

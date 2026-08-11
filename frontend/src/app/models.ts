@@ -48,6 +48,18 @@ export interface Task {
   /** Absent on almost everything — see `Priority`. */
   priority?: Priority | null;
   /**
+   * The day it has to be done by, `YYYY-MM-DD`. Absent on almost everything.
+   *
+   * ⚠ **It does not reorder anything** — the backend sorts by priority and this
+   * is not part of that. A deadline is evidence for a rank, not a competing
+   * answer to *what next*, so do not sort by it here either.
+   */
+  due?: string | null;
+  /** Whether `due` has passed, by the SERVER's clock. Absent means false — and
+   *  do not recompute it from `due` here, or two clients in two timezones will
+   *  disagree about which day it is. */
+  overdue?: boolean;
+  /**
    * The tasks this one waits for, oldest id first. Absent when there are none.
    *
    * ⚠ **Not the same as `blocked`.** The link is kept when a blocker closes,
@@ -143,6 +155,7 @@ export interface NewTask {
   subject: string;
   body: string;
   priority?: Priority | null;
+  due?: string | null;
   blocked_on?: number[];
   assignee?: Assignee | null;
 }
@@ -163,5 +176,10 @@ export interface Change {
    *  empty array is how a task stops being blocked, which is why there is no
    *  separate unblock flag: `[]` is a value, not an absence. */
   blocked_on?: number[] | null;
+  /** Set the day it has to be done by. */
+  due?: string | null;
+  /** Take it off. A date has no "empty" value the way a blocker list does, so
+   *  removing one needs its own field rather than a meaningful null. */
+  clear_due?: boolean;
   assignee?: Assignee | null;
 }

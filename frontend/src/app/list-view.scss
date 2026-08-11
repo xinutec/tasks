@@ -117,6 +117,20 @@
   // An icon rather than the ids: the row already carries a rank, an id and a
   // holder, and "#697,#14" in a phone-width meta row is what pushes it past the
   // edge. Which tasks they are is one tap away, on the task itself.
+  // Overdue is the one state worth colouring, and it is a fact rather than a
+  // threshold — which is why there is no "due soon" shade between the two.
+  .due {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+
+    &.overdue {
+      color: var(--mat-sys-error);
+      opacity: 1;
+    }
+  }
+
   .blocked {
     font-size: 16px;
     width: 16px;

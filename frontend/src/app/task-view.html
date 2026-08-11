@@ -13,6 +13,16 @@
         <!-- The ids ARE drawn here, unlike the list: this is the one screen with
              room for them, and "what is it waiting for" is the question that
              brought the reader. Shown only while a blocker is still open. -->
+        @if (t.due) {
+          <span class="due" [class.overdue]="t.overdue">
+            @if (t.overdue) {
+              overdue
+            } @else {
+              due
+            }
+            {{ t.due }}
+          </span>
+        }
         @if (t.blocked) {
           <span class="blocked">
             <mat-icon>block</mat-icon>

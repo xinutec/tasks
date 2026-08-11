@@ -122,6 +122,8 @@ task edit <id> --body -         # rewrite the prose
 task edit <id> --priority P0    # rank one that already exists
 task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
 task edit <id> --unblock        # it is not waiting any more
+task edit <id> --due 2026-09-01 # when it has to be done by
+task edit <id> --no-due         # no deadline after all
 ```
 
 ⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
@@ -229,6 +231,27 @@ rule starts applying the moment somebody states a rank.
 The link is kept when the blocker closes — it is a record of how the work went —
 but it stops constraining anything and stops being drawn. `⛔#697` in your prompt
 means *still waiting*; nothing there means nothing is in the way.
+
+## When it has to be done by
+
+⚠ **`--due` does NOT reorder anything.** The list is ordered by priority, still,
+and that is the only sort there is. A deadline is *evidence for* a rank rather
+than a competing answer to what-next: how long the work takes is the term that
+would decide the order, and nothing anywhere records it. So a near date is an
+argument for ranking something up, and a person makes that call.
+
+⚠ **A task may not be due before something it is blocked on.** That one is
+arithmetic rather than judgement — you cannot finish before the thing you are
+waiting for — so it is refused, with the other task named. Equal is allowed.
+
+Almost nothing has a deadline, and that is right: a date belongs here when
+something OUTSIDE decides it. #260 is the case this was built for — *retire the
+Fitbit Web API before Sep 2026* — where the rank was carrying an argument the
+data could not hold.
+
+Your prompt shows `due 2026-09-01`, or `OVERDUE 2026-09-01` once the day has
+passed. The date rather than a countdown, because the digest is cached and read
+minutes later, and a date is the same fact whenever it is read.
 
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
 every list afterwards says who did it — pass `--to pippijn` (or anyone) in the

@@ -27,6 +27,7 @@ fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
         subject: subject.into(),
         body: String::new(),
         priority,
+        due: None,
         blocked_on: Vec::new(),
         assignee: None,
     }

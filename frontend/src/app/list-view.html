@@ -69,6 +69,19 @@
               <!-- Only while a blocker is still OPEN — `blocked`, not the mere
                    presence of `blocked_on`, which is kept after the blocker
                    closes as a record of how the work went. -->
+              <!-- An icon, not the date — the same call as `blocked` below and
+                   for the same measured reason: a full `2026-09-01` in this row
+                   pushed the long-subject fixture from 9 wrapped lines to 12 at
+                   phone width. Whether there IS a deadline, and whether it has
+                   passed, is what a list needs; WHEN is on the task. -->
+              @if (row.task.due) {
+                <mat-icon
+                  class="due"
+                  [class.overdue]="row.task.overdue"
+                  [attr.aria-label]="row.task.overdue ? 'overdue' : 'has a deadline'"
+                  >event</mat-icon
+                >
+              }
               @if (row.task.blocked) {
                 <mat-icon class="blocked" aria-label="blocked">block</mat-icon>
               }

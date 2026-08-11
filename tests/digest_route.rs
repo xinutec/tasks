@@ -147,6 +147,7 @@ async fn seed(pool: &MySqlPool) {
                 subject: subject.into(),
                 body: String::new(),
                 priority: None,
+                due: None,
                 blocked_on: Vec::new(),
                 assignee: Some(holder),
             },

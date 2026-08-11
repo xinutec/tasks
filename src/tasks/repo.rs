@@ -6,7 +6,7 @@
 //! that can be absent for a write nobody noticed is not one.
 
 use anyhow::Context;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 
 use crate::error::AppError;
@@ -79,6 +79,9 @@ struct Row {
     subject: String,
     status: Status,
     priority: Option<Priority>,
+    due: Option<NaiveDate>,
+    /// Whether `due` has passed, by the DATABASE's clock — see the projection.
+    past_due: i8,
     /// The blockers, comma-joined by SQL — see the projection for why.
     blocked_on: Option<String>,
     /// How many of them are still open. Counted in SQL for the same reason
@@ -128,6 +131,8 @@ impl Row {
             subject: self.subject,
             status: self.status,
             priority: self.priority,
+            due: self.due,
+            overdue: self.past_due != 0,
             blocked_on: parse_ids(self.blocked_on.as_deref()),
             blocked: self.open_blockers > 0,
             assignee,
@@ -150,7 +155,12 @@ impl Row {
 macro_rules! select {
     ($tail:literal) => {
         concat!(
-            "SELECT t.id, t.subject, t.status, t.priority, t.assignee_kind, ",
+            "SELECT t.id, t.subject, t.status, t.priority, t.due, ",
+            // One clock — the database's — so the CLI, the app and the digest
+            // cannot disagree about which day it is. `CURDATE()` is the session
+            // zone, pinned to UTC in `db::connect`.
+            "(t.due IS NOT NULL AND t.due < CURDATE()) AS past_due, ",
+            "t.assignee_kind, ",
             // Two correlated subqueries rather than a join, for the reason
             // `filed_by` below is one: a join to `task_blocks` MULTIPLIES the
             // task row by its edges, and a list is the one thing here that must
@@ -335,6 +345,9 @@ pub struct NewTask {
     /// stays — see [`Priority`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// The day it has to be done by, if something outside already decides it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<NaiveDate>,
     /// The tasks this one waits for, if they are known at filing time.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocked_on: Vec<u64>,
@@ -363,6 +376,20 @@ pub struct Change {
     /// Ranking a task wrongly is corrected by ranking it again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// Set the day it has to be done by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<NaiveDate>,
+    /// Take the deadline off.
+    ///
+    /// ⚠ **An explicit flag, where `blocked_on` needs none.** The reasoning is
+    /// the same and the types give different answers: an empty LIST is a value
+    /// that says *nothing blocks this*, so absence can keep meaning leave-alone.
+    /// A date has no such value — every date is a real deadline — so removing
+    /// one has to be said some other way. `Option<Option<NaiveDate>>` would be
+    /// the alternative, and a null with meaning is the shape that makes every
+    /// client guess.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub clear_due: bool,
     /// The blockers as they should now be — the whole set, not an addition.
     ///
     /// ⚠ **An empty list is how a task stops being blocked**, and that is why
@@ -496,7 +523,56 @@ async fn blocking_is_consistent(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
     priority: Option<Priority>,
+    due: Option<NaiveDate>,
 ) -> Result<()> {
+    // ⚠ **The deadline twin of the rank rule, and it needs no threshold.** A
+    // task cannot be finished before the thing it is waiting for, so a due date
+    // earlier than an open blocker's is not a priority call — it is arithmetic,
+    // and it is wrong however anybody feels about it. Equal is allowed: both
+    // landing on the same day is tight, not impossible.
+    //
+    // Checked before the rank, because it is the harder fact.
+    if let Some(mine) = due {
+        // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+        let ahead: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
+            "SELECT bt.id, bt.due FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
+            "WHERE b.task_id = ? AND bt.due IS NOT NULL AND bt.due > ? AND ",
+            still_open!("bt.status")
+        ))
+        .bind(id)
+        .bind(mine)
+        .fetch_all(&mut **tx)
+        .await
+        .context("reading the deadlines of what blocks this task")?;
+        if let Some((blocker, theirs)) = ahead.first() {
+            return Err(AppError::BadRequest(format!(
+                "#{id} would be due {mine} while #{blocker}, which blocks it, is not due \
+                 until {theirs} — it cannot be finished before the thing it waits for."
+            )));
+        }
+    }
+    // And the other end: a blocker pushed out past something waiting on it.
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+    let stranded: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
+        "SELECT t.id, t.due FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
+        "WHERE b.blocked_on = ? AND t.due IS NOT NULL AND ",
+        still_open!("t.status"),
+        " AND ? IS NOT NULL AND t.due < ?"
+    ))
+    .bind(id)
+    .bind(due)
+    .bind(due)
+    .fetch_all(&mut **tx)
+    .await
+    .context("reading the deadlines of what this task blocks")?;
+    if let Some((other, theirs)) = stranded.first() {
+        let mine = due.expect("the query cannot match when this is null");
+        return Err(AppError::BadRequest(format!(
+            "#{id} would not be due until {mine} while #{other}, which is blocked on it, \
+             is due {theirs} — that leaves #{other} due before the thing it waits for."
+        )));
+    }
+
     let Some(stated) = priority else {
         // Nothing claimed at this end. Whatever is blocked ON this task is still
         // checked below only where IT has stated something.
@@ -776,12 +852,13 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
     let done = sqlx::query(
-        "INSERT INTO tasks (subject, body, priority, assignee_kind, assignee_person, \
-         assignee_session) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (subject, body, priority, due, assignee_kind, assignee_person, \
+         assignee_session) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&subject)
     .bind(&new.body)
     .bind(new.priority)
+    .bind(new.due)
     .bind(kind)
     .bind(person)
     .bind(session)
@@ -792,7 +869,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     record(&mut tx, id, actor, "created", Some(subject.clone())).await?;
     if let Some(moved) = set_blockers(&mut tx, id, &new.blocked_on).await? {
         record(&mut tx, id, actor, "blocked", Some(moved)).await?;
-        blocking_is_consistent(&mut tx, id, new.priority).await?;
+        blocking_is_consistent(&mut tx, id, new.priority, new.due).await?;
     }
     if kind != AssigneeKind::Nobody {
         let to = label_of(&mut tx, &assignee).await?;
@@ -941,6 +1018,35 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         changed.push("priority");
     }
 
+    // `clear_due` wins over `due`: a caller sending both has contradicted
+    // itself, and taking the deadline off is the safer reading — it removes a
+    // claim rather than asserting one.
+    let due_change = if change.clear_due {
+        Some(None)
+    } else {
+        change.due.map(Some)
+    };
+    if let Some(due) = due_change
+        && due != before.due
+    {
+        sqlx::query("UPDATE tasks SET due = ? WHERE id = ?")
+            .bind(due)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .context("setting a deadline")?;
+        let show = |d: Option<NaiveDate>| d.map_or("none".to_string(), |d| d.to_string());
+        record(
+            &mut tx,
+            id,
+            actor,
+            "due",
+            Some(format!("{} → {}", show(before.due), show(due))),
+        )
+        .await?;
+        changed.push("due");
+    }
+
     if let Some(want) = &change.blocked_on
         && let Some(moved) = set_blockers(&mut tx, id, want).await?
     {
@@ -954,8 +1060,14 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // blocker is the case. Checking as we go would refuse a change that is
     // consistent the moment it lands. Inside the transaction, so a refusal rolls
     // the whole thing back rather than leaving half of it written.
-    if change.priority.is_some() || change.blocked_on.is_some() {
-        blocking_is_consistent(&mut tx, id, change.priority.or(before.priority)).await?;
+    if change.priority.is_some() || change.blocked_on.is_some() || due_change.is_some() {
+        blocking_is_consistent(
+            &mut tx,
+            id,
+            change.priority.or(before.priority),
+            due_change.unwrap_or(before.due),
+        )
+        .await?;
     }
 
     // Closing a task makes the closer its holder.

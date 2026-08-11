@@ -98,6 +98,7 @@ a done row.
 | a **holder** | nobody, the person, or a session |
 | a **priority** | `P0`–`P4`, or none at all — which is the ordinary case |
 | a **block** | tasks this one waits for, in `task_blocks` — usually none |
+| a **deadline** | a `DATE`, when something outside decides — usually none |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
 
 ⚠ **Status and holder are independent, and that is why there are four states and
@@ -140,6 +141,24 @@ at all on a line that does not, which is what makes it affordable in the digest.
 *leave it alone* for every field on that endpoint, and the exception —
 `Option<Option<Priority>>`, a field whose null is meaningful — costs more than
 the gesture is worth. Ranking it again is the correction.
+
+⚠ **A deadline is a DATE and it reorders nothing.** Asked for on 2026-08-11,
+straight after the first full ranking pass found the gap: #260 was ranked `P0`
+and does not pass the `P0` test — nothing about it accrues hourly, it fails all
+at once on a date somebody else chose, and there was nowhere to write that date
+down. The rank was carrying an argument the column could not hold.
+
+`repo::list` stays the only sort. A deadline is evidence for a rank, not a
+competing answer to *what next* — how long the work takes is the term that would
+decide, and nothing records it, so floating a `P4` above a `P1` because a date is
+near would replace a human decision with an arithmetic one. What it does instead
+is show on the line and shout once the day has passed: **overdue is a fact and
+needs no threshold, where "due soon" would need one**, which is why there is no
+such notice.
+
+The one constraint is the deadline twin of the rank rule: a task may not be due
+before something it is blocked on. That is arithmetic rather than judgement, and
+it is refused at both ends like its twin.
 
 ⚠ **A blocked task says which ticket, and the link carries a rule.** Pippijn,
 2026-08-11: *"It can be the same, but not higher priority than the thing it's

@@ -8,7 +8,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Store a fieldless enum in a `VARCHAR` column.
@@ -350,6 +350,27 @@ pub struct Task {
     /// not a level — see [`Priority`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// The day this has to be done by, when something outside decides.
+    ///
+    /// ⚠ **A day, not an instant**, because that is what a deadline is — *before
+    /// Sep 2026*, *by the 14th*. A time would invent precision nobody stated and
+    /// make every reader choose a timezone to compare in.
+    ///
+    /// ⚠ **It does not reorder anything.** A deadline is evidence for a rank,
+    /// not a competing answer to *what next*: how long the work takes is the
+    /// term that would decide, and nothing records it. So a near date argues for
+    /// a rank and a person makes it. See `repo::list`, still the only sort.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub due: Option<NaiveDate>,
+    /// Whether [`due`](Self::due) has passed, by the database's clock.
+    ///
+    /// Derived server-side for the same reason [`blocked`](Self::blocked) is:
+    /// otherwise the CLI and the app each compare against their own idea of
+    /// today, which is two copies of one rule and one timezone away from
+    /// disagreeing. Overdue is a fact; *due soon* would need a threshold, so
+    /// there is deliberately no such flag.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub overdue: bool,
     /// The tasks this one is waiting for, oldest id first. Usually empty.
     ///
     /// ⚠ **A LIST, and the first cut of this was a single id.** The measurement

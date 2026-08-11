@@ -65,6 +65,10 @@ export const TASKS = [
     // row also carries a "from" chip. If a rank is going to collide with
     // anything at phone width it is here.
     priority: 'P0',
+    // A deadline that has passed: the one state worth colouring, and the widest
+    // this row gets — rank, date, id and a "from" chip at phone width.
+    due: '2026-08-01',
+    overdue: true,
     assignee: { kind: 'nobody' },
     // In the pile and says where it came from — the row `filed_by` exists for.
     filed_by: 'health',
@@ -78,6 +82,7 @@ export const TASKS = [
       'Abstractly evaluate what the agents run, across languages, into one effect language, keeping the undetermined subjects counted rather than dropped, so a gap is a number and never a silence',
     status: 'doing',
     priority: 'P4',
+    due: '2026-09-01',
     assignee: { kind: 'session', id: SESSIONS[0].id, name: 'memview' },
     // Held AND filed by somebody else. The holder wins: this row must not draw
     // two names, and who is carrying it is the more useful one.

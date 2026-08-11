@@ -25,6 +25,15 @@
     background: var(--mat-sys-surface-container-high);
   }
 
+  .due {
+    font-variant-numeric: tabular-nums;
+
+    &.overdue {
+      color: var(--mat-sys-error);
+      font-weight: 600;
+    }
+  }
+
   .blocked {
     display: inline-flex;
     align-items: center;

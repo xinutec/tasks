@@ -40,6 +40,7 @@
 use std::io::Read;
 
 use anyhow::{Context, Result, bail};
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -176,6 +177,9 @@ enum Command {
         /// Task ids this one waits for. Repeat for several.
         #[arg(long = "blocked-on")]
         blocked_on: Vec<u64>,
+        /// The day it has to be done by: YYYY-MM-DD.
+        #[arg(long)]
+        due: Option<NaiveDate>,
     },
     /// Mark a task as being worked on.
     Start { id: TaskRef },
@@ -265,6 +269,17 @@ enum Command {
         /// It is not waiting for anything any more.
         #[arg(long)]
         unblock: bool,
+        /// The day it has to be done by: YYYY-MM-DD.
+        ///
+        /// A deadline does NOT reorder anything — the list is still ordered by
+        /// priority. It is evidence for a rank, not a substitute for one. What
+        /// it does refuse is a date earlier than something this task is blocked
+        /// on, which cannot be met whatever anybody decides.
+        #[arg(long, conflicts_with = "no_due")]
+        due: Option<NaiveDate>,
+        /// Take the deadline off.
+        #[arg(long = "no-due")]
+        no_due: bool,
     },
     /// Exactly what a prompt receives — for checking the cost, not for reading.
     Digest,
@@ -657,6 +672,13 @@ fn line(task: &Value) -> String {
         task["priority"].as_str().unwrap_or(""),
         task["subject"].as_str().unwrap_or("")
     );
+    if let Some(due) = task["due"].as_str() {
+        if task["overdue"].as_bool().unwrap_or(false) {
+            out.push_str(&format!("  OVERDUE {due}"));
+        } else {
+            out.push_str(&format!("  due {due}"));
+        }
+    }
     if task["blocked"].as_bool().unwrap_or(false)
         && let Some(on) = task["blocked_on"].as_array()
     {
@@ -794,6 +816,7 @@ async fn main() -> Result<()> {
             to,
             priority,
             blocked_on,
+            due,
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
@@ -802,6 +825,9 @@ async fn main() -> Result<()> {
             }
             if !blocked_on.is_empty() {
                 payload["blocked_on"] = json!(blocked_on);
+            }
+            if let Some(due) = due {
+                payload["due"] = json!(due.to_string());
             }
             if let Some(to) = to {
                 let to = client.resolve(to).await?;
@@ -845,6 +871,8 @@ async fn main() -> Result<()> {
             priority,
             blocked_on,
             unblock,
+            due,
+            no_due,
         } => {
             let mut change = json!({});
             if let Some(priority) = priority {
@@ -856,6 +884,13 @@ async fn main() -> Result<()> {
                 change["blocked_on"] = json!([] as [u64; 0]);
             } else if !blocked_on.is_empty() {
                 change["blocked_on"] = json!(blocked_on);
+            }
+            // A date has no "empty" value the way a blocker list does, so
+            // removing one needs its own word on the wire.
+            if no_due {
+                change["clear_due"] = json!(true);
+            } else if let Some(due) = due {
+                change["due"] = json!(due.to_string());
             }
             if let Some(subject) = subject {
                 change["subject"] = json!(subject);
