@@ -20,6 +20,12 @@ export const STATUS_LABEL: Record<Status, string> = {
 /**
  * What each rank means, in one line.
  *
+ * ⚠ **Each is a TEST that can fail, not a degree of feeling** — applied as a
+ * cascade, first one that passes wins. A single axis with no anchor is what
+ * inflates a scale until everything is `P0` and somebody invents `P-1`; asking
+ * *is damage accruing*, *is something waiting*, *is there a workaround in use*
+ * is answerable about a ticket rather than felt about it.
+ *
  * ⚠ **A second copy of `Priority::gloss` in the Rust side, and it has to say the
  * same thing.** The point of five named levels is that Pippijn and every session
  * read them the same way; two surfaces glossing them differently would be worse
@@ -33,11 +39,11 @@ export const STATUS_LABEL: Record<Status, string> = {
  * at all rather than as a word.
  */
 export const PRIORITY_GLOSS: Record<Priority, string> = {
-  P0: 'drop what you are doing; nothing else moves until this does',
-  P1: 'next, ahead of anything unranked',
-  P2: 'ordinary work — and where an unranked task already sits',
-  P3: 'when there is room; it will not be missed this week',
-  P4: 'kept on purpose but not scheduled — the alternative to dropping it',
+  P0: 'damage is accruing — every hour it stays open costs more',
+  P1: 'nothing is accruing, but other work is waiting on this',
+  P2: 'ordinary work, nothing waiting on it — where UNRANKED sits',
+  P3: 'a workaround exists and is in use; what it costs is friction',
+  P4: 'kept as a record rather than a plan; it may never happen',
 };
 
 /** Most urgent first, which is the order they are offered in. */

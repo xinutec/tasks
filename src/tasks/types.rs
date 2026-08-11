@@ -192,18 +192,34 @@ impl Priority {
 
     /// What each level means, in one line.
     ///
-    /// ⚠ **Without this the levels are worth nothing.** Five names two readers
-    /// interpret differently do not compare across holders, and this system's
-    /// whole point is that work moves between a person and several
-    /// conversations. Printed by `task --help`, which is where it will actually
-    /// be read.
+    /// ⚠ **Each one is a TEST that can fail, not a degree of feeling.** This is
+    /// the difference between a scale that holds and one that inflates. A single
+    /// axis — most important, quite important, less so — has no anchor, so every
+    /// filer argues their own item is above the line, the line drifts up, and
+    /// the end state is a spreadsheet where everything is `P0` and somebody
+    /// invents `P-1`. Pippijn has watched that happen and asked for it not to
+    /// happen here (2026-08-11).
+    ///
+    /// So these are five distinct SITUATIONS, applied as a cascade — the first
+    /// test that passes is the rank. *Is damage accruing?* *Is something else
+    /// waiting?* *Is there a workaround in use?* *Would this be kept only as a
+    /// record?* Each is answerable about a ticket rather than felt about it,
+    /// which is what lets two conversations reach the same answer.
+    ///
+    /// ⚠ **A full range is a check on the RANKING, never a quota on the
+    /// tickets.** If a pass comes back mostly `P0` the tests are being applied
+    /// loosely; if it comes back all `P2` the ranker is not reading. Neither is
+    /// fixed by moving tickets to fill a bucket — that is the curve-grading that
+    /// makes the whole column a fiction.
+    ///
+    /// Printed by `task --help`, which is where it will actually be read.
     pub fn gloss(self) -> &'static str {
         match self {
-            Priority::P0 => "drop what you are doing; nothing else moves until this does",
-            Priority::P1 => "next, ahead of anything unranked",
-            Priority::P2 => "ordinary work — and where an UNRANKED task already sits",
-            Priority::P3 => "when there is room; it will not be missed this week",
-            Priority::P4 => "kept on purpose but not scheduled — the alternative to dropping it",
+            Priority::P0 => "damage is accruing — every hour it stays open costs more",
+            Priority::P1 => "nothing is accruing, but other work is waiting on this",
+            Priority::P2 => "ordinary work, nothing waiting on it — where UNRANKED sits",
+            Priority::P3 => "a workaround exists and is in use; what it costs is friction",
+            Priority::P4 => "kept as a record rather than a plan; it may never happen",
         }
     }
 
