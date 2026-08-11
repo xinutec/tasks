@@ -378,6 +378,40 @@ fn check_assignee(assignee: &Assignee) -> Result<()> {
     }
 }
 
+/// The assignee foreign key's refusal, turned into an answer the caller can act
+/// on. Any other failure keeps `doing` as its context and stays a 500.
+///
+/// ⚠ **`fk_tasks_session` was always doing the refusing.** What was wrong was
+/// the answer: the violation arrived as `AppError::Other`, which is a 500 logged
+/// as an internal error and reaching the caller as the anyhow context — the
+/// words `moving a task`, which name the operation they already know they asked
+/// for. The service knows exactly which id has no row and can say so.
+///
+/// ⚠ **Discriminated by KIND rather than by the constraint's name**, which is
+/// not the obvious way round and is forced: sqlx 0.9's MySQL driver answers
+/// `DatabaseError::constraint()` with `None`, so `fk_tasks_session` reaches Rust
+/// only inside the message text, and matching on that is a parse of an English
+/// sentence MariaDB is free to reword. `ErrorKind::ForeignKeyViolation` is
+/// typed — and on a statement writing `assignee_session` there is exactly one
+/// key it can be, this schema's other one belonging to `task_events`.
+///
+/// ⚠ **Reading the constraint's answer rather than checking the row first.**
+/// A `SELECT` before the write spends a query on every move to learn what the
+/// constraint is about to enforce anyway, and still races a session deleted
+/// between the two. This cannot: the write already happened.
+fn unknown_holder(e: sqlx::Error, session: Option<&str>, doing: &'static str) -> AppError {
+    let violated = e
+        .as_database_error()
+        .is_some_and(|db| db.kind() == sqlx::error::ErrorKind::ForeignKeyViolation);
+    match session.filter(|_| violated) {
+        Some(id) => AppError::BadRequest(format!(
+            "no session `{id}` — a task can only be held by a conversation this \
+             service has seen, and `task sessions --all` lists them"
+        )),
+        None => AppError::Other(anyhow::Error::new(e).context(doing)),
+    }
+}
+
 /// What to call an assignee in the history, resolved against the session table.
 ///
 /// ⚠ **Written history needs the same name on both sides of an arrow.** A
@@ -464,7 +498,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     .bind(session)
     .execute(&mut *tx)
     .await
-    .context("filing a task")?;
+    .map_err(|e| unknown_holder(e, session, "filing a task"))?;
     let id = done.last_insert_id();
     record(&mut tx, id, actor, "created", Some(subject.clone())).await?;
     if kind != AssigneeKind::Nobody {
@@ -675,7 +709,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             .bind(id)
             .execute(&mut *tx)
             .await
-            .context("moving a task")?;
+            .map_err(|e| unknown_holder(e, session, "moving a task"))?;
             let to = label_of(&mut tx, assignee).await?;
             record(
                 &mut tx,

@@ -1463,3 +1463,173 @@ async fn an_open_task_may_still_be_put_in_the_pile() {
     .await
     .expect("putting an open task back in the pile");
 }
+
+/// #724: a holder nobody has heard of is a 400 that names it, not a 500.
+///
+/// ⚠ **The refusal was always there — the FOREIGN KEY does it.** What was wrong
+/// was the answer: `fk_tasks_session` arrived as `sqlx::Error` → `AppError::Other`,
+/// which is a 500 logged as "internal error" and reaching the caller as the
+/// anyhow context — the words `moving a task`. That names the operation the
+/// caller already knows they asked for, and 500 sends somebody to look at a
+/// service that was working correctly.
+mod unknown_holder {
+    use super::*;
+
+    const NO_SUCH: &str = "no-such-session-at-all";
+
+    fn refusal(e: tasks::error::AppError) -> String {
+        match e {
+            tasks::error::AppError::BadRequest(msg) => msg,
+            other => panic!("an unknown holder was not a bad request: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn moving_a_task_to_one_says_which_id_was_wrong() {
+        let pool = common::fresh_db().await;
+        sessions::touch(&pool, "sess-1", None)
+            .await
+            .expect("a session");
+        let task = repo::create(&pool, filed("Hand this over"), &pippijn())
+            .await
+            .expect("filing");
+
+        let msg = refusal(
+            repo::update(
+                &pool,
+                task.id,
+                Change {
+                    assignee: Some(to_session(NO_SUCH)),
+                    ..Default::default()
+                },
+                &pippijn(),
+            )
+            .await
+            .expect_err("a holder with no session row was accepted"),
+        );
+        assert!(
+            msg.contains(NO_SUCH),
+            "the refusal does not say what was wrong: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn filing_for_one_says_which_id_was_wrong() {
+        // The other door to the same constraint: `task add --to <id>`, and the
+        // web form, both reach the INSERT rather than the UPDATE.
+        let pool = common::fresh_db().await;
+        let msg = refusal(
+            repo::create(
+                &pool,
+                NewTask {
+                    assignee: Some(to_session(NO_SUCH)),
+                    ..filed("For a conversation that is not there")
+                },
+                &pippijn(),
+            )
+            .await
+            .expect_err("a holder with no session row was accepted"),
+        );
+        assert!(
+            msg.contains(NO_SUCH),
+            "the refusal does not say what was wrong: {msg}"
+        );
+    }
+
+    /// ⚠ **The one that keeps the mapping honest.**
+    ///
+    /// Every write in `update` runs in one transaction, so widening the mapping
+    /// to *any* foreign key failure on the way through — or to any database
+    /// error at all — would start answering 400 for faults that are genuinely
+    /// the service's. This pins that a move that fails for no reason at all
+    /// still succeeds, and `a_task_may_not_be_closed_into_the_pile` above pins
+    /// that the OTHER refusals kept their own answers.
+    #[tokio::test]
+    async fn a_holder_the_service_has_seen_is_untouched_by_any_of_this() {
+        let pool = common::fresh_db().await;
+        for id in ["sess-1", "sess-2"] {
+            sessions::touch(&pool, id, None).await.expect("a session");
+        }
+        let task = repo::create(
+            &pool,
+            filed("Ordinary handover"),
+            &Actor::Session("sess-1".into()),
+        )
+        .await
+        .expect("filing");
+        let moved = repo::update(
+            &pool,
+            task.id,
+            Change {
+                assignee: Some(to_session("sess-2")),
+                ..Default::default()
+            },
+            &Actor::Session("sess-1".into()),
+        )
+        .await
+        .expect("handing a task to a session that exists");
+        assert_eq!(moved.task.assignee.id.as_deref(), Some("sess-2"));
+    }
+
+    /// ⚠ **The test that keeps the mapping from becoming a masking fallback.**
+    ///
+    /// Ablating the `ForeignKeyViolation` check to `true` left all 29 other
+    /// tests green — so without this one, "any failure writing an assignee is
+    /// the caller's fault" was a free edit, and a lost connection mid-move would
+    /// answer `400 no session `sess-2`` about a session that exists.
+    ///
+    /// An id past `VARCHAR(64)` is the lever: same statement, same column, and
+    /// MariaDB answers `1406 (22001)` rather than a constraint violation.
+    ///
+    /// ⚠ **So an over-long id stays a 500, and that is left alone deliberately.**
+    /// It is the same complaint as #724 through a door nothing here uses — ids
+    /// are 36-character uuids and the CLI sends the one in its environment — and
+    /// the fix for it is a length bound in `check_assignee`, not a wider reading
+    /// of the constraint. Bounding it here would also delete the only non-FK
+    /// error this statement can produce, and with it this test.
+    #[tokio::test]
+    async fn a_failure_that_is_not_the_constraint_stays_an_internal_error() {
+        let pool = common::fresh_db().await;
+        let too_long = "x".repeat(200);
+        let e = repo::create(
+            &pool,
+            NewTask {
+                assignee: Some(to_session(&too_long)),
+                ..filed("An id past what the column holds")
+            },
+            &pippijn(),
+        )
+        .await
+        .expect_err("a 200-character session id was stored in a VARCHAR(64)");
+        assert!(
+            matches!(e, tasks::error::AppError::Other(_)),
+            "a database fault that is not the assignee constraint was reported \
+             as the caller's mistake: {e:?}"
+        );
+    }
+
+    /// ⚠ **A PERSON is not checked, and that is not an oversight.**
+    ///
+    /// `assignee_person` carries a Nextcloud user id and has no foreign key —
+    /// there is no table of people here to point one at. So this refusal is
+    /// about conversations only, and a test that expected symmetry would be
+    /// asserting a validation this service cannot perform.
+    #[tokio::test]
+    async fn a_person_nobody_has_heard_of_is_still_accepted() {
+        let pool = common::fresh_db().await;
+        repo::create(
+            &pool,
+            NewTask {
+                assignee: Some(Assignee {
+                    kind: AssigneeKind::Person,
+                    id: Some("someone-else".into()),
+                    name: None,
+                }),
+                ..filed("For a person the service cannot check")
+            },
+            &pippijn(),
+        )
+        .await
+        .expect("a person id is not validated here");
+    }
+}
