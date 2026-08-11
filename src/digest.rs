@@ -185,6 +185,18 @@ pub fn render(tasks: &[Task]) -> String {
 /// column of "(nobody)" would be the noise this file exists to refuse.
 fn line(task: &Task) -> String {
     let mut line = format!("{} **#{}** {}", task.status.marker(), task.id, task.subject);
+    // ⚠ **Costs nothing until somebody ranks something**, which is why it is
+    // allowed in the one place every session pays for on every turn: an
+    // unranked task prints exactly what it printed before, and almost every
+    // task is unranked. A ranked one spends five bytes to say the thing the
+    // reader opened this list to find out.
+    //
+    // The ORDER BY has already put these at the top — `repo::list` sorts,
+    // `render` never does — so this marks lines that are already where the
+    // reader is looking rather than asking anybody to scan for them.
+    if let Some(priority) = task.priority {
+        line.push_str(&format!(" [{priority}]"));
+    }
     if task.assignee.kind != AssigneeKind::Nobody {
         line.push_str(&format!(" ({})", task.assignee.label()));
     }

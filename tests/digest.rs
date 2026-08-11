@@ -8,7 +8,7 @@
 
 use chrono::{TimeZone, Utc};
 use tasks::digest::{MAX_BYTES, PILE_LINES, render};
-use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};
+use tasks::tasks::types::{Assignee, AssigneeKind, Priority, Status, Task};
 
 fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
     let at = Utc.with_ymd_and_hms(2026, 8, 8, 12, 0, 0).unwrap();
@@ -16,6 +16,7 @@ fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
         id,
         subject: subject.to_string(),
         status,
+        priority: None,
         assignee,
         detailed: false,
         filed_by: None,
@@ -288,4 +289,52 @@ fn the_header_countermands_the_built_in_task_tools() {
         !out.lines().skip(1).any(|line| line.contains("TaskCreate")),
         "the warning is repeated per task:\n{out}"
     );
+}
+
+/// ⚠ **A rank costs nothing until somebody sets one**, which is the only reason
+/// this is allowed in the file that reaches every prompt on every turn.
+///
+/// Almost every task is unranked and always will be, so the ordinary line must
+/// be byte-for-byte what it was before the column existed. A default of `P2` —
+/// the shape rejected in `migrations/0005_priority.sql` — would have spent five
+/// bytes a line, on every line, in every conversation, to say nothing.
+#[test]
+fn an_unranked_task_costs_exactly_what_it_did_before() {
+    let unranked = open(1, "in the pile");
+    let plain = render(std::slice::from_ref(&unranked));
+    assert_eq!(
+        plain.lines().nth(1),
+        Some("- [ ] **#1** in the pile"),
+        "an unranked line grew:\n{plain}"
+    );
+
+    let mut ranked = unranked;
+    ranked.priority = Some(Priority::P0);
+    let out = render(&[ranked]);
+    assert!(out.contains("- [ ] **#1** in the pile [P0]"), "{out}");
+    // The same fixture twice, so the difference IS the marker: five bytes — a
+    // space, two brackets, two characters — spent only where somebody ranked
+    // something. Stated as a number because this file's assertions are about
+    // cost.
+    assert_eq!(out.len() - plain.len(), 5, "{out}");
+}
+
+/// `render` does not sort, and must not start.
+///
+/// The one ordering in the service is `repo::list`'s `ORDER BY`, so a digest
+/// receives its tasks already ranked. A second sort here would be a second rule
+/// to keep true, and it would fight the pile cap — which trims the tail of
+/// whatever order it is handed.
+#[test]
+fn the_order_is_the_one_render_was_handed() {
+    let mut urgent = held(9, "ranked but last in the list", "recall");
+    urgent.priority = Some(Priority::P0);
+    let out = render(&[held(1, "first", "recall"), urgent]);
+    let ids: Vec<u64> = out
+        .lines()
+        .filter_map(|l| l.split("**#").nth(1))
+        .filter_map(|l| l.split("**").next())
+        .filter_map(|l| l.parse().ok())
+        .collect();
+    assert_eq!(ids, vec![1, 9], "render reordered by priority:\n{out}");
 }

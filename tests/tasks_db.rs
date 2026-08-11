@@ -33,6 +33,7 @@ fn filed(subject: &str) -> NewTask {
     NewTask {
         subject: subject.into(),
         body: String::new(),
+        priority: None,
         assignee: None,
     }
 }
@@ -303,6 +304,7 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
         NewTask {
             subject: "Has prose".into(),
             body: "# Why\n\nA paragraph of reasoning.".into(),
+            priority: None,
             assignee: None,
         },
         &pippijn(),
@@ -338,6 +340,7 @@ async fn a_session_rename_moves_no_task() {
         NewTask {
             subject: "Assigned to a session that will be renamed".into(),
             body: String::new(),
+            priority: None,
             assignee: Some(to_session("sess-1")),
         },
         &pippijn(),
@@ -390,6 +393,7 @@ async fn a_session_row_carries_how_much_it_is_holding() {
             NewTask {
                 subject: format!("Task {n}"),
                 body: String::new(),
+                priority: None,
                 assignee: Some(to_session("sess-1")),
             },
             &pippijn(),
@@ -402,6 +406,7 @@ async fn a_session_row_carries_how_much_it_is_holding() {
         NewTask {
             subject: "Already done".into(),
             body: String::new(),
+            priority: None,
             assignee: Some(to_session("sess-1")),
         },
         &pippijn(),

@@ -117,7 +117,9 @@ task move <id> <session-id>     # hand it to another conversation
 task move <id> nobody           # put it back in the pile
 task add "One line" --body -    # yours, by default
 task add "One line" --to nobody # for whoever picks it up
+task add "One line" --priority P1   # and rank it while filing
 task edit <id> --body -         # rewrite the prose
+task edit <id> --priority P0    # rank one that already exists
 ```
 
 ⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
@@ -174,6 +176,33 @@ every turn, without opening anything.
 So: **the present tense at the top, the history under it.** Whoever opens this
 next wants to know where it stands, not how it got here — and the second
 question is only asked once the first is answered.
+
+## What to do next: P0 to P4
+
+Asked for by Pippijn on 2026-08-11. Five levels, and `task --help` glosses each
+one — read them there rather than guessing, because a level two conversations
+read differently ranks nothing.
+
+⚠ **Almost everything is UNRANKED, and that is not a sixth level.** An unranked
+task sorts exactly where `P2` does. So `P0` and `P1` rise above the untriaged and
+`P3` and `P4` **sink below** it, and everything nobody has ranked keeps its
+place — oldest first, which is what makes old work get fixed rather than buried.
+Sorting the ranked first and the rest after would have got `P4` backwards:
+marking a task *when there is room* would have lifted it above four hundred
+tickets nobody had read.
+
+⚠ **Do not rank things to tidy up.** There were 700-odd tasks the day the column
+was added and none of them were ranked; that is the correct state, and it is why
+the column is nullable rather than defaulted. A rank is worth something because
+most tasks do not have one. Rank a task when you have actually decided its
+place, and leave the rest alone.
+
+⚠ **There is no way to unrank.** Absence means *leave it alone* for every field
+`task edit` takes, and a task ranked wrongly is corrected by ranking it again.
+The service will not clear one for you.
+
+It shows up wherever a task is drawn — `task list`, `task show`, your prompt, and
+the app — and it costs nothing on a task that has none.
 
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
 every list afterwards says who did it — pass `--to pippijn` (or anyone) in the

@@ -21,6 +21,17 @@ export type Status = 'open' | 'doing' | 'done' | 'dropped';
 /** Who holds a task. Mirrors `tasks::types::AssigneeKind`. */
 export type AssigneeKind = 'nobody' | 'person' | 'session';
 
+/** How urgent, when somebody has said. Mirrors `tasks::types::Priority`.
+ *
+ *  ⚠ **Absence is NOT a sixth member and must not be given one.** Almost every
+ *  task is unranked and always will be — there were 700-odd rows the day this
+ *  was added and none of them were going to be triaged — so a default would
+ *  have all of them assert something nobody said. An unranked task sorts where
+ *  `P2` does, which is what lets `P3` and `P4` mean *below the untriaged*
+ *  rather than *above it*. The backend does that sorting; nothing here
+ *  reorders. */
+export type Priority = 'P0' | 'P1' | 'P2' | 'P3' | 'P4';
+
 export interface Assignee {
   kind: AssigneeKind;
   /** The Nextcloud user id, or the CLI session id. Absent for `nobody`. */
@@ -34,6 +45,8 @@ export interface Task {
   id: number;
   subject: string;
   status: Status;
+  /** Absent on almost everything — see `Priority`. */
+  priority?: Priority | null;
   assignee: Assignee;
   /** Whether there is prose behind it worth opening. */
   detailed: boolean;
@@ -117,6 +130,7 @@ export interface Me {
 export interface NewTask {
   subject: string;
   body: string;
+  priority?: Priority | null;
   assignee?: Assignee | null;
 }
 
@@ -129,5 +143,8 @@ export interface Change {
   subject?: string | null;
   body?: string | null;
   status?: Status | null;
+  /** Absent means leave it alone, so this cannot UNRANK a task — the same rule
+   *  every other field here follows. Ranking it again is the correction. */
+  priority?: Priority | null;
   assignee?: Assignee | null;
 }

@@ -7,6 +7,9 @@
       <p class="where">
         <span class="id">#{{ t.id }}</span>
         <span class="status" [class]="t.status">{{ statusLabel[t.status] }}</span>
+        @if (t.priority) {
+          <span class="priority" [class]="t.priority">{{ t.priority }}</span>
+        }
       </p>
     </header>
 
@@ -24,6 +27,21 @@
           </button>
         }
       </div>
+
+      <!-- Ranking it. Beside the move rather than among the status buttons:
+           the status says where a task IS and this says when it should be
+           picked up, and putting them in one row read as five more states. -->
+      <button mat-stroked-button [matMenuTriggerFor]="rank" [disabled]="saving()">
+        <mat-icon>low_priority</mat-icon>
+        {{ t.priority ?? 'unranked' }}
+      </button>
+      <mat-menu #rank="matMenu">
+        @for (p of priorities; track p) {
+          <button mat-menu-item [disabled]="t.priority === p" (click)="setPriority(p)">
+            <span>{{ p }} — {{ priorityGloss[p] }}</span>
+          </button>
+        }
+      </mat-menu>
 
       <!-- The move. One control, and every destination in one menu: who holds
            a task is a single question with a small closed set of answers, and

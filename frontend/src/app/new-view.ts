@@ -8,8 +8,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { Router } from '@angular/router';
 
 import { reason } from './errors';
-import { sessionLabel } from './holder';
-import { Assignee } from './models';
+import { PRIORITIES, PRIORITY_GLOSS, sessionLabel } from './holder';
+import { Assignee, Priority } from './models';
 import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
@@ -46,6 +46,10 @@ export class NewView {
   readonly subject = signal('');
   readonly body = signal('');
   readonly to = signal<string>('nobody');
+  /** `null` is unranked, which is not a level — see `PRIORITY_GLOSS`. */
+  readonly priority = signal<Priority | null>(null);
+  readonly priorities = PRIORITIES;
+  readonly priorityGloss = PRIORITY_GLOSS;
 
   readonly sessionOptions = computed(() =>
     this.store.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
@@ -89,6 +93,9 @@ export class NewView {
       .create({
         subject,
         body: this.body(),
+        // Omitted rather than sent as null when unranked: absence is what the
+        // API reads as "no rank", and the column stays NULL.
+        priority: this.priority() ?? undefined,
         assignee: this.assignee(),
       })
       .subscribe({

@@ -1,4 +1,4 @@
-import { Assignee, Status } from './models';
+import { Assignee, Priority, Status } from './models';
 
 /**
  * How a holder and a status are drawn — one table each, keyed by the closed
@@ -16,6 +16,32 @@ export const STATUS_LABEL: Record<Status, string> = {
   done: 'done',
   dropped: 'dropped',
 };
+
+/**
+ * What each rank means, in one line.
+ *
+ * ⚠ **A second copy of `Priority::gloss` in the Rust side, and it has to say the
+ * same thing.** The point of five named levels is that Pippijn and every session
+ * read them the same way; two surfaces glossing them differently would be worse
+ * than no gloss at all, since each reader would believe theirs. `--help` on the
+ * CLI is the other copy. Nothing checks this at build time — the wire mirror
+ * covers shapes, not prose — so change both or neither.
+ *
+ * ⚠ **There is no entry for "unranked", deliberately.** Absence is not a sixth
+ * level: it sorts where `P2` does, which is what lets `P3` and `P4` mean *below
+ * the untriaged*. Anywhere this map is used, the absent case is drawn as nothing
+ * at all rather than as a word.
+ */
+export const PRIORITY_GLOSS: Record<Priority, string> = {
+  P0: 'drop what you are doing; nothing else moves until this does',
+  P1: 'next, ahead of anything unranked',
+  P2: 'ordinary work — and where an unranked task already sits',
+  P3: 'when there is room; it will not be missed this week',
+  P4: 'kept on purpose but not scheduled — the alternative to dropping it',
+};
+
+/** Most urgent first, which is the order they are offered in. */
+export const PRIORITIES: Priority[] = ['P0', 'P1', 'P2', 'P3', 'P4'];
 
 export const STATUS_ICON: Record<Status, string> = {
   open: 'radio_button_unchecked',

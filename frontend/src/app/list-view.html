@@ -57,6 +57,15 @@
             }}</mat-icon>
             <span class="subject">{{ row.task.subject }}</span>
             <span class="meta">
+              <!-- Only when somebody has ranked it. Absence is not a level, so
+                   there is nothing to draw for the tasks that have none — which
+                   is nearly all of them. The backend has already sorted these
+                   to the top; this says why they are there. -->
+              @if (row.task.priority) {
+                <span class="priority" [class]="row.task.priority">{{
+                  row.task.priority
+                }}</span>
+              }
               <span class="id">#{{ row.task.id }}</span>
               @if (row.task.assignee.kind !== 'nobody') {
                 <span class="holder">{{ row.holder }}</span>

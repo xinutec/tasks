@@ -71,6 +71,14 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('menuitem', { name: SESSIONS[1].id }).waitFor();
   await shot(page, 'move');
 
+  // The rank menu, for the same reason as the move above: every item carries a
+  // one-line gloss, and those lines are the longest prose the app renders. If
+  // they are going to overflow or wrap badly it is at phone width, in a menu.
+  await page.goto(`/t/${TASKS[1].id}`);
+  await page.getByRole('button', { name: /P4|unranked/ }).click();
+  await page.getByRole('menuitem', { name: /P0/ }).waitFor();
+  await shot(page, 'rank');
+
   // Both ways out of a task: the overflow menu that offers the second one, and
   // what a task looks like once it has been taken. ⚠ Reloaded rather than
   // pressing Escape — dismissing the move menu leaves its backdrop up through

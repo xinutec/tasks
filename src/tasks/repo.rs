@@ -12,7 +12,7 @@ use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 use crate::error::AppError;
 use crate::still_open;
 use crate::tasks::types::{
-    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Status, Task, TaskDetail, Updated,
+    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Status, Task, TaskDetail, Updated,
 };
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -78,6 +78,7 @@ struct Row {
     id: u64,
     subject: String,
     status: Status,
+    priority: Option<Priority>,
     assignee_kind: AssigneeKind,
     assignee_person: Option<String>,
     assignee_session: Option<String>,
@@ -121,6 +122,7 @@ impl Row {
             id: self.id,
             subject: self.subject,
             status: self.status,
+            priority: self.priority,
             assignee,
             detailed: self.detailed != 0,
             filed_by: self.filed_by,
@@ -141,7 +143,7 @@ impl Row {
 macro_rules! select {
     ($tail:literal) => {
         concat!(
-            "SELECT t.id, t.subject, t.status, t.assignee_kind, ",
+            "SELECT t.id, t.subject, t.status, t.priority, t.assignee_kind, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
             "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
             // Correlated rather than joined: a task has one `created` event, but
@@ -159,11 +161,26 @@ macro_rules! select {
     };
 }
 
-/// Tasks matching a filter, oldest id first.
+/// Tasks matching a filter: by priority, then oldest id first.
 ///
-/// ⚠ **Ordered by id, which is creation order, and not by status.** A list that
-/// re-sorts as work starts on an item moves the line somebody was reading; the
-/// client groups when it wants to.
+/// ⚠ **Ordered by id and NOT by status.** A list that re-sorts as work starts on
+/// an item moves the line somebody was reading; the client groups when it wants
+/// to. Id order is oldest first, and that is the point rather than an accident —
+/// old tickets belong at the top so they get fixed rather than buried under
+/// whatever was filed this morning. Pippijn refused two proposals to reorder by
+/// anything else on 2026-08-10 (`#704`, `#723`).
+///
+/// ⚠ **Priority is the one thing that reorders, because it is the one order
+/// somebody stated.** `COALESCE(t.priority, 'P2')` is the whole of it: an
+/// unranked task sorts exactly where an ordinary one does, so `P0` and `P1` rise
+/// above the untriaged and `P3`/`P4` sink below, and everything nobody has
+/// touched keeps its id order untouched. The mirror of
+/// [`Priority::rank`](crate::tasks::types::Priority::rank), which
+/// `tests/priority.rs` checks against a real database rather than by inspection.
+///
+/// ⚠ **This is the only sort in the service**, deliberately: `digest::render`
+/// preserves the order it is handed, so a second ordering for the prompt would
+/// be a second thing to keep true.
 pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     let mut query = QueryBuilder::<MySql>::new(select!(""));
     query.push(" WHERE 1 = 1");
@@ -190,7 +207,7 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         query.push(" AND t.assignee_kind = 'person' AND t.assignee_person = ");
         query.push_bind(person);
     }
-    query.push(" ORDER BY t.id");
+    query.push(" ORDER BY COALESCE(t.priority, 'P2'), t.id");
     let rows: Vec<Row> = query
         .build_query_as()
         .fetch_all(pool)
@@ -291,6 +308,10 @@ pub struct NewTask {
     pub subject: String,
     #[serde(default)]
     pub body: String,
+    /// How urgent. Absent leaves it unranked, which is where almost everything
+    /// stays — see [`Priority`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
     /// Who it is for. Absent leaves it in the pile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
@@ -309,6 +330,13 @@ pub struct Change {
     pub body: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
+    /// ⚠ **Absent means leave it alone, so this cannot CLEAR a priority.** That
+    /// is the same rule every other field here follows, and the cost of an
+    /// exception — `Option<Option<Priority>>`, which serde renders as a field
+    /// whose null is meaningful — is not worth a gesture nobody has asked for.
+    /// Ranking a task wrongly is corrected by ranking it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
 }
@@ -488,11 +516,12 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
     let done = sqlx::query(
-        "INSERT INTO tasks (subject, body, assignee_kind, assignee_person, assignee_session) \
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (subject, body, priority, assignee_kind, assignee_person, \
+         assignee_session) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&subject)
     .bind(&new.body)
+    .bind(new.priority)
     .bind(kind)
     .bind(person)
     .bind(session)
@@ -623,6 +652,29 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         )
         .await?;
         changed.push("status");
+    }
+
+    // ⚠ **Compared before writing, like every other field here.** Re-ranking a
+    // task to what it already is must write no event: the history is read, and
+    // one full of `P2 → P2` is one nobody reads. `unranked` is spelled out
+    // rather than left blank so the line says which direction the change went.
+    if let Some(priority) = change.priority.filter(|p| Some(*p) != before.priority) {
+        sqlx::query("UPDATE tasks SET priority = ? WHERE id = ?")
+            .bind(priority)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .context("ranking a task")?;
+        let was = before.priority.map_or("unranked", Priority::as_str);
+        record(
+            &mut tx,
+            id,
+            actor,
+            "ranked",
+            Some(format!("{was} → {priority}")),
+        )
+        .await?;
+        changed.push("priority");
     }
 
     // Closing a task makes the closer its holder.

@@ -27,12 +27,12 @@
 //! ```text
 //! task list [--all|--mine|--pile] [--done] yours and the pile; wider; narrower; spare
 //! task show <id>                            one task, its prose and its history
-//! task add <subject> [--body -] [--to me|pippijn|<session>|nobody]
+//! task add <subject> [--body -] [--to me|pippijn|<session>|nobody] [--priority P3]
 //! task start <id> / task done <id> [--to W] move it along
 //! task drop <id>                            close it without doing it
 //! task reopen <id>                          put it back to open
 //! task move <id> me|pippijn|<session>|nobody  hand it over
-//! task edit <id> [--subject S] [--body -]   change the words
+//! task edit <id> [--subject S] [--body -] [--priority P0]  change the words, rank it
 //! task digest                              exactly what a prompt receives
 //! task rename <name>                        tell the service what I call myself
 //! ```
@@ -46,15 +46,23 @@ use serde_json::{Value, json};
 use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
 use tasks::tasks::selection::list_query;
+use tasks::tasks::types::Priority;
 
 /// Where the service lives. The VPN name, because that is the only place it is.
 const DEFAULT_URL: &str = "https://tasks.xinutec.org";
 
-#[derive(Parser)]
-#[command(
-    name = "task",
-    about = "The work Claude sessions and Pippijn hand between each other",
-    long_about = "The work Claude sessions and Pippijn hand between each other.
+/// The two model facts a reader cannot guess, and what the five ranks mean.
+///
+/// ⚠ **Assembled rather than written out**, because [`Priority::gloss`] is where
+/// the levels are defined and a second copy in a help string is the copy that
+/// drifts. Five names two readers interpret differently rank nothing.
+fn long_about() -> String {
+    let levels: String = Priority::all()
+        .iter()
+        .map(|p| format!("\n  {p}  {}", p.gloss()))
+        .collect();
+    format!(
+        "The work Claude sessions and Pippijn hand between each other.
 
 Two facts decide how to use this, and neither is guessable from the commands:
 
@@ -70,7 +78,22 @@ Two facts decide how to use this, and neither is guessable from the commands:
 So the question to ask before handing something over is WHOSE SUBJECT IT IS, and
 never who is online. Preferring whoever is awake would pile every task onto
 whichever conversation happened to be running, which is the opposite of what a
-list of addressed work is for."
+list of addressed work is for.
+
+PRIORITY is P0 to P4, and it is the one thing that reorders a list:{levels}
+
+Almost everything is UNRANKED, and that is not a sixth level — it sorts exactly
+where P2 does. So P0 and P1 rise above the untriaged and P3 and P4 sink below
+it, and anything nobody has ranked keeps its place: oldest first, which is what
+makes old work get fixed rather than buried."
+    )
+}
+
+#[derive(Parser)]
+#[command(
+    name = "task",
+    about = "The work Claude sessions and Pippijn hand between each other",
+    long_about = long_about()
 )]
 struct Cli {
     /// Base URL of the service. Defaults to $TASKS_URL, then the VPN name.
@@ -83,8 +106,10 @@ struct Cli {
     /// Print what the service answered, verbatim, instead of the human format.
     ///
     /// A task is `{id, subject, status, assignee, detailed, filed_by,
-    /// created_at, updated_at, closed_at}`. `status` is one of `open`, `doing`,
-    /// `done`, `dropped`. THE HOLDER IS `assignee`, an object — `{kind, id,
+    /// created_at, updated_at, closed_at}`, plus `priority` when one is set —
+    /// `P0` to `P4`, and ABSENT rather than null on the almost-everything that
+    /// has none. `status` is one of `open`, `doing`, `done`, `dropped`. THE
+    /// HOLDER IS `assignee`, an object — `{kind, id,
     /// name}` with `kind` one of `session`, `person`, `nobody` — and there is no
     /// top-level `session` field.
     ///
@@ -144,6 +169,10 @@ enum Command {
         /// `nobody` for the pile, or a session id.
         #[arg(long)]
         to: Option<To>,
+        /// How urgent: P0 to P4. Leave it off unless you mean it — see the
+        /// levels under `task --help`.
+        #[arg(long)]
+        priority: Option<Priority>,
     },
     /// Mark a task as being worked on.
     Start { id: TaskRef },
@@ -215,6 +244,13 @@ enum Command {
         /// `-` reads stdin.
         #[arg(long)]
         body: Option<String>,
+        /// Rank it: P0 to P4, listed under `task --help`.
+        ///
+        /// There is no way to UNRANK from here, deliberately: absence means
+        /// "leave it alone" for every other field on this command, and a task
+        /// ranked wrongly is corrected by ranking it again.
+        #[arg(long)]
+        priority: Option<Priority>,
     },
     /// Exactly what a prompt receives — for checking the cost, not for reading.
     Digest,
@@ -597,9 +633,14 @@ fn line(task: &Value) -> String {
         "dropped" => "- [-]",
         _ => "- [ ]",
     };
+    // Before the subject rather than after it: a column of ranks is scannable
+    // down the left edge, and the list is already sorted so they arrive in
+    // order. Two spaces where there is no rank, so nothing shifts sideways
+    // between a ranked line and an unranked one.
     let mut out = format!(
-        "{marker} #{:<4} {}",
+        "{marker} #{:<4} {:<2} {}",
         task["id"].as_u64().unwrap_or(0),
+        task["priority"].as_str().unwrap_or(""),
         task["subject"].as_str().unwrap_or("")
     );
     let holder = &task["assignee"];
@@ -727,9 +768,13 @@ async fn main() -> Result<()> {
             subject,
             body: raw,
             to,
+            priority,
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
+            if let Some(priority) = priority {
+                payload["priority"] = json!(priority.as_str());
+            }
             if let Some(to) = to {
                 let to = client.resolve(to).await?;
                 payload["assignee"] = assignee(&to, client.me()?);
@@ -769,8 +814,12 @@ async fn main() -> Result<()> {
             id,
             subject,
             body: raw,
+            priority,
         } => {
             let mut change = json!({});
+            if let Some(priority) = priority {
+                change["priority"] = json!(priority.as_str());
+            }
             if let Some(subject) = subject {
                 change["subject"] = json!(subject);
             }

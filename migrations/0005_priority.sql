@@ -1,0 +1,36 @@
+-- What to do next, said once instead of re-derived every time.
+--
+-- Asked for by Pippijn on 2026-08-11 in these words: P0 to P4. Until now the
+-- only order a task had was the one it was filed in, so a holder with twenty
+-- open tasks answered "what next" by reading all twenty and building an
+-- argument nobody recorded. The tasks session did exactly that twice in one day
+-- and reached the answer from scratch both times.
+--
+-- ⚠ **NULL is its own state and NOT a level.** Defaulting the column to 'P2'
+-- would have every one of the 700+ rows already here claim a priority nobody
+-- set, and a field that says something false about most of its rows is worse
+-- than the absent field it replaced. So an unprioritised task stays
+-- unprioritised, and the only rows that carry a level are the ones somebody
+-- typed one on.
+--
+-- ⚠ **It still has to ORDER**, and this is where NULL earns its keep: lists sort
+-- by `COALESCE(priority, 'P2'), id`, so an untriaged task ranks exactly where an
+-- ordinary one does. P0 and P1 rise above it, P3 and P4 SINK BELOW it, and
+-- everything untouched stays in id order — oldest first, which is the rule
+-- Pippijn gave twice on 2026-08-10 and is why old work gets fixed rather than
+-- buried. Sorting the levels first and the untriaged after would have got P4
+-- backwards: marking a task "when there is room" would have lifted it above
+-- four hundred tasks nobody had ranked at all.
+--
+-- VARCHAR rather than an ENUM or a TINYINT, matching `status` one column up: the
+-- Rust side hand-writes Type/Encode/Decode delegating to `str` (see
+-- `varchar_enum!`), a derived `sqlx::Type` would declare the column as ENUM and
+-- fail every read, and the lexical order of 'P0'..'P4' is already the order
+-- wanted. A TINYINT would sort the same and read as a magic number in every
+-- query and every row of a manual `SELECT`.
+--
+-- No index. The sort is on an expression, which MariaDB cannot serve from a
+-- plain index anyway, and the whole table is under a thousand rows — an index
+-- here would be decoration that has to be maintained.
+ALTER TABLE tasks
+    ADD COLUMN priority VARCHAR(2) NULL AFTER status;

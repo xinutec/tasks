@@ -156,6 +156,96 @@ macro_rules! still_open {
 
 varchar_enum!(Status);
 
+/// How urgent a task is, when somebody has said.
+///
+/// ⚠ **Absence is not a level, and every list depends on that.** Most tasks have
+/// no priority and always will: there were 700-odd rows the day this was added
+/// and none of them were going to be triaged. A default of `P2` would have all
+/// of them assert something nobody said, so the column is nullable and this type
+/// only ever describes a task somebody ranked. `Option<Priority>` throughout.
+///
+/// ⚠ **Untriaged sorts as [`Priority::P2`] all the same** — [`Priority::rank`],
+/// and `COALESCE(priority, 'P2')` in the SQL. That is the one decision the
+/// whole feature turns on: it puts `P0`/`P1` above the untriaged pile and `P3`/
+/// `P4` *below* it, where "sort the ranked first, the rest after" would have
+/// lifted a task marked *when there is room* above four hundred nobody had read.
+/// Within a rank it stays id order, oldest first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Priority {
+    P0,
+    P1,
+    P2,
+    P3,
+    P4,
+}
+
+impl Priority {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Priority::P0 => "P0",
+            Priority::P1 => "P1",
+            Priority::P2 => "P2",
+            Priority::P3 => "P3",
+            Priority::P4 => "P4",
+        }
+    }
+
+    /// What each level means, in one line.
+    ///
+    /// ⚠ **Without this the levels are worth nothing.** Five names two readers
+    /// interpret differently do not compare across holders, and this system's
+    /// whole point is that work moves between a person and several
+    /// conversations. Printed by `task --help`, which is where it will actually
+    /// be read.
+    pub fn gloss(self) -> &'static str {
+        match self {
+            Priority::P0 => "drop what you are doing; nothing else moves until this does",
+            Priority::P1 => "next, ahead of anything unranked",
+            Priority::P2 => "ordinary work — and where an UNRANKED task already sits",
+            Priority::P3 => "when there is room; it will not be missed this week",
+            Priority::P4 => "kept on purpose but not scheduled — the alternative to dropping it",
+        }
+    }
+
+    /// Every level, most urgent first. One source for `--help` and the parser.
+    pub fn all() -> [Priority; 5] {
+        [
+            Priority::P0,
+            Priority::P1,
+            Priority::P2,
+            Priority::P3,
+            Priority::P4,
+        ]
+    }
+
+    /// Where an `Option<Priority>` sorts. Unranked ranks as `P2`.
+    ///
+    /// The Rust twin of the SQL's `COALESCE(priority, 'P2')`, and the two must
+    /// agree — `tests/priority.rs` compares them against a real database rather
+    /// than trusting that they were written on the same afternoon.
+    pub fn rank(this: Option<Priority>) -> Priority {
+        this.unwrap_or(Priority::P2)
+    }
+}
+
+impl FromStr for Priority {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Case-folded for the CLI's sake — `p0` is what a hand types — and the
+        // stored spelling is the upper one, which is what the SQL sorts on.
+        match s.to_ascii_uppercase().as_str() {
+            "P0" => Ok(Priority::P0),
+            "P1" => Ok(Priority::P1),
+            "P2" => Ok(Priority::P2),
+            "P3" => Ok(Priority::P3),
+            "P4" => Ok(Priority::P4),
+            other => Err(format!("unknown priority {other:?} — P0 to P4")),
+        }
+    }
+}
+
+varchar_enum!(Priority);
+
 /// Which kind of holder a task has.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -240,6 +330,10 @@ pub struct Task {
     pub id: u64,
     pub subject: String,
     pub status: Status,
+    /// How urgent, when somebody has said. Absent is the ordinary case and is
+    /// not a level — see [`Priority`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
     pub assignee: Assignee,
     /// Whether there is prose behind it worth opening. A task written as a
     /// one-line reminder has none, and offering to open an empty sheet is worse

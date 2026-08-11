@@ -6,8 +6,15 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { reason } from './errors';
-import { STATUS_ICON, STATUS_LABEL, holderLabel, sessionLabel } from './holder';
-import { Assignee, Status, TaskDetail } from './models';
+import {
+  PRIORITIES,
+  PRIORITY_GLOSS,
+  STATUS_ICON,
+  STATUS_LABEL,
+  holderLabel,
+  sessionLabel,
+} from './holder';
+import { Assignee, Priority, Status, TaskDetail } from './models';
 import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
@@ -39,6 +46,8 @@ export class TaskView {
    *  the other way out rather than the next step along, and it lives in the
    *  overflow menu. */
   readonly statuses: Status[] = ['open', 'doing', 'done'];
+  readonly priorities = PRIORITIES;
+  readonly priorityGloss = PRIORITY_GLOSS;
 
   readonly task = signal<TaskDetail | null>(null);
   /** The move menu's destinations, labelled here rather than in the template:
@@ -93,6 +102,13 @@ export class TaskView {
 
   setStatus(status: Status): void {
     this.change({ status });
+  }
+
+  /** ⚠ **No "unranked" item, matching the CLI.** Absence means *leave it alone*
+   *  for every field on this endpoint, so there is nothing to send that would
+   *  clear one; a task ranked wrongly is corrected by ranking it again. */
+  setPriority(priority: Priority): void {
+    this.change({ priority });
   }
 
   /** Close it without doing it. Undone by tapping `open`, like any other status

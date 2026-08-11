@@ -42,6 +42,20 @@
     </mat-select>
   </mat-form-field>
 
+  <!-- Last, and empty by default. Ranking is the exception rather than part of
+       filing: almost nothing is ranked, and a control that defaulted to a level
+       would have every task filed here claim one. -->
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Priority</mat-label>
+    <mat-select name="priority" [ngModel]="priority()" (ngModelChange)="priority.set($event)">
+      <mat-option [value]="null">unranked</mat-option>
+      @for (p of priorities; track p) {
+        <mat-option [value]="p">{{ p }} — {{ priorityGloss[p] }}</mat-option>
+      }
+    </mat-select>
+    <mat-hint>Leave it unranked unless you mean it. Unranked sorts where P2 does.</mat-hint>
+  </mat-form-field>
+
   @if (failed(); as why) {
     <p class="failed">{{ why }}</p>
   }

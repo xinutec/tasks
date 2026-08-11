@@ -93,9 +93,10 @@ a done row.
 
 | thing | what it is |
 | --- | --- |
-| a **task** | a one-line subject, a markdown body, a status, and a holder |
+| a **task** | a one-line subject, a markdown body, a status, a holder, and maybe a priority |
 | a **status** | `open`, `doing`, `done`, `dropped` — two open states and two ways out |
 | a **holder** | nobody, the person, or a session |
+| a **priority** | `P0`–`P4`, or none at all — which is the ordinary case |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
 
 ⚠ **Status and holder are independent, and that is why there are four states and
@@ -112,6 +113,32 @@ the two alternatives are both worse: leaving it open for ever, or closing it as
 nothing anywhere else — nothing injected selects a closed row of either kind —
 and there is deliberately no *reason* field beside it, because a reason is prose
 and the body is where prose goes.
+
+⚠ **A priority is absent by default, and absence is not a level.** Asked for by
+Pippijn on 2026-08-11. There were 700-odd tasks the day the column was added and
+none of them were going to be triaged, so a `DEFAULT 'P2'` would have had every
+one of them assert something nobody said — a field that is false about most of
+its rows is worse than the absent field it replaced.
+
+⚠ **It still has to order, and the whole feature is one `COALESCE`.** Lists sort
+by `COALESCE(priority, 'P2'), id`, so an unranked task sorts exactly where an
+ordinary one does. `P0` and `P1` rise above the untriaged; `P3` and `P4` **sink
+below** it; everything untouched keeps its id order. The obvious alternative —
+ranked first, unranked after — gets `P4` backwards, lifting a task marked *when
+there is room* above four hundred nobody has read. `Priority::rank` is the same
+rule in Rust and `tests/priority.rs` compares the two against a real database,
+because a drift between them is silent: every list still returns every task, in
+an order nobody notices is wrong until the `P0` is not at the top.
+
+⚠ **`repo::list` is the only sort in the service.** `digest::render` preserves
+the order it is handed, so the prompt, the CLI and the app all inherit one rule
+rather than three. The rank costs five bytes on a line that has one and nothing
+at all on a line that does not, which is what makes it affordable in the digest.
+
+⚠ **Nothing can clear a priority**, on `PATCH` or from the CLI. Absence means
+*leave it alone* for every field on that endpoint, and the exception —
+`Option<Option<Priority>>`, a field whose null is meaningful — costs more than
+the gesture is worth. Ranking it again is the correction.
 
 ⚠ **A session's id is its identity and its name is an attribute.** A rename is
 an `UPDATE` of one column and every task assigned to that session stays
@@ -190,12 +217,12 @@ task list [--all|--mine|--pile] [--done]  # yours and the pile; wider; narrower;
 task show <id> [--body]                   # one task, its prose and its history
 task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
-task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody]
+task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody] [--priority P1]
 task start <id> / task done <id> [--to W] # move it along
 task drop <id>                            # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
 task move <id> me|pippijn|<session>|nobody  # hand it over
-task edit <id> [--subject S] [--body -]   # change the words
+task edit <id> [--subject S] [--body -] [--priority P0]   # change the words, rank it
 task digest                               # exactly what a prompt receives
 task rename <name>                        # tell the service what I call myself
 ```

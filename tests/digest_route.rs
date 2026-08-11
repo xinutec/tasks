@@ -146,6 +146,7 @@ async fn seed(pool: &MySqlPool) {
             NewTask {
                 subject: subject.into(),
                 body: String::new(),
+                priority: None,
                 assignee: Some(holder),
             },
             &Actor::Person("pippijn".into()),

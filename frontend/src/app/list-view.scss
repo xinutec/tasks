@@ -114,6 +114,30 @@
     font-variant-numeric: tabular-nums;
   }
 
+  // ⚠ **Weight, not hue alone.** P0 and P1 are the two that have to be spotted
+  // while scrolling; P3 and P4 are marked so they can be recognised and passed
+  // over, which is the opposite job and wants the opposite emphasis. Reading
+  // this by colour alone would fail anybody who cannot separate red from grey,
+  // so the letter is always there and the colour only reinforces it.
+  .priority {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    background: var(--mat-sys-surface-container-high);
+
+    &.P0,
+    &.P1 {
+      background: var(--mat-sys-error-container);
+      color: var(--mat-sys-on-error-container);
+    }
+
+    &.P3,
+    &.P4 {
+      opacity: 0.6;
+    }
+  }
+
   .holder {
     padding: 2px 8px;
     border-radius: 999px;
