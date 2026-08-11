@@ -97,6 +97,7 @@ a done row.
 | a **status** | `open`, `doing`, `done`, `dropped` — two open states and two ways out |
 | a **holder** | nobody, the person, or a session |
 | a **priority** | `P0`–`P4`, or none at all — which is the ordinary case |
+| a **block** | tasks this one waits for, in `task_blocks` — usually none |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
 
 ⚠ **Status and holder are independent, and that is why there are four states and
@@ -139,6 +140,33 @@ at all on a line that does not, which is what makes it affordable in the digest.
 *leave it alone* for every field on that endpoint, and the exception —
 `Option<Option<Priority>>`, a field whose null is meaningful — costs more than
 the gesture is worth. Ranking it again is the correction.
+
+⚠ **A blocked task says which ticket, and the link carries a rule.** Pippijn,
+2026-08-11: *"It can be the same, but not higher priority than the thing it's
+blocked on."* Claiming *do this next* about work you cannot start is the single
+move that inflates a scale — everything downstream drifts up while the thing
+actually holding it sits at `P3` — and it is the one shape a machine can catch.
+Refused at both ends: ranking the blocked task up, and demoting the blocker.
+Refused rather than cascaded, because quietly re-ranking rows nobody asked about
+is worse than saying no and naming the pair.
+
+⚠ **A table, and the first cut was a column.** The measurement said no open task
+named more than one blocker; that counted the absence of the feature rather than
+the shape of the work, since there was nowhere to record even one. With a single
+slot the workaround for a second blocker is the body — which is the staleness
+this replaced, applied to the tasks with the most dependencies.
+
+⚠ **No cycles, walked rather than checked one step.** `A → B → A` is the case
+everybody thinks of; `A → B → C → A` arrives as three separate edits that each
+look fine, and only a traversal of the whole graph refuses it. A loop would make
+the rank rule unsatisfiable, not merely odd.
+
+⚠ **An unranked task is never in violation, and that asymmetry is deliberate.**
+It sorts as `P2` — that is the ordering — but it asserts nothing, and the rule is
+about assertions. Applying it to untriaged tasks would mean recording a
+dependency is refused until you rank the dependent, turning a fact into a
+decision. That is the pressure that ends with everything ranked to satisfy a
+field, and a value that was satisfied rather than chosen says nothing.
 
 ⚠ **A session's id is its identity and its name is an attribute.** A rename is
 an `UPDATE` of one column and every task assigned to that session stays

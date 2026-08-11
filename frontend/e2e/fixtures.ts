@@ -90,6 +90,12 @@ export const TASKS = [
     id: 106,
     subject: 'The console task reader points at a store we deliberately emptied',
     status: 'open',
+    // Blocked, and by TWO tasks — the case a single column could not have
+    // carried. Also the widest this meta row gets: rank, block icon, id and an
+    // unnamed session's uuid on one line at phone width.
+    priority: 'P3',
+    blocked_on: [80, 92],
+    blocked: true,
     // No name: drawn as the raw uuid, which is wider than the phone.
     assignee: { kind: 'session', id: SESSIONS[1].id },
     detailed: false,
@@ -133,6 +139,11 @@ export const TASKS = [
  *  session id. */
 export const DETAIL = {
   ...TASKS[1],
+  // Blocked here too, so the TASK screen's chip is drawn in the shot rather
+  // than only the list's icon — they are different markup and only one of them
+  // spells the ids out.
+  blocked_on: [80, 106],
+  blocked: true,
   body: '…',
   body_html: `<p>Read as a language problem, the reader is an <strong>abstract
 interpreter</strong>: it evaluates as far as the text determines and stops.</p>

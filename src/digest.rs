@@ -197,6 +197,15 @@ fn line(task: &Task) -> String {
     if let Some(priority) = task.priority {
         line.push_str(&format!(" [{priority}]"));
     }
+    // ⚠ **Only while a blocker is still open**, which is what `blocked` means —
+    // a finished dependency is a fact about the past and belongs in the task,
+    // not in every prompt. Costs nothing on the tasks that are not waiting,
+    // which is nearly all of them, and on the ones that are it answers the
+    // question a reader would otherwise open the task to ask.
+    if task.blocked {
+        let on: Vec<String> = task.blocked_on.iter().map(|id| format!("#{id}")).collect();
+        line.push_str(&format!(" ⛔{}", on.join(",")));
+    }
     if task.assignee.kind != AssigneeKind::Nobody {
         line.push_str(&format!(" ({})", task.assignee.label()));
     }

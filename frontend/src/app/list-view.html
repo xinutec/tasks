@@ -66,6 +66,12 @@
                   row.task.priority
                 }}</span>
               }
+              <!-- Only while a blocker is still OPEN — `blocked`, not the mere
+                   presence of `blocked_on`, which is kept after the blocker
+                   closes as a record of how the work went. -->
+              @if (row.task.blocked) {
+                <mat-icon class="blocked" aria-label="blocked">block</mat-icon>
+              }
               <span class="id">#{{ row.task.id }}</span>
               @if (row.task.assignee.kind !== 'nobody') {
                 <span class="holder">{{ row.holder }}</span>

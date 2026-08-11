@@ -25,6 +25,23 @@
     background: var(--mat-sys-surface-container-high);
   }
 
+  .blocked {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--mat-sys-on-surface-variant);
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+
+    a {
+      color: inherit;
+    }
+  }
+
   // Same shape as the list's, so a rank reads the same in both places.
   .priority {
     padding: 2px 6px;

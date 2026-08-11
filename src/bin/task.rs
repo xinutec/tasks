@@ -173,6 +173,9 @@ enum Command {
         /// levels under `task --help`.
         #[arg(long)]
         priority: Option<Priority>,
+        /// Task ids this one waits for. Repeat for several.
+        #[arg(long = "blocked-on")]
+        blocked_on: Vec<u64>,
     },
     /// Mark a task as being worked on.
     Start { id: TaskRef },
@@ -251,6 +254,17 @@ enum Command {
         /// ranked wrongly is corrected by ranking it again.
         #[arg(long)]
         priority: Option<Priority>,
+        /// What this task waits for. Repeat for several; the whole set is
+        /// replaced, so `--unblock` is the way to say "nothing".
+        ///
+        /// A task may not be ranked more urgently than what blocks it, and
+        /// nothing may block itself or close a loop. Both are refused with the
+        /// other task named.
+        #[arg(long = "blocked-on", conflicts_with = "unblock")]
+        blocked_on: Vec<u64>,
+        /// It is not waiting for anything any more.
+        #[arg(long)]
+        unblock: bool,
     },
     /// Exactly what a prompt receives — for checking the cost, not for reading.
     Digest,
@@ -643,6 +657,16 @@ fn line(task: &Value) -> String {
         task["priority"].as_str().unwrap_or(""),
         task["subject"].as_str().unwrap_or("")
     );
+    if task["blocked"].as_bool().unwrap_or(false)
+        && let Some(on) = task["blocked_on"].as_array()
+    {
+        let ids: Vec<String> = on
+            .iter()
+            .filter_map(|v| v.as_u64())
+            .map(|v| format!("#{v}"))
+            .collect();
+        out.push_str(&format!("  ⛔{}", ids.join(",")));
+    }
     let holder = &task["assignee"];
     if holder["kind"].as_str().unwrap_or("nobody") != "nobody" {
         let who = holder["name"]
@@ -769,11 +793,15 @@ async fn main() -> Result<()> {
             body: raw,
             to,
             priority,
+            blocked_on,
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
             if let Some(priority) = priority {
                 payload["priority"] = json!(priority.as_str());
+            }
+            if !blocked_on.is_empty() {
+                payload["blocked_on"] = json!(blocked_on);
             }
             if let Some(to) = to {
                 let to = client.resolve(to).await?;
@@ -815,10 +843,19 @@ async fn main() -> Result<()> {
             subject,
             body: raw,
             priority,
+            blocked_on,
+            unblock,
         } => {
             let mut change = json!({});
             if let Some(priority) = priority {
                 change["priority"] = json!(priority.as_str());
+            }
+            // An empty list IS the clear, so `--unblock` and `--blocked-on`
+            // reach the service as the same field with different contents.
+            if unblock {
+                change["blocked_on"] = json!([] as [u64; 0]);
+            } else if !blocked_on.is_empty() {
+                change["blocked_on"] = json!(blocked_on);
             }
             if let Some(subject) = subject {
                 change["subject"] = json!(subject);

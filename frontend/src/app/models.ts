@@ -47,6 +47,18 @@ export interface Task {
   status: Status;
   /** Absent on almost everything — see `Priority`. */
   priority?: Priority | null;
+  /**
+   * The tasks this one waits for, oldest id first. Absent when there are none.
+   *
+   * ⚠ **Not the same as `blocked`.** The link is kept when a blocker closes,
+   * because the dependency is a fact about how the work went; what ends is its
+   * effect. `blocked` is the question a reader is actually asking, and the
+   * backend answers it — do not recompute it here, since it depends on the
+   * status of rows this client may not have.
+   */
+  blocked_on?: number[];
+  /** Whether any blocker is still open. Absent means false. */
+  blocked?: boolean;
   assignee: Assignee;
   /** Whether there is prose behind it worth opening. */
   detailed: boolean;
@@ -131,6 +143,7 @@ export interface NewTask {
   subject: string;
   body: string;
   priority?: Priority | null;
+  blocked_on?: number[];
   assignee?: Assignee | null;
 }
 
@@ -146,5 +159,9 @@ export interface Change {
   /** Absent means leave it alone, so this cannot UNRANK a task — the same rule
    *  every other field here follows. Ranking it again is the correction. */
   priority?: Priority | null;
+  /** The blockers as they should now be — the whole set, not an addition. An
+   *  empty array is how a task stops being blocked, which is why there is no
+   *  separate unblock flag: `[]` is a value, not an absence. */
+  blocked_on?: number[] | null;
   assignee?: Assignee | null;
 }

@@ -79,6 +79,11 @@ struct Row {
     subject: String,
     status: Status,
     priority: Option<Priority>,
+    /// The blockers, comma-joined by SQL — see the projection for why.
+    blocked_on: Option<String>,
+    /// How many of them are still open. Counted in SQL for the same reason
+    /// `detailed` is: a client must not have to fetch rows to answer a boolean.
+    open_blockers: i64,
     assignee_kind: AssigneeKind,
     assignee_person: Option<String>,
     assignee_session: Option<String>,
@@ -123,6 +128,8 @@ impl Row {
             subject: self.subject,
             status: self.status,
             priority: self.priority,
+            blocked_on: parse_ids(self.blocked_on.as_deref()),
+            blocked: self.open_blockers > 0,
             assignee,
             detailed: self.detailed != 0,
             filed_by: self.filed_by,
@@ -144,6 +151,22 @@ macro_rules! select {
     ($tail:literal) => {
         concat!(
             "SELECT t.id, t.subject, t.status, t.priority, t.assignee_kind, ",
+            // Two correlated subqueries rather than a join, for the reason
+            // `filed_by` below is one: a join to `task_blocks` MULTIPLIES the
+            // task row by its edges, and a list is the one thing here that must
+            // not gain rows. Both are covered by the table's primary key.
+            //
+            // ⚠ GROUP_CONCAT is capped by `group_concat_max_len` (1024 bytes by
+            // default, ~140 ids). A task with more blockers than that has a
+            // problem this truncation is not the biggest part of, and the count
+            // beside it is exact regardless — so `blocked` stays right even if
+            // the list were ever clipped.
+            "(SELECT GROUP_CONCAT(b.blocked_on ORDER BY b.blocked_on) FROM task_blocks b ",
+            "WHERE b.task_id = t.id) AS blocked_on, ",
+            "(SELECT COUNT(*) FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
+            "WHERE b.task_id = t.id AND ",
+            still_open!("bt.status"),
+            ") AS open_blockers, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
             "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
             // Correlated rather than joined: a task has one `created` event, but
@@ -312,6 +335,9 @@ pub struct NewTask {
     /// stays — see [`Priority`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// The tasks this one waits for, if they are known at filing time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_on: Vec<u64>,
     /// Who it is for. Absent leaves it in the pile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
@@ -337,6 +363,16 @@ pub struct Change {
     /// Ranking a task wrongly is corrected by ranking it again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// The blockers as they should now be — the whole set, not an addition.
+    ///
+    /// ⚠ **An empty list is how a task stops being blocked**, and that is why
+    /// there is no `unblock` flag beside this. Absence still means *leave it
+    /// alone*, as everywhere else here; `[]` is a value rather than an absence,
+    /// so unblocking needs no second way to say it. Unlike `priority`, which
+    /// genuinely cannot be cleared, this one can, because a task really does
+    /// stop waiting and that is an event rather than a correction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_on: Option<Vec<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
 }
@@ -404,6 +440,230 @@ fn check_assignee(assignee: &Assignee) -> Result<()> {
             }
         }
     }
+}
+
+/// The comma-joined ids `GROUP_CONCAT` returns, as numbers.
+///
+/// Anything unparseable is dropped rather than defaulted: these are foreign keys
+/// the database itself produced, so a non-number here means the query changed,
+/// and inventing a `0` would point at a task that cannot exist.
+fn parse_ids(joined: Option<&str>) -> Vec<u64> {
+    joined
+        .unwrap_or("")
+        .split(',')
+        .filter_map(|id| id.trim().parse().ok())
+        .collect()
+}
+
+/// Pippijn's rule on a blocked task, checked at both ends.
+///
+/// *"It can be the same, but not higher priority than the thing it's blocked
+/// on."* (2026-08-11.) A task you cannot start must not claim to be the next
+/// thing anybody does — that is the single move that inflates a scale, and it is
+/// the one shape a machine can catch.
+///
+/// ⚠ **The bound is the LEAST urgent open blocker**, which is the one that
+/// decides when this can actually start. Blocked on a `P1` and a `P3`, a task
+/// waits for the `P3`.
+///
+/// ⚠ **Both ends, because either edit can break it.** Ranking the BLOCKED task
+/// up is the obvious one. Ranking a BLOCKER *down* is the one that would
+/// otherwise slip through: demote a `P1` to `P3` and everything waiting on it is
+/// silently left more urgent than what it waits for.
+///
+/// ⚠ **Refused, not cascaded.** Quietly demoting whatever waits on a demoted
+/// blocker would edit rows nobody asked about, and the caller would learn what
+/// happened by going and looking. The refusal names both tasks, so the person
+/// deciding sees the pair.
+///
+/// ⚠ **Only while the blocker is OPEN.** A closed blocker constrains nothing —
+/// the work is free to start — and applying the rule to it would leave a
+/// finished dependency holding a rank down for ever.
+///
+/// ⚠ **The rule binds a CLAIM, so an unranked task is never in violation.** This
+/// is the one asymmetry and it is deliberate. Unranked sorts as [`Priority::P2`]
+/// — that is the ordering — but it asserts nothing, and the rule is about
+/// asserting *do this next* for work you cannot start. Applying it to untriaged
+/// tasks would mean recording *"#726 waits for #697"* is refused until #726 is
+/// ranked, which turns writing down a fact into making a decision. That is the
+/// pressure that ends with everything ranked to satisfy a field, and a scale
+/// where every value has been satisfied rather than chosen says nothing.
+///
+/// So: the blocked task is checked only once somebody has ranked it. A
+/// BLOCKER's absent rank still counts as `P2`, because that is genuinely where
+/// it sits in the list and the claim above it has to clear something.
+async fn blocking_is_consistent(
+    tx: &mut Transaction<'_, MySql>,
+    id: u64,
+    priority: Option<Priority>,
+) -> Result<()> {
+    let Some(stated) = priority else {
+        // Nothing claimed at this end. Whatever is blocked ON this task is still
+        // checked below only where IT has stated something.
+        return unblocked_end(tx, id, None).await;
+    };
+    let mine = Priority::rank(Some(stated));
+
+    // This end: what this task waits for, of those still open.
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+    let blockers: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
+        "SELECT bt.id, bt.priority FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
+        "WHERE b.task_id = ? AND ",
+        still_open!("bt.status")
+    ))
+    .bind(id)
+    .fetch_all(&mut **tx)
+    .await
+    .context("reading what blocks this task")?;
+    for (blocker, blocker_priority) in blockers {
+        let theirs = Priority::rank(blocker_priority);
+        if mine < theirs {
+            return Err(AppError::BadRequest(format!(
+                "#{id} would be {mine} while #{blocker}, which blocks it, is {theirs} — \
+                 a task cannot be more urgent than what it is waiting for. Rank \
+                 #{blocker} up first, or rank this one no higher than {theirs}."
+            )));
+        }
+    }
+
+    unblocked_end(tx, id, Some(stated)).await
+}
+
+/// The other end: what waits for this task, and whether demoting it breaks them.
+///
+/// Split out only so the early return above can reach it — a task with no rank
+/// of its own can still be the BLOCKER whose demotion would strand something
+/// that does have one.
+async fn unblocked_end(
+    tx: &mut Transaction<'_, MySql>,
+    id: u64,
+    priority: Option<Priority>,
+) -> Result<()> {
+    let mine = Priority::rank(priority);
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+    let waiting: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
+        "SELECT t.id, t.priority FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
+        "WHERE b.blocked_on = ? AND ",
+        still_open!("t.status")
+    ))
+    .bind(id)
+    .fetch_all(&mut **tx)
+    .await
+    .context("reading what this task blocks")?;
+    for (other, other_priority) in waiting {
+        // Same asymmetry: an untriaged dependent has claimed nothing, so there
+        // is nothing for this demotion to contradict.
+        let Some(theirs) = other_priority else {
+            continue;
+        };
+        if theirs < mine {
+            return Err(AppError::BadRequest(format!(
+                "#{id} would be {mine} while #{other}, which is blocked on it, is \
+                 {theirs} — that leaves #{other} more urgent than what it waits for. \
+                 Rank #{other} down first."
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Refuse a set of blockers that cannot all be satisfied.
+///
+/// ⚠ **A cycle makes the rank rule unsatisfiable rather than merely odd**: every
+/// task around the loop would have to be no more urgent than the next, all the
+/// way back to itself, and none of them could ever start. Walked breadth-first
+/// over the whole edge set rather than checked one step, because `A → B → C → A`
+/// is the same mistake spread over three separate edits. Bounded by the graph:
+/// every task is enqueued at most once.
+async fn no_cycle(tx: &mut Transaction<'_, MySql>, id: u64, proposed: &[u64]) -> Result<()> {
+    let mut seen: Vec<u64> = vec![id];
+    let mut queue: Vec<u64> = proposed.to_vec();
+    while let Some(next) = queue.pop() {
+        if next == id {
+            return Err(AppError::BadRequest(format!(
+                "#{id} cannot be blocked on itself, or on anything waiting for it — \
+                 nothing in such a loop could ever start"
+            )));
+        }
+        if seen.contains(&next) {
+            continue;
+        }
+        seen.push(next);
+        let onward: Vec<u64> =
+            sqlx::query_scalar("SELECT blocked_on FROM task_blocks WHERE task_id = ?")
+                .bind(next)
+                .fetch_all(&mut **tx)
+                .await
+                .context("walking the blocking graph")?;
+        queue.extend(onward);
+    }
+    Ok(())
+}
+
+/// Replace a task's blockers, and say what moved.
+///
+/// The whole set is written rather than added to: `Change::blocked_on` is the
+/// list as it should now be, so an empty one is how a task stops being blocked.
+/// That is why there is no `--unblock` flag anywhere — an empty list is a value,
+/// not an absence, and needs no second way to say it.
+async fn set_blockers(
+    tx: &mut Transaction<'_, MySql>,
+    id: u64,
+    want: &[u64],
+) -> Result<Option<String>> {
+    let mut want: Vec<u64> = want.to_vec();
+    want.sort_unstable();
+    want.dedup();
+    let mut have: Vec<u64> =
+        sqlx::query_scalar("SELECT blocked_on FROM task_blocks WHERE task_id = ?")
+            .bind(id)
+            .fetch_all(&mut **tx)
+            .await
+            .context("reading the current blockers")?;
+    have.sort_unstable();
+    if have == want {
+        return Ok(None);
+    }
+    no_cycle(tx, id, &want).await?;
+
+    sqlx::query("DELETE FROM task_blocks WHERE task_id = ?")
+        .bind(id)
+        .execute(&mut **tx)
+        .await
+        .context("clearing the old blockers")?;
+    for blocker in &want {
+        sqlx::query("INSERT INTO task_blocks (task_id, blocked_on) VALUES (?, ?)")
+            .bind(id)
+            .bind(blocker)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| unknown_blocker(e, *blocker))?;
+    }
+    let show = |ids: &[u64]| {
+        if ids.is_empty() {
+            "nothing".to_string()
+        } else {
+            ids.iter()
+                .map(|x| format!("#{x}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    };
+    Ok(Some(format!("{} → {}", show(&have), show(&want))))
+}
+
+/// A blocker id with no task behind it, said plainly instead of as a 500.
+///
+/// The same defect and the same fix as `unknown_holder` above — both foreign
+/// keys arrive as `ErrorKind::ForeignKeyViolation`, and on this statement there
+/// is one row that can be missing.
+fn unknown_blocker(e: sqlx::Error, blocker: u64) -> AppError {
+    if e.as_database_error()
+        .is_some_and(|db| db.kind() == sqlx::error::ErrorKind::ForeignKeyViolation)
+    {
+        return AppError::BadRequest(format!("no task #{blocker} to be blocked on"));
+    }
+    AppError::Other(anyhow::Error::new(e).context("recording what blocks a task"))
 }
 
 /// The assignee foreign key's refusal, turned into an answer the caller can act
@@ -530,6 +790,10 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     .map_err(|e| unknown_holder(e, session, "filing a task"))?;
     let id = done.last_insert_id();
     record(&mut tx, id, actor, "created", Some(subject.clone())).await?;
+    if let Some(moved) = set_blockers(&mut tx, id, &new.blocked_on).await? {
+        record(&mut tx, id, actor, "blocked", Some(moved)).await?;
+        blocking_is_consistent(&mut tx, id, new.priority).await?;
+    }
     if kind != AssigneeKind::Nobody {
         let to = label_of(&mut tx, &assignee).await?;
         record(&mut tx, id, actor, "assigned", Some(format!("→ {to}"))).await?;
@@ -675,6 +939,23 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         )
         .await?;
         changed.push("priority");
+    }
+
+    if let Some(want) = &change.blocked_on
+        && let Some(moved) = set_blockers(&mut tx, id, want).await?
+    {
+        record(&mut tx, id, actor, "blocked", Some(moved)).await?;
+        changed.push("blocked_on");
+    }
+
+    // ⚠ **After BOTH writes, and once — not inside either.** A change may move
+    // the rank and the blockers together, and each is legal only against the
+    // NEW value of the other: ranking to `P1` while also pointing at a `P1`
+    // blocker is the case. Checking as we go would refuse a change that is
+    // consistent the moment it lands. Inside the transaction, so a refusal rolls
+    // the whole thing back rather than leaving half of it written.
+    if change.priority.is_some() || change.blocked_on.is_some() {
+        blocking_is_consistent(&mut tx, id, change.priority.or(before.priority)).await?;
     }
 
     // Closing a task makes the closer its holder.

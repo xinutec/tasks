@@ -350,6 +350,32 @@ pub struct Task {
     /// not a level — see [`Priority`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// The tasks this one is waiting for, oldest id first. Usually empty.
+    ///
+    /// ⚠ **A LIST, and the first cut of this was a single id.** The measurement
+    /// said no open task named more than one blocker, which is not evidence:
+    /// there was nowhere to record even one, so it counted the absence of the
+    /// feature. Pippijn caught it (2026-08-11). With one slot the workaround for
+    /// a second blocker is the body, which is the staleness this replaced.
+    ///
+    /// ⚠ **It carries a rule about [`priority`](Self::priority), not just a
+    /// link.** A task may not be ranked more urgently than the thing blocking
+    /// it — equal is allowed, higher is refused — because claiming *do this
+    /// next* about something you cannot start is how a scale stops meaning
+    /// anything. With several blockers the bound is the LEAST urgent open one:
+    /// that is the one that decides when this can actually start.
+    ///
+    /// ⚠ **Kept when a blocker closes rather than cleared.** The dependency is a
+    /// fact about how the work went; what stops is the *effect*. So a non-empty
+    /// list is not the same as being blocked, and [`blocked`](Self::blocked) is
+    /// the question a reader is actually asking.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_on: Vec<u64>,
+    /// Whether any of [`blocked_on`](Self::blocked_on) is still open — resolved
+    /// through the projection, so no reader needs a second query and no client
+    /// has to know that a closed blocker does not count.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub blocked: bool,
     pub assignee: Assignee,
     /// Whether there is prose behind it worth opening. A task written as a
     /// one-line reminder has none, and offering to open an empty sheet is worse

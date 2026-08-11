@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { RouterLink } from '@angular/router';
 
 import { reason } from './errors';
 import {
@@ -30,7 +31,14 @@ import { TasksApi } from './tasks-api';
   selector: 'app-task-view',
   templateUrl: './task-view.html',
   styleUrl: './task-view.scss',
-  imports: [DatePipe, MatButtonModule, MatIconModule, MatMenuModule, MatProgressBarModule],
+  imports: [
+    DatePipe,
+    MatButtonModule,
+    MatIconModule,
+    MatMenuModule,
+    MatProgressBarModule,
+    RouterLink,
+  ],
 })
 export class TaskView {
   /** Bound from the route (`withComponentInputBinding`), so the URL is what

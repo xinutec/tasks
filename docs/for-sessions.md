@@ -120,6 +120,8 @@ task add "One line" --to nobody # for whoever picks it up
 task add "One line" --priority P1   # and rank it while filing
 task edit <id> --body -         # rewrite the prose
 task edit <id> --priority P0    # rank one that already exists
+task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
+task edit <id> --unblock        # it is not waiting any more
 ```
 
 ⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
@@ -203,6 +205,30 @@ The service will not clear one for you.
 
 It shows up wherever a task is drawn — `task list`, `task show`, your prompt, and
 the app — and it costs nothing on a task that has none.
+
+## What it is waiting for
+
+⚠ **Say it as a ticket number, not in the body.** Twelve open tasks named a
+blocker in prose the day this was added, in six different spellings — and **five
+of the twelve named a blocker that was already closed**, so a reader who believed
+the body thought the task was stuck when it was ready to start. `--blocked-on`
+joins to the live row and cannot go stale that way.
+
+⚠ **A task may not be ranked more urgently than what blocks it.** Equal is fine,
+higher is refused, and the refusal names the other task. With several blockers
+the bound is the LEAST urgent one still open — that is the one deciding when you
+can actually start. Ranking the BLOCKER down is refused for the same reason.
+
+⚠ **Nothing may block itself, and no loop is allowed** — not `A → B → A`, and not
+`A → B → C → A`, which arrives as three edits that each look fine on their own.
+
+⚠ **An unranked task is never in violation.** It has claimed nothing, so
+recording *"this waits for that"* never forces you to rank anything first. The
+rule starts applying the moment somebody states a rank.
+
+The link is kept when the blocker closes — it is a record of how the work went —
+but it stops constraining anything and stops being drawn. `⛔#697` in your prompt
+means *still waiting*; nothing there means nothing is in the way.
 
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
 every list afterwards says who did it — pass `--to pippijn` (or anyone) in the

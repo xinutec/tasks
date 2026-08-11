@@ -114,6 +114,16 @@
     font-variant-numeric: tabular-nums;
   }
 
+  // An icon rather than the ids: the row already carries a rank, an id and a
+  // holder, and "#697,#14" in a phone-width meta row is what pushes it past the
+  // edge. Which tasks they are is one tap away, on the task itself.
+  .blocked {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+  }
+
   // ⚠ **Weight, not hue alone.** P0 and P1 are the two that have to be spotted
   // while scrolling; P3 and P4 are marked so they can be recognised and passed
   // over, which is the opposite job and wants the opposite emphasis. Reading
