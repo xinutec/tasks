@@ -31,7 +31,7 @@ use tasks::session::{UserSession, create_session};
 use tasks::sessions;
 use tasks::state::AppState;
 use tasks::tasks::repo::{self, NewTask};
-use tasks::tasks::types::{Actor, Assignee, AssigneeKind};
+use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Ranking};
 use tower::ServiceExt;
 
 const SECRET: &str = "test-secret";
@@ -146,7 +146,7 @@ async fn seed(pool: &MySqlPool) {
             NewTask {
                 subject: subject.into(),
                 body: String::new(),
-                priority: None,
+                priority: Ranking::Unassessed,
                 due: None,
                 blocked_on: Vec::new(),
                 assignee: Some(holder),

@@ -167,7 +167,21 @@ export interface Me {
 export interface NewTask {
   subject: string;
   body: string;
-  priority?: Priority | null;
+  /**
+   * ⚠ **Required, and the only field here that is** — note there is no `?`.
+   * Every other key means *leave it alone* when absent; this one has no such
+   * reading, and the service refuses a filing that never mentions it.
+   *
+   * * a level — judged.
+   * * `null` — **unassessed**: nobody has judged this yet.
+   *
+   * Both sort at `P2`. What the pair buys is that `P2` means *somebody looked
+   * and called it ordinary*, where it used to be indistinguishable from
+   * *nobody looked*. Send `null` rather than omitting the key: omitting it is
+   * a 4xx, not a default.
+   */
+  // dev-lint: allow-wire-mirror the Rust side is `Ranking`, not `Option<Priority>`, and the rule reads the null arm off the TYPE. `Ranking` is a hand-written Deserialize whose whole purpose is that `null` is legal and ABSENCE is not — the one shape an Option cannot express. Null is right here; the rule cannot see it.
+  priority: Priority | null;
   due?: string | null;
   blocked_on?: number[];
   assignee?: Assignee | null;

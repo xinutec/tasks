@@ -11,7 +11,8 @@ use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 
 use crate::error::AppError;
 use crate::tasks::types::{
-    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Status, Task, TaskDetail, Updated,
+    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Ranking, Status, Task, TaskDetail,
+    Updated,
 };
 use crate::{due_soon, still_open};
 
@@ -362,10 +363,29 @@ pub struct NewTask {
     pub subject: String,
     #[serde(default)]
     pub body: String,
-    /// How urgent. Absent leaves it unranked, which is where almost everything
-    /// stays — see [`Priority`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Priority>,
+    /// How urgent — and **the one field a filer may not leave out**.
+    ///
+    /// ⚠ **No `serde(default)`, and no `skip_serializing_if`, deliberately.**
+    /// Every other field here means *leave it alone* when absent; this one has
+    /// no such reading. A missing key is refused, so the two states are both
+    /// things somebody SAID rather than one thing said and one thing skipped:
+    ///
+    /// * `"priority": "P2"` — a level, judged.
+    /// * `"priority": null` — **unassessed**: nobody has judged this yet.
+    ///
+    /// `null` still sorts exactly where `P2` does (`COALESCE(priority, 'P2')`),
+    /// so this costs no ordering and buys one thing: `P2` now means *somebody
+    /// looked and called it ordinary*, where before it was indistinguishable
+    /// from *nobody looked*. Asked for by Pippijn 2026-08-11 — "I want
+    /// everything to have a priority" — with the explicit escape kept, because
+    /// a filer working outside their own domain genuinely cannot judge, and
+    /// forcing a number out of them would buy false precision rather than
+    /// triage.
+    ///
+    /// Carrying no attributes at all is what states this to the mirror check:
+    /// `models.ts` must declare the key as always present and nullable, not
+    /// optional.
+    pub priority: Ranking,
     /// The day it has to be done by, if something outside already decides it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<NaiveDate>,
@@ -878,7 +898,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     )
     .bind(&subject)
     .bind(&new.body)
-    .bind(new.priority)
+    .bind(new.priority.stored())
     .bind(new.due)
     .bind(kind)
     .bind(person)
@@ -890,7 +910,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     record(&mut tx, id, actor, "created", Some(subject.clone())).await?;
     if let Some(moved) = set_blockers(&mut tx, id, &new.blocked_on).await? {
         record(&mut tx, id, actor, "blocked", Some(moved)).await?;
-        blocking_is_consistent(&mut tx, id, new.priority, new.due).await?;
+        blocking_is_consistent(&mut tx, id, new.priority.stored(), new.due).await?;
     }
     if kind != AssigneeKind::Nobody {
         let to = label_of(&mut tx, &assignee).await?;

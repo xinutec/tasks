@@ -42,25 +42,30 @@
     </mat-select>
   </mat-form-field>
 
-  <!-- Last, and empty by default. Ranking is the exception rather than part of
-       filing: almost nothing is ranked, and a control that defaulted to a level
-       would have every task filed here claim one. -->
+  <!-- Last, and starting on NOTHING. Filing means answering this: either a
+       level, or `unassessed` for work you are not the one to judge. The old
+       control defaulted to unranked, which answered for the filer — the same
+       objection as defaulting to a level, in the other direction. -->
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>Priority</mat-label>
     <mat-select name="priority" [ngModel]="priority()" (ngModelChange)="priority.set($event)">
-      <mat-option [value]="null">unranked</mat-option>
+      <mat-option [value]="null">unassessed — nobody has judged this yet</mat-option>
       @for (p of priorities; track p) {
         <mat-option [value]="p">{{ p }} — {{ priorityGloss[p] }}</mat-option>
       }
     </mat-select>
-    <mat-hint>Leave it unranked unless you mean it. Unranked sorts where P2 does.</mat-hint>
+    <mat-hint>Required. Unassessed sorts where P2 does, but says nobody judged it.</mat-hint>
   </mat-form-field>
 
   @if (failed(); as why) {
     <p class="failed">{{ why }}</p>
   }
 
-  <button mat-flat-button type="submit" [disabled]="saving() || !subject().trim()">
+  <button
+    mat-flat-button
+    type="submit"
+    [disabled]="saving() || !subject().trim() || priority() === undefined"
+  >
     <mat-icon>add</mat-icon>
     File it
   </button>

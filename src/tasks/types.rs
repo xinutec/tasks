@@ -269,6 +269,100 @@ impl Priority {
     }
 }
 
+/// What a filer said about urgency. **There is no "did not say".**
+///
+/// ⚠ **This type exists so that omission is not a state.** `Option<Priority>` is
+/// the right shape for a task that already exists — most are unranked and always
+/// will be — but at the moment of FILING it lets a client skip the question
+/// entirely, and then `None` means two different things: *nobody has judged
+/// this* and *nobody was asked*. This says which.
+///
+/// Asked for by Pippijn 2026-08-11: "I want everything to have a priority",
+/// with [`Ranking::Unassessed`] kept deliberately as the second answer rather
+/// than removed. A required field whose safe answer is obvious gets filled in
+/// reflexively — that is how everything ends up `P2` and the rank stops meaning
+/// anything, which is the same failure as everything ending up `P0`. An honest
+/// *I am not judging this* is worth more than a number nobody stood behind.
+///
+/// ⚠ **It changes no ordering.** Both answers still sort at `Priority::P2` via
+/// [`Priority::rank`] and the SQL's `COALESCE(priority, 'P2')`. What it buys is
+/// that `P2` now means **somebody looked and called it ordinary**.
+///
+/// The wire form is `Priority` or `null`, and the ABSENCE of the key is a
+/// deserialisation error — which is the whole mechanism. A non-`Option` field
+/// is required by serde's derive; an `Option` one is not, whatever attributes it
+/// carries. That surprise cost a wrong first attempt here: `#[serde(default)]`
+/// was removed from `NewTask::priority` on the belief it made the field
+/// mandatory, and `tests/priority.rs::filing` caught that it did not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ranking {
+    /// Judged, at this level.
+    At(Priority),
+    /// Explicitly not judged. Sorts as `P2`; means *nobody has assessed this*.
+    Unassessed,
+}
+
+impl Ranking {
+    /// What goes in the column: `NULL` for unassessed.
+    pub fn stored(self) -> Option<Priority> {
+        match self {
+            Ranking::At(priority) => Some(priority),
+            Ranking::Unassessed => None,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Ranking {
+    /// `null` is [`Ranking::Unassessed`]; a string must be a level; **absent is
+    /// an error**, which is the entire point of this impl.
+    ///
+    /// ⚠ **`deserialize_any`, and NOT `Option::<Priority>::deserialize`.** That
+    /// obvious spelling is what this was written as first, and it silently
+    /// accepted a filing with no `priority` key at all. Serde fills a missing
+    /// field through `missing_field`, whose deserialiser rejects everything
+    /// EXCEPT `deserialize_option` — which it answers with `visit_none`. So
+    /// delegating to `Option` opts straight into the fallback this type exists
+    /// to refuse, and the field reads as `Unassessed` when nobody was asked.
+    /// Going through `deserialize_any` takes the path `missing_field` errors on.
+    ///
+    /// `tests/priority.rs::filing::omitting_priority_is_refused` is the guard,
+    /// and it caught this. It is worth keeping precisely because the two impls
+    /// differ by one line and behave identically on every input except the one
+    /// that matters.
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Stated;
+
+        impl<'de> serde::de::Visitor<'de> for Stated {
+            type Value = Ranking;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a priority (\"P0\" to \"P4\"), or null for unassessed")
+            }
+
+            /// Deferred to [`Priority`]'s own derive rather than to `FromStr`:
+            /// the CLI's parser case-folds so a hand can type `p0`, and the wire
+            /// should not. One spelling on the wire, and no second list to drift.
+            fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Ranking, E> {
+                Priority::deserialize(serde::de::value::StrDeserializer::<E>::new(s))
+                    .map(Ranking::At)
+            }
+
+            /// JSON `null` through `deserialize_any`.
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Ranking, E> {
+                Ok(Ranking::Unassessed)
+            }
+
+            /// `null` reached through a self-describing format that models it as
+            /// an option instead. Both spellings mean the same answer.
+            fn visit_none<E: serde::de::Error>(self) -> Result<Ranking, E> {
+                Ok(Ranking::Unassessed)
+            }
+        }
+
+        d.deserialize_any(Stated)
+    }
+}
+
 impl FromStr for Priority {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {

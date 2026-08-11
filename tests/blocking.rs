@@ -14,7 +14,7 @@
 mod common;
 
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
-use tasks::tasks::types::{Actor, Priority, Status};
+use tasks::tasks::types::{Actor, Priority, Ranking, Status};
 
 fn pippijn() -> Actor {
     Actor::Person("pippijn".into())
@@ -24,7 +24,7 @@ fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
     NewTask {
         subject: subject.into(),
         body: String::new(),
-        priority,
+        priority: priority.map_or(Ranking::Unassessed, Ranking::At),
         due: None,
         blocked_on: Vec::new(),
         assignee: None,

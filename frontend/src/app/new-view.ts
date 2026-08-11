@@ -46,8 +46,15 @@ export class NewView {
   readonly subject = signal('');
   readonly body = signal('');
   readonly to = signal<string>('nobody');
-  /** `null` is unranked, which is not a level — see `PRIORITY_GLOSS`. */
-  readonly priority = signal<Priority | null>(null);
+  /**
+   * Three states, and `undefined` is the one that matters: NOT YET ANSWERED.
+   *
+   * ⚠ **It does not start on a value**, because a control that starts on one
+   * answers for the filer. `null` here is `unassessed` — a real answer meaning
+   * *nobody has judged this* — and it has to be chosen, the same way a level
+   * does. Filing is blocked until one of the six is picked.
+   */
+  readonly priority = signal<Priority | null | undefined>(undefined);
   readonly priorities = PRIORITIES;
   readonly priorityGloss = PRIORITY_GLOSS;
 
@@ -86,16 +93,19 @@ export class NewView {
 
   file(): void {
     const subject = this.subject().trim();
-    if (!subject || this.saving()) return;
+    const priority = this.priority();
+    // `undefined` is unanswered; `null` is a chosen `unassessed`. The button
+    // is disabled in the same state, so this is the second of two guards.
+    if (!subject || priority === undefined || this.saving()) return;
     this.saving.set(true);
     this.failed.set(null);
     this.api
       .create({
         subject,
         body: this.body(),
-        // Omitted rather than sent as null when unranked: absence is what the
-        // API reads as "no rank", and the column stays NULL.
-        priority: this.priority() ?? undefined,
+        // SENT, always — null for unassessed. Omitting the key is refused by
+        // the service now, and that is the point: it cannot be skipped.
+        priority,
         assignee: this.assignee(),
       })
       .subscribe({

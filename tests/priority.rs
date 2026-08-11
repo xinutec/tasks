@@ -16,7 +16,7 @@
 mod common;
 
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
-use tasks::tasks::types::{Actor, Priority, Status};
+use tasks::tasks::types::{Actor, Priority, Ranking, Status};
 
 fn pippijn() -> Actor {
     Actor::Person("pippijn".into())
@@ -26,7 +26,7 @@ fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
     NewTask {
         subject: subject.into(),
         body: String::new(),
-        priority,
+        priority: priority.map_or(Ranking::Unassessed, Ranking::At),
         due: None,
         blocked_on: Vec::new(),
         assignee: None,
@@ -230,4 +230,61 @@ async fn ranking_changes_the_order_and_nothing_else() {
         order(&pool).await.is_empty(),
         "a ranked task survived being closed"
     );
+}
+
+/// The wire contract: a filer must SAY, and `null` is a legal thing to say.
+///
+/// ⚠ **These are serde tests on purpose.** The rule lives in the shape of
+/// `NewTask`, not in a runtime check inside `create`, so the thing to pin is
+/// what the deserialiser accepts — every client reaches the service through it,
+/// and a rule enforced in one client is not a rule.
+mod filing {
+    use tasks::tasks::repo::NewTask;
+    use tasks::tasks::types::{Priority, Ranking};
+
+    /// The ablation for this whole module. Restore `#[serde(default)]` on
+    /// `NewTask::priority` and only this test fails — which is what says the
+    /// attribute is load-bearing rather than decoration.
+    #[test]
+    fn omitting_priority_is_refused() {
+        let err = serde_json::from_str::<NewTask>(r#"{"subject":"Something"}"#)
+            .expect_err("a filing that never mentioned priority was accepted");
+        assert!(
+            err.to_string().contains("priority"),
+            "the refusal has to name the field a filer left out, got: {err}"
+        );
+    }
+
+    /// Explicit null is how a filer says "I am not judging this one".
+    #[test]
+    fn null_is_unassessed_and_is_accepted() {
+        let new: NewTask = serde_json::from_str(r#"{"subject":"Something","priority":null}"#)
+            .expect("an explicit `unassessed` filing was refused");
+        assert_eq!(
+            new.priority,
+            Ranking::Unassessed,
+            "null should mean unassessed"
+        );
+    }
+
+    #[test]
+    fn a_level_is_carried_through() {
+        let new: NewTask = serde_json::from_str(r#"{"subject":"Something","priority":"P1"}"#)
+            .expect("a ranked filing was refused");
+        assert_eq!(new.priority, Ranking::At(Priority::P1));
+    }
+
+    /// Absence still means *leave it alone* everywhere else, and that contrast
+    /// is the reason the rule is legible: `body`, `due`, `blocked_on` and
+    /// `assignee` all stay optional, so the one required field reads as a
+    /// deliberate exception rather than an inconsistency.
+    #[test]
+    fn every_other_field_is_still_optional() {
+        let new: NewTask = serde_json::from_str(r#"{"subject":"Something","priority":null}"#)
+            .expect("filing with only the two required fields");
+        assert!(new.body.is_empty());
+        assert_eq!(new.due, None);
+        assert!(new.blocked_on.is_empty());
+        assert!(new.assignee.is_none());
+    }
 }

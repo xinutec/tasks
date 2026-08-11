@@ -115,9 +115,9 @@ task move <id> me               # take it — `me` is YOU, this conversation
 task move <id> pippijn          # hand it to Pippijn
 task move <id> <session-id>     # hand it to another conversation
 task move <id> nobody           # put it back in the pile
-task add "One line" --body -    # yours, by default
-task add "One line" --to nobody # for whoever picks it up
-task add "One line" --priority P1   # and rank it while filing
+task add "One line" --priority P2 --body -   # yours, by default
+task add "One line" --priority P1 --to nobody  # for whoever picks it up
+task add "One line" --unassessed    # not yours to judge; whoever takes it decides
 task edit <id> --body -         # rewrite the prose
 task edit <id> --priority P0    # rank one that already exists
 task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
@@ -187,9 +187,22 @@ Asked for by Pippijn on 2026-08-11. Five levels, and `task --help` glosses each
 one — read them there rather than guessing, because a level two conversations
 read differently ranks nothing.
 
-⚠ **Almost everything is UNRANKED, and that is not a sixth level.** An unranked
+⚠ **FILING ONE MEANS SAYING.** `task add` takes `--priority`, or `--unassessed`
+for work that is not yours to judge — filing into another session's domain is the
+ordinary case, and that is what the escape is for. Leaving both off is not an
+answer and is refused, by the CLI and by the service both. Asked for by Pippijn
+2026-08-11: *"I want everything to have a priority."*
+
+⚠ **Reach for `--unassessed` rather than a reflex `P2`.** They sort identically,
+so nothing is lost by being honest; what differs is the claim. `P2` says *I read
+this and it is ordinary*. `--unassessed` says *I have not judged it*. A required
+field whose safe answer is obvious gets filled with that answer, and then the
+rank carries no information — the same failure as everything being `P0`, which is
+what the levels were rewritten to prevent.
+
+⚠ **UNASSESSED is not a sixth level.** An unassessed
 task sorts exactly where `P2` does. So `P0` and `P1` rise above the untriaged and
-`P3` and `P4` **sink below** it, and everything nobody has ranked keeps its
+`P3` and `P4` **sink below** it, and everything nobody has judged keeps its
 place — oldest first, which is what makes old work get fixed rather than buried.
 Sorting the ranked first and the rest after would have got `P4` backwards:
 marking a task *when there is room* would have lifted it above four hundred

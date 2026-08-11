@@ -7,7 +7,7 @@ mod common;
 
 use tasks::sessions;
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
-use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Status};
+use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Ranking, Status};
 
 fn pippijn() -> Actor {
     Actor::Person("pippijn".into())
@@ -33,7 +33,7 @@ fn filed(subject: &str) -> NewTask {
     NewTask {
         subject: subject.into(),
         body: String::new(),
-        priority: None,
+        priority: Ranking::Unassessed,
         due: None,
         blocked_on: Vec::new(),
         assignee: None,
@@ -306,7 +306,7 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
         NewTask {
             subject: "Has prose".into(),
             body: "# Why\n\nA paragraph of reasoning.".into(),
-            priority: None,
+            priority: Ranking::Unassessed,
             due: None,
             blocked_on: Vec::new(),
             assignee: None,
@@ -344,7 +344,7 @@ async fn a_session_rename_moves_no_task() {
         NewTask {
             subject: "Assigned to a session that will be renamed".into(),
             body: String::new(),
-            priority: None,
+            priority: Ranking::Unassessed,
             due: None,
             blocked_on: Vec::new(),
             assignee: Some(to_session("sess-1")),
@@ -399,7 +399,7 @@ async fn a_session_row_carries_how_much_it_is_holding() {
             NewTask {
                 subject: format!("Task {n}"),
                 body: String::new(),
-                priority: None,
+                priority: Ranking::Unassessed,
                 due: None,
                 blocked_on: Vec::new(),
                 assignee: Some(to_session("sess-1")),
@@ -414,7 +414,7 @@ async fn a_session_row_carries_how_much_it_is_holding() {
         NewTask {
             subject: "Already done".into(),
             body: String::new(),
-            priority: None,
+            priority: Ranking::Unassessed,
             due: None,
             blocked_on: Vec::new(),
             assignee: Some(to_session("sess-1")),

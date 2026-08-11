@@ -83,10 +83,19 @@ list of addressed work is for.
 
 PRIORITY is P0 to P4, and it is the one thing that reorders a list:{levels}
 
-Almost everything is UNRANKED, and that is not a sixth level — it sorts exactly
-where P2 does. So P0 and P1 rise above the untriaged and P3 and P4 sink below
-it, and anything nobody has ranked keeps its place: oldest first, which is what
-makes old work get fixed rather than buried."
+FILING ONE MEANS SAYING. `task add` takes `--priority`, or `--unassessed` for
+work that is not yours to judge — filing into another session's domain is the
+ordinary case. Both are answers and both sort at P2; the difference is that P2
+claims somebody read it and called it ordinary, where UNASSESSED claims nobody
+has. Leaving both off is not an answer and is refused.
+
+UNASSESSED is not a sixth level — it sorts exactly where P2 does. So P0 and P1
+rise above it and P3 and P4 sink below, and anything nobody has judged keeps its
+place: oldest first, which is what makes old work get fixed rather than buried.
+
+The escape is there so the required flag cannot be satisfied by typing P2 at a
+question you did not answer. Everything on P0 and everything on P2 fail the same
+way — the rank stops carrying information."
     )
 }
 
@@ -160,6 +169,12 @@ enum Command {
         body: bool,
     },
     /// File a task.
+    ///
+    /// ⚠ **A filing must state urgency**, either `--priority` or
+    /// `--unassessed`. Both are answers; leaving both off is not, and is
+    /// refused before anything reaches the service. Pippijn, 2026-08-11: "I
+    /// want everything to have a priority."
+    #[command(group(clap::ArgGroup::new("rank").required(true).args(["priority", "unassessed"])))]
     Add {
         subject: String,
         /// The body. `-` reads stdin, which is how a session writes a long one
@@ -170,10 +185,25 @@ enum Command {
         /// `nobody` for the pile, or a session id.
         #[arg(long)]
         to: Option<To>,
-        /// How urgent: P0 to P4. Leave it off unless you mean it — see the
-        /// levels under `task --help`.
+        /// How urgent: P0 to P4. Required, unless you say `--unassessed`.
+        ///
+        /// The levels are under `task --help`. Read them before picking: they
+        /// are tests a task either passes or does not, and `P2` is the one to
+        /// reach for when none of the others fit.
         #[arg(long)]
         priority: Option<Priority>,
+        /// Say, explicitly, that you are not judging this one.
+        ///
+        /// ⚠ **Not a sixth level and not a shrug.** It sorts exactly where `P2`
+        /// does; the difference is that `P2` claims somebody read the task and
+        /// called it ordinary, and this claims nobody has. Use it when the work
+        /// is not yours to judge — filing into another session's domain is the
+        /// ordinary case — and leave the call to whoever picks it up.
+        ///
+        /// It exists so that the required flag above cannot be satisfied by
+        /// typing `P2` at a question you did not answer.
+        #[arg(long, conflicts_with = "priority")]
+        unassessed: bool,
         /// Task ids this one waits for. Repeat for several.
         #[arg(long = "blocked-on")]
         blocked_on: Vec<u64>,
@@ -821,14 +851,22 @@ async fn main() -> Result<()> {
             body: raw,
             to,
             priority,
+            // Read by clap's group, not here: `--unassessed` is the absence of
+            // `--priority` once one of the two is known to have been given.
+            unassessed: _,
             blocked_on,
             due,
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
-            if let Some(priority) = priority {
-                payload["priority"] = json!(priority.as_str());
-            }
+            // Always present, and null when unassessed: the service refuses a
+            // filing that never mentions it, so there is no "leave it out" arm
+            // here to fall down. clap's group guarantees exactly one of the two
+            // arrived, which is why `unassessed` needs no test of its own.
+            payload["priority"] = match priority {
+                Some(priority) => json!(priority.as_str()),
+                None => Value::Null,
+            };
             if !blocked_on.is_empty() {
                 payload["blocked_on"] = json!(blocked_on);
             }
