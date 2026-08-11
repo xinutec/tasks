@@ -18,6 +18,7 @@ fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
         status,
         priority: None,
         due: None,
+        escalated_to: None,
         overdue: false,
         blocked_on: Vec::new(),
         blocked: false,

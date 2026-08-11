@@ -10,10 +10,10 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 
 use crate::error::AppError;
-use crate::still_open;
 use crate::tasks::types::{
     Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Status, Task, TaskDetail, Updated,
 };
+use crate::{due_soon, still_open};
 
 type Result<T> = std::result::Result<T, AppError>;
 
@@ -80,6 +80,8 @@ struct Row {
     status: Status,
     priority: Option<Priority>,
     due: Option<NaiveDate>,
+    /// `P0` when a near deadline raises this task, else NULL — see `due_soon!`.
+    escalated_to: Option<Priority>,
     /// Whether `due` has passed, by the DATABASE's clock — see the projection.
     past_due: i8,
     /// The blockers, comma-joined by SQL — see the projection for why.
@@ -132,6 +134,7 @@ impl Row {
             status: self.status,
             priority: self.priority,
             due: self.due,
+            escalated_to: self.escalated_to,
             overdue: self.past_due != 0,
             blocked_on: parse_ids(self.blocked_on.as_deref()),
             blocked: self.open_blockers > 0,
@@ -156,6 +159,15 @@ macro_rules! select {
     ($tail:literal) => {
         concat!(
             "SELECT t.id, t.subject, t.status, t.priority, t.due, ",
+            // Reported as the VALUE it sorts as, not as a flag, so that no
+            // renderer has to know the rule — the week and the level both live
+            // here. NULL when the stored rank is already `P0`, because nothing
+            // was raised and saying otherwise would invite a client to draw a
+            // difference that does not exist.
+            "IF(",
+            due_soon!("t.due"),
+            " AND COALESCE(t.priority, 'P2') > 'P0', ",
+            "'P0', NULL) AS escalated_to, ",
             // One clock — the database's — so the CLI, the app and the digest
             // cannot disagree about which day it is. `CURDATE()` is the session
             // zone, pinned to UTC in `db::connect`.
@@ -240,7 +252,16 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         query.push(" AND t.assignee_kind = 'person' AND t.assignee_person = ");
         query.push_bind(person);
     }
-    query.push(" ORDER BY COALESCE(t.priority, 'P2'), t.id");
+    // The sort key is the EFFECTIVE rank: a deadline inside the week raises a
+    // task to `P0` wherever it was set. This is the one thing a deadline is
+    // allowed to reorder, and only because Pippijn stated the rule — the earlier
+    // refusal to let dates reorder was about arithmetic overriding a human
+    // decision, and a rule he sets IS the decision.
+    query.push(concat!(
+        " ORDER BY IF(",
+        due_soon!("t.due"),
+        ", 'P0', COALESCE(t.priority, 'P2')), t.id"
+    ));
     let rows: Vec<Row> = query
         .build_query_as()
         .fetch_all(pool)

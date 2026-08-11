@@ -357,22 +357,27 @@ async fn ranking_and_blocking_in_one_change_is_judged_on_the_result() {
 /// impossible.
 mod deadlines {
     use super::*;
-    use chrono::NaiveDate;
+    use chrono::{Duration, NaiveDate, Utc};
 
-    fn day(s: &str) -> NaiveDate {
-        s.parse().expect("a date")
+    /// ⚠ **Relative, because a hardcoded future date is a test with an expiry
+    /// date.** As first written these were literals — `2026-09-01` for "not
+    /// overdue", `2026-08-12` for "has a deadline" — both true the afternoon
+    /// they were written, both false within a month, and the second one broke
+    /// the same day, when a deadline inside a week started raising the rank.
+    fn day(days: i64) -> NaiveDate {
+        (Utc::now() + Duration::days(days)).date_naive()
     }
 
     async fn due(
         pool: &sqlx::MySqlPool,
         id: u64,
-        on: &str,
+        days: i64,
     ) -> std::result::Result<(), tasks::error::AppError> {
         repo::update(
             pool,
             id,
             Change {
-                due: Some(day(on)),
+                due: Some(day(days)),
                 ..Default::default()
             },
             &pippijn(),
@@ -387,17 +392,15 @@ mod deadlines {
         let blocker = file(&pool, "must happen first", None).await;
         let waiting = file(&pool, "cannot precede it", None).await;
         block(&pool, waiting, &[blocker]).await.expect("blocking");
-        due(&pool, blocker, "2026-09-01")
-            .await
-            .expect("the blocker");
+        due(&pool, blocker, 60).await.expect("the blocker");
 
         let msg = refusal(
-            due(&pool, waiting, "2026-08-15")
+            due(&pool, waiting, 30)
                 .await
                 .expect_err("a task was due before its blocker"),
         );
         assert!(msg.contains(&format!("#{blocker}")), "{msg}");
-        due(&pool, waiting, "2026-09-01")
+        due(&pool, waiting, 60)
             .await
             .expect("the same day is allowed");
     }
@@ -409,15 +412,11 @@ mod deadlines {
         let blocker = file(&pool, "must happen first", None).await;
         let waiting = file(&pool, "waits for it", None).await;
         block(&pool, waiting, &[blocker]).await.expect("blocking");
-        due(&pool, blocker, "2026-08-20")
-            .await
-            .expect("the blocker");
-        due(&pool, waiting, "2026-08-25")
-            .await
-            .expect("the dependent");
+        due(&pool, blocker, 30).await.expect("the blocker");
+        due(&pool, waiting, 40).await.expect("the dependent");
 
         let msg = refusal(
-            due(&pool, blocker, "2026-09-30")
+            due(&pool, blocker, 90)
                 .await
                 .expect_err("a blocker was pushed past its dependent"),
         );
@@ -428,11 +427,11 @@ mod deadlines {
     async fn a_deadline_is_recorded_and_can_be_taken_off_again() {
         let pool = common::fresh_db().await;
         let id = file(&pool, "has a date", None).await;
-        due(&pool, id, "2026-09-01").await.expect("setting");
+        due(&pool, id, 60).await.expect("setting");
 
         let task = repo::get(&pool, id).await.expect("read").expect("a task");
-        assert_eq!(task.task.due, Some(day("2026-09-01")));
-        assert!(!task.task.overdue, "a date next month is not overdue");
+        assert_eq!(task.task.due, Some(day(60)));
+        assert!(!task.task.overdue, "a date two months out is not overdue");
 
         repo::update(
             &pool,
@@ -453,7 +452,8 @@ mod deadlines {
             .filter(|e| e.kind == "due")
             .filter_map(|e| e.detail.as_deref())
             .collect();
-        assert_eq!(moves, vec!["none → 2026-09-01", "2026-09-01 → none"]);
+        let d = day(60);
+        assert_eq!(moves, vec![format!("none → {d}"), format!("{d} → none")]);
     }
 
     #[tokio::test]
@@ -462,9 +462,9 @@ mod deadlines {
         // CLI, the app and the digest cannot disagree about which day it is.
         let pool = common::fresh_db().await;
         let id = file(&pool, "late", None).await;
-        due(&pool, id, "2020-01-01").await.expect("setting");
+        due(&pool, id, -2000).await.expect("setting");
         let task = repo::get(&pool, id).await.expect("read").expect("a task");
-        assert!(task.task.overdue, "2020 has not passed?");
+        assert!(task.task.overdue, "a date years back is not overdue?");
     }
 
     #[tokio::test]
@@ -473,10 +473,8 @@ mod deadlines {
         let blocker = file(&pool, "was first", None).await;
         let waiting = file(&pool, "waited", None).await;
         block(&pool, waiting, &[blocker]).await.expect("blocking");
-        due(&pool, blocker, "2026-12-01")
-            .await
-            .expect("the blocker");
-        due(&pool, waiting, "2026-08-15")
+        due(&pool, blocker, 120).await.expect("the blocker");
+        due(&pool, waiting, 30)
             .await
             .expect_err("an open blocker allowed an earlier date");
 
@@ -491,23 +489,27 @@ mod deadlines {
         )
         .await
         .expect("finishing the blocker");
-        due(&pool, waiting, "2026-08-15")
+        due(&pool, waiting, 30)
             .await
             .expect("a closed blocker still held the date back");
     }
 
-    /// ⚠ **A deadline must not reorder anything.**
+    /// ⚠ **A FAR deadline must not reorder anything** — which is a narrower
+    /// claim than this test started with.
     ///
-    /// `repo::list` sorts by priority then id and that stays the only sort. A
-    /// deadline is evidence for a rank, not a competing answer — how long the
-    /// work takes is the term that would decide, and nothing records it. So a
-    /// date argues for a rank and a person makes it.
+    /// As first written it said *a deadline* must not reorder, with a fixture
+    /// due tomorrow, and it was correct until Pippijn added the rule that a
+    /// deadline inside a week raises the rank (`mod escalation`). What survives
+    /// is the half still worth defending: a date far enough out is evidence for
+    /// a rank rather than a substitute for one, and leaves the order alone. The
+    /// near half is now a stated rule rather than arithmetic overriding a
+    /// decision, which is the whole difference.
     #[tokio::test]
-    async fn a_deadline_does_not_move_a_task_up_the_list() {
+    async fn a_far_deadline_does_not_move_a_task_up_the_list() {
         let pool = common::fresh_db().await;
         let urgent = file(&pool, "ranked P1, no date", Some(Priority::P1)).await;
-        let dated = file(&pool, "ranked P4, due tomorrow", Some(Priority::P4)).await;
-        due(&pool, dated, "2026-08-12").await.expect("setting");
+        let dated = file(&pool, "ranked P4, due in three months", Some(Priority::P4)).await;
+        due(&pool, dated, 90).await.expect("setting");
 
         let order: Vec<u64> = repo::list(&pool, &Filter::default())
             .await
@@ -519,6 +521,131 @@ mod deadlines {
             order,
             vec![urgent, dated],
             "a deadline silently overrode a ranking decision"
+        );
+    }
+}
+
+/// A deadline inside the week raises the rank — Pippijn, 2026-08-11.
+///
+/// ⚠ **This is the one thing a deadline is allowed to reorder**, and it does not
+/// contradict `a_deadline_does_not_move_a_task_up_the_list` above: that pins
+/// that a FAR date changes nothing. The earlier refusal was about arithmetic
+/// overriding a human decision; a rule Pippijn states IS the decision, and it is
+/// also the case where `P0`'s own test ("every hour it stays open costs more")
+/// starts being true, since the hours are what is being spent.
+mod escalation {
+    use super::*;
+    use chrono::{Duration, Utc};
+
+    async fn due_in(
+        pool: &sqlx::MySqlPool,
+        id: u64,
+        days: i64,
+    ) -> std::result::Result<(), tasks::error::AppError> {
+        let day = (Utc::now() + Duration::days(days)).date_naive();
+        repo::update(
+            pool,
+            id,
+            Change {
+                due: Some(day),
+                ..Default::default()
+            },
+            &pippijn(),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn one(pool: &sqlx::MySqlPool, id: u64) -> tasks::tasks::types::Task {
+        repo::list(pool, &Filter::default())
+            .await
+            .expect("listing")
+            .into_iter()
+            .find(|t| t.id == id)
+            .expect("the task")
+    }
+
+    #[tokio::test]
+    async fn inside_the_week_a_task_sorts_as_p0_whatever_it_was_set_to() {
+        let pool = common::fresh_db().await;
+        let id = file(&pool, "due in three days", Some(Priority::P4)).await;
+        due_in(&pool, id, 3).await.expect("setting");
+
+        let task = one(&pool, id).await;
+        assert_eq!(task.escalated_to, Some(Priority::P0));
+        // ⚠ The STORED rank is untouched. Nothing writes P0 into the row: a job
+        // that did would edit history nobody asked for and need a scheduler to
+        // be right. This is recomputed from the date every time it is read.
+        assert_eq!(task.priority, Some(Priority::P4), "the stored rank moved");
+    }
+
+    /// ⚠ **The boundary, because "less than a week" has two readings.**
+    #[tokio::test]
+    async fn exactly_a_week_out_is_not_yet_inside_it() {
+        let pool = common::fresh_db().await;
+        let seven = file(&pool, "due in seven days", Some(Priority::P2)).await;
+        let six = file(&pool, "due in six days", Some(Priority::P2)).await;
+        due_in(&pool, seven, 7).await.expect("setting");
+        due_in(&pool, six, 6).await.expect("setting");
+
+        assert_eq!(one(&pool, seven).await.escalated_to, None);
+        assert_eq!(one(&pool, six).await.escalated_to, Some(Priority::P0));
+    }
+
+    #[tokio::test]
+    async fn a_task_already_p0_is_not_reported_as_raised() {
+        // Nothing was raised, and saying otherwise would invite a client to draw
+        // a difference that does not exist.
+        let pool = common::fresh_db().await;
+        let id = file(&pool, "already urgent", Some(Priority::P0)).await;
+        due_in(&pool, id, 1).await.expect("setting");
+        assert_eq!(one(&pool, id).await.escalated_to, None);
+    }
+
+    #[tokio::test]
+    async fn an_overdue_task_is_raised_too() {
+        let pool = common::fresh_db().await;
+        let id = file(&pool, "late", Some(Priority::P3)).await;
+        due_in(&pool, id, -5).await.expect("setting");
+        let task = one(&pool, id).await;
+        assert_eq!(task.escalated_to, Some(Priority::P0));
+        assert!(task.overdue);
+    }
+
+    #[tokio::test]
+    async fn a_task_with_no_deadline_is_never_raised() {
+        let pool = common::fresh_db().await;
+        let id = file(&pool, "no date at all", Some(Priority::P4)).await;
+        assert_eq!(one(&pool, id).await.escalated_to, None);
+    }
+
+    /// The raise has to reach the ORDER BY, not only the projection.
+    ///
+    /// A version that reported `escalated_to` and sorted on the stored rank
+    /// would draw a `P0!` marker at the bottom of the list, which is worse than
+    /// not marking it at all: the reader would believe the order.
+    #[tokio::test]
+    async fn the_raise_is_what_the_list_is_sorted_by() {
+        let pool = common::fresh_db().await;
+        let ordinary = file(&pool, "filed first, ranked P1", Some(Priority::P1)).await;
+        let soon = file(
+            &pool,
+            "filed second, P4 but due in two days",
+            Some(Priority::P4),
+        )
+        .await;
+        due_in(&pool, soon, 2).await.expect("setting");
+
+        let order: Vec<u64> = repo::list(&pool, &Filter::default())
+            .await
+            .expect("listing")
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(
+            order,
+            vec![soon, ordinary],
+            "the raised task did not reach the top"
         );
     }
 }

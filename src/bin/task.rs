@@ -666,10 +666,16 @@ fn line(task: &Value) -> String {
     // down the left edge, and the list is already sorted so they arrive in
     // order. Two spaces where there is no rank, so nothing shifts sideways
     // between a ranked line and an unranked one.
+    // A near deadline raises the rank; `!` marks a level nobody chose, so the
+    // order never reads as random. The rule lives in SQL — this only prints
+    // whichever value the service says the list was sorted by.
+    let rank = match task["escalated_to"].as_str() {
+        Some(raised) => format!("{raised}!"),
+        None => task["priority"].as_str().unwrap_or("").to_string(),
+    };
     let mut out = format!(
-        "{marker} #{:<4} {:<2} {}",
+        "{marker} #{:<4} {rank:<3} {}",
         task["id"].as_u64().unwrap_or(0),
-        task["priority"].as_str().unwrap_or(""),
         task["subject"].as_str().unwrap_or("")
     );
     if let Some(due) = task["due"].as_str() {

@@ -147,6 +147,31 @@ impl FromStr for Status {
 /// `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere` is what ties this to
 /// [`Status::is_open`]: nothing else can compare a match arm against a string
 /// living in a database.
+/// SQL for *a deadline close enough to raise the rank*, in exactly one place.
+///
+/// Pippijn's rule, 2026-08-11: **less than one week**. Seven days is his number
+/// rather than a guess, which is why it is a constant here and not a setting —
+/// a threshold somebody can change from a UI is one nobody can reason about.
+///
+/// Spelled once because it appears three times: the sort key, the projection
+/// that reports the raise, and the guard that stops a task already at `P0`
+/// claiming to have been raised. Three copies of a date comparison are three
+/// chances to disagree about what day it is.
+///
+/// `<` rather than `<=`: *less than* a week. A task due exactly seven days out
+/// is not yet inside it, and `tests/blocking.rs` pins that boundary.
+#[macro_export]
+macro_rules! due_soon {
+    ($column:literal) => {
+        concat!(
+            $column,
+            " IS NOT NULL AND ",
+            $column,
+            " < CURDATE() + INTERVAL 7 DAY"
+        )
+    };
+}
+
 #[macro_export]
 macro_rules! still_open {
     ($column:literal) => {
@@ -362,6 +387,29 @@ pub struct Task {
     /// a rank and a person makes it. See `repo::list`, still the only sort.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due: Option<NaiveDate>,
+    /// What this sorts as instead, when a near deadline has raised it.
+    ///
+    /// ⚠ **Absent is the ordinary case, and present always means
+    /// [`Priority::P0`].** Pippijn, 2026-08-11: *"can we make it P0 only when
+    /// there's less than 1 week until deadline?"* — so inside that week a task
+    /// sorts as `P0` whatever it was set to, and [`priority`](Self::priority)
+    /// still holds what somebody actually chose.
+    ///
+    /// ⚠ **Derived at read time, never written.** A job that stamped `P0` into
+    /// the row when the week arrived would edit history nobody asked for and
+    /// need a scheduler to be correct. This is recomputable from `due` and the
+    /// clock, so it cannot drift and cannot be wrong in the database.
+    ///
+    /// ⚠ **Carried as a value rather than a flag so no renderer has to know the
+    /// rule.** The CLI, the app and the digest each draw
+    /// `escalated_to.unwrap_or(priority)`; the week and the level it escalates
+    /// to live in one place, in SQL.
+    ///
+    /// This is also the case where `P0`'s own test starts passing: with a fixed
+    /// date and work remaining, every hour really does cost more, because the
+    /// hours are the resource being spent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escalated_to: Option<Priority>,
     /// Whether [`due`](Self::due) has passed, by the database's clock.
     ///
     /// Derived server-side for the same reason [`blocked`](Self::blocked) is:

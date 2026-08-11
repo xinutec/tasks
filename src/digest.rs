@@ -194,7 +194,12 @@ fn line(task: &Task) -> String {
     // The ORDER BY has already put these at the top — `repo::list` sorts,
     // `render` never does — so this marks lines that are already where the
     // reader is looking rather than asking anybody to scan for them.
-    if let Some(priority) = task.priority {
+    // `escalated_to` first: a near deadline raises the rank, and the line has to
+    // show what the list actually sorted by or the order reads as random. The
+    // `!` says the level was not the one anybody chose — `task show` gives both.
+    if let Some(raised) = task.escalated_to {
+        line.push_str(&format!(" [{raised}!]"));
+    } else if let Some(priority) = task.priority {
         line.push_str(&format!(" [{priority}]"));
     }
     // ⚠ **Only while a blocker is still open**, which is what `blocked` means —

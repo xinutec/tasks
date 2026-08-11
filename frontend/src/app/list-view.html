@@ -61,7 +61,15 @@
                    there is nothing to draw for the tasks that have none — which
                    is nearly all of them. The backend has already sorted these
                    to the top; this says why they are there. -->
-              @if (row.task.priority) {
+              <!-- The raised rank when a deadline is near, else the one that
+                   was set. `!` marks a level nobody chose, so the order never
+                   reads as random. The rule lives in SQL — this only draws
+                   whichever value the list was sorted by. -->
+              @if (row.task.escalated_to) {
+                <span class="priority raised" [class]="row.task.escalated_to"
+                  >{{ row.task.escalated_to }}!</span
+                >
+              } @else if (row.task.priority) {
                 <span class="priority" [class]="row.task.priority">{{
                   row.task.priority
                 }}</span>

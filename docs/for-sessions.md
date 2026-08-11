@@ -234,11 +234,17 @@ means *still waiting*; nothing there means nothing is in the way.
 
 ## When it has to be done by
 
-⚠ **`--due` does NOT reorder anything.** The list is ordered by priority, still,
-and that is the only sort there is. A deadline is *evidence for* a rank rather
-than a competing answer to what-next: how long the work takes is the term that
-would decide the order, and nothing anywhere records it. So a near date is an
-argument for ranking something up, and a person makes that call.
+⚠ **Inside the last week, a deadline RAISES the rank to `P0`.** Pippijn's rule,
+2026-08-11. The line reads `P0!` — the `!` says the level is not the one anybody
+set, and `task show` prints both. Nothing is written: the raise is recomputed
+from the date every time it is read, so it appears on its own and goes away on
+its own.
+
+⚠ **Further out than a week it reorders NOTHING.** A deadline is evidence for a
+rank rather than a competing answer to what-next: how long the work takes is the
+term that would decide, and nothing anywhere records it. So a far date is an
+argument for ranking something up and a person makes that call; a near one is
+Pippijn's stated rule, which is a decision rather than arithmetic.
 
 ⚠ **A task may not be due before something it is blocked on.** That one is
 arithmetic rather than judgement — you cannot finish before the thing you are

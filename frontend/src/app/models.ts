@@ -55,6 +55,19 @@ export interface Task {
    * answer to *what next*, so do not sort by it here either.
    */
   due?: string | null;
+  /**
+   * What this sorts as instead, when a near deadline has raised it — always
+   * `'P0'` when present, absent otherwise.
+   *
+   * ⚠ **Draw `escalated_to ?? priority`, and do not work the rule out here.**
+   * The week (less than seven days) and the level both live in SQL, so this
+   * carries the VALUE rather than a flag. A client that recomputed it would be
+   * a second copy of the rule and a second opinion about what day it is.
+   *
+   * ⚠ **`priority` still holds what somebody actually chose** — nothing is
+   * written when a deadline comes close. This is derived on every read.
+   */
+  escalated_to?: Priority | null;
   /** Whether `due` has passed, by the SERVER's clock. Absent means false — and
    *  do not recompute it from `due` here, or two clients in two timezones will
    *  disagree about which day it is. */

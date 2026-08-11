@@ -64,7 +64,8 @@ export const TASKS = [
     // Ranked, and in the pile: the widest a list row's meta gets, since a pile
     // row also carries a "from" chip. If a rank is going to collide with
     // anything at phone width it is here.
-    priority: 'P0',
+    priority: 'P3',
+    escalated_to: 'P0',
     // A deadline that has passed: the one state worth colouring, and the widest
     // this row gets — rank, date, id and a "from" chip at phone width.
     due: '2026-08-01',
@@ -149,6 +150,9 @@ export const DETAIL = {
   // spells the ids out.
   blocked_on: [80, 106],
   blocked: true,
+  // Raised by its deadline, so the task screen draws BOTH the level it sorts
+  // as and the one somebody set — the pair only this screen shows.
+  escalated_to: 'P0',
   body: '…',
   body_html: `<p>Read as a language problem, the reader is an <strong>abstract
 interpreter</strong>: it evaluates as far as the text determines and stops.</p>

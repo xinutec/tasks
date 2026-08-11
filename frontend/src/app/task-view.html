@@ -7,7 +7,12 @@
       <p class="where">
         <span class="id">#{{ t.id }}</span>
         <span class="status" [class]="t.status">{{ statusLabel[t.status] }}</span>
-        @if (t.priority) {
+        <!-- Both, here: what it sorts as AND what somebody set, because this is
+             the screen where "why is this at the top" gets asked. -->
+        @if (t.escalated_to) {
+          <span class="priority raised" [class]="t.escalated_to">{{ t.escalated_to }}!</span>
+          <span class="set">set {{ t.priority ?? 'unranked' }}</span>
+        } @else if (t.priority) {
           <span class="priority" [class]="t.priority">{{ t.priority }}</span>
         }
         <!-- The ids ARE drawn here, unlike the list: this is the one screen with

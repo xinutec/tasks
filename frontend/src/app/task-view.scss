@@ -25,6 +25,10 @@
     background: var(--mat-sys-surface-container-high);
   }
 
+  .set {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
   .due {
     font-variant-numeric: tabular-nums;
 
@@ -67,6 +71,15 @@
     &.P3,
     &.P4 {
       opacity: 0.6;
+    }
+    // ⚠ **A raised level must not look like a chosen one.** The `!` says it in
+    // text; the outline says it at a glance, so a reader scanning the top of the
+    // list can tell "somebody decided this" from "a date did". Same treatment in
+    // both views, because the two are read minutes apart.
+    &.raised {
+      background: transparent;
+      outline: 1px dashed currentColor;
+      outline-offset: -1px;
     }
   }
 
