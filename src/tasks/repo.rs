@@ -397,6 +397,23 @@ pub struct NewTask {
     pub assignee: Option<Assignee>,
 }
 
+/// ⚠ **What the refusal SAYS, and nothing about whether there is one.** The
+/// type above is what enforces this — `Ranking` has no reading for an absent
+/// key — and if the two ever disagree the deserialiser still refuses, with
+/// serde's wording instead of these words. So the cost of forgetting to keep
+/// this level is a worse message, never an accepted filing.
+///
+/// It says both answers because saying only the first is what the whole rule
+/// was going to be misread as. See `crate::wire`.
+impl crate::wire::RequiredKeys for NewTask {
+    fn required() -> &'static [(&'static str, &'static str)] {
+        &[(
+            "priority",
+            r#""P0" to "P4" if you have judged it, or null for unassessed if nobody has"#,
+        )]
+    }
+}
+
 /// A change to an existing task. Every field is optional and absent means
 /// *leave it alone* — a genuine partial update, so a client changing a status
 /// need not restate a body it has not read.
@@ -444,6 +461,15 @@ pub struct Change {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
 }
+
+/// Nothing is required of a change, and taking the default is how that is said.
+///
+/// ⚠ **Not an oversight to be tidied up later by copying `NewTask`'s list.** A
+/// change means *leave alone what I did not mention*, so a client moving a
+/// status must not have to restate a priority it has never read — and requiring
+/// one here would make every edit through this route restate the rank, which is
+/// how a rank stops being something somebody said.
+impl crate::wire::RequiredKeys for Change {}
 
 fn check_subject(subject: &str) -> Result<String> {
     let subject = subject.trim();

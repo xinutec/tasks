@@ -13,6 +13,7 @@ use crate::sessions;
 use crate::state::AppState;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Task, TaskDetail, Updated};
+use crate::wire::{RequiredKeys, Wire};
 
 /// Every `/api` path that is not a route.
 ///
@@ -179,7 +180,7 @@ pub async fn create(
     Access(viewer): Access,
     SeenAs(called): SeenAs,
     State(app): State<AppState>,
-    Json(new): Json<NewTask>,
+    Wire(new): Wire<NewTask>,
 ) -> Result<Json<Task>, AppError> {
     let actor = viewer.actor();
     if let Viewer::Session(id) = &viewer {
@@ -195,7 +196,7 @@ pub async fn update(
     SeenAs(called): SeenAs,
     State(app): State<AppState>,
     Path(id): Path<u64>,
-    Json(change): Json<Change>,
+    Wire(change): Wire<Change>,
 ) -> Result<Json<Updated>, AppError> {
     let actor = viewer.actor();
     if let Viewer::Session(session) = &viewer {
@@ -217,6 +218,14 @@ pub struct Rename {
     pub name: String,
 }
 
+/// `name` is not listed, and that is the proportionate answer rather than an
+/// omission. The type refuses a rename that names nothing either way; what
+/// listing a key buys is a sentence explaining an answer a caller would not
+/// guess, and here there is only one thing to send. Compare `NewTask`, where
+/// the unguessable answer — `null`, for *nobody has judged this* — is the whole
+/// reason the key is required at all.
+impl RequiredKeys for Rename {}
+
 /// Tell the service what a session now calls itself.
 ///
 /// ⚠ **A rename is an UPDATE of one column and moves nothing.** The id is the
@@ -227,7 +236,7 @@ pub async fn rename(
     Access(viewer): Access,
     State(app): State<AppState>,
     Path(id): Path<String>,
-    Json(body): Json<Rename>,
+    Wire(body): Wire<Rename>,
 ) -> Result<impl IntoResponse, AppError> {
     if let Viewer::Session(own) = &viewer
         && own != &id

@@ -177,8 +177,15 @@ export interface NewTask {
    *
    * Both sort at `P2`. What the pair buys is that `P2` means *somebody looked
    * and called it ordinary*, where it used to be indistinguishable from
-   * *nobody looked*. Send `null` rather than omitting the key: omitting it is
-   * a 4xx, not a default.
+   * *nobody looked*. Send `null` rather than omitting the key — omitting it is
+   * a **400** naming both answers, not a default:
+   *
+   * > `priority` is required: "P0" to "P4" if you have judged it, or null for
+   * > unassessed if nobody has. Leaving the key out is not a default.
+   *
+   * ⚠ **A cached bundle of this file older than `5dce9b6` is the one client
+   * that really hits it**, which is the reason that message says as much as it
+   * does — see `src/wire.rs`.
    */
   // dev-lint: allow-wire-mirror the Rust side is `Ranking`, not `Option<Priority>`, and the rule reads the null arm off the TYPE. `Ranking` is a hand-written Deserialize whose whole purpose is that `null` is legal and ABSENCE is not — the one shape an Option cannot express. Null is right here; the rule cannot see it.
   priority: Priority | null;
