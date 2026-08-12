@@ -13,10 +13,11 @@
 //! script, or **a phone still running a pre-`5dce9b6` bundle**, which posts
 //! without the key and gets whatever this file pins.
 //!
-//! None of these requests reaches the database — a body is refused during
-//! extraction, before the handler runs — so they take a lazy pool, the way
-//! `tests/access.rs` does. `filing_a_whole_task_still_works` is the exception
-//! and says why.
+//! A refused body never reaches the database — an extractor answers before the
+//! handler runs — so these take a lazy pool pointed at nothing, the way
+//! `tests/access.rs` does. Two tests are deliberately the other way round and
+//! say so: `a_change_may_still_leave_priority_out` uses the unreachable pool as
+//! its evidence, and `filing_a_whole_task_still_works` takes the real one.
 
 mod common;
 
@@ -141,9 +142,6 @@ async fn a_priority_that_is_present_and_wrong_is_refused_for_that() {
 /// mentions no priority is a normal edit, not a refusal.
 #[tokio::test]
 async fn a_change_may_still_leave_priority_out() {
-    // Reaches the database — there is no such task — so it must NOT be refused
-    // during extraction. A 400 here would mean the required-key rule had leaked
-    // onto the wrong body type.
     let app = app();
     let res = app
         .oneshot(
@@ -158,10 +156,18 @@ async fn a_change_may_still_leave_priority_out() {
         )
         .await
         .expect("the router answered");
-    assert_ne!(
+    // ⚠ **500 is the PASS here, and it is asserted rather than merely allowed.**
+    // The body got through extraction and the handler then went looking for a
+    // database that is not there — which is exactly the evidence wanted, since
+    // nothing downstream of the extractor can run until the extractor lets go.
+    // `assert_ne!(BAD_REQUEST)` would have said the same thing about a 401,
+    // i.e. it would still pass on the day this stopped reaching the handler at
+    // all.
+    assert_eq!(
         res.status(),
-        StatusCode::BAD_REQUEST,
-        "an edit that leaves priority alone was refused as if it were a filing"
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "an edit that leaves priority alone never reached the handler — the \
+         required-key rule has leaked onto the wrong body type"
     );
 }
 
