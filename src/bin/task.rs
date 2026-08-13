@@ -43,7 +43,9 @@ use anyhow::{Context, Result, bail};
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
+use tokio::io::AsyncWriteExt;
 
+use tasks::tasks::duplicates;
 use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
 use tasks::tasks::selection::list_query;
@@ -210,6 +212,14 @@ enum Command {
         /// The day it has to be done by: YYYY-MM-DD.
         #[arg(long)]
         due: Option<NaiveDate>,
+        /// Skip the check for a task that says this already.
+        ///
+        /// The check costs one Haiku call and 8-25 seconds, after the filing has
+        /// already landed. Worth skipping when filing a batch, or on a machine
+        /// with no `claude` on its PATH — though that case needs no flag, since
+        /// a missing binary is reported and ignored.
+        #[arg(long)]
+        no_duplicate_check: bool,
     },
     /// Mark a task as being worked on.
     Start { id: TaskRef },
@@ -662,6 +672,140 @@ fn known_sessions(rows: &Value) -> Vec<(String, Option<String>)> {
         .collect()
 }
 
+/// The model that reads the list. The cheapest one there is, deliberately:
+/// this rides the same subscription allowance as the session that ran the
+/// command, and a second opinion about a title is not worth taking room from
+/// the work. Named in full rather than by alias so that changing model is a
+/// change to this line.
+const CHECKER: &str = "claude-haiku-4-5-20251001";
+
+/// How long one check may take before it is abandoned.
+///
+/// The measured spread over five replayed filings was 8–24 seconds against 134
+/// open tasks. This guards a call that never returns rather than one that is
+/// slow, and it is time a session spends waiting after its task is already
+/// filed.
+const PATIENCE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Whether anything open already says what is being filed.
+///
+/// ⚠ **Every open task, not this session's.** The duplicate that matters is the
+/// one another conversation filed — it is the only kind nobody can see — so this
+/// deliberately asks the widest question the list supports, and is the one place
+/// in this CLI that does. `--all`'s reasoning in `selection.rs` is about what
+/// costs a prompt its bytes; this costs one command's stderr.
+async fn already_filed(
+    client: &Client,
+    filed: u64,
+    subject: &str,
+) -> Result<Vec<duplicates::Match>> {
+    let query = list_query(true, false, false, false, None)?;
+    let req = client
+        .request(reqwest::Method::GET, "/api/tasks")
+        .query(&query);
+    let open = client.send(req).await?.unwrap_or(json!([]));
+    let corpus: Vec<(u64, String)> = open
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|task| Some((task["id"].as_u64()?, task["subject"].as_str()?.to_string())))
+        // The task just filed is on this list. Asking whether it duplicates
+        // itself is the one answer guaranteed to be useless.
+        .filter(|(id, _)| *id != filed)
+        .collect();
+    if corpus.is_empty() {
+        return Ok(Vec::new());
+    }
+    let said = ask(&duplicates::prompt(subject, &corpus)).await?;
+    Ok(duplicates::parse(&said, filed))
+}
+
+/// Put the question to a one-shot session and leave nothing behind.
+///
+/// ⚠ **Every call is a conversation, and a conversation is a file that outlives
+/// it.** memview's `console/src/gist.rs` found 2,299 of these and 57 MB in the
+/// three days after its own sweep was written, because a `claude -p` call files
+/// a transcript like any other session and nothing was removing them. So the id
+/// is named here rather than left to the CLI, and the file goes the moment the
+/// answer is in hand — including on the failing paths, which leave exactly the
+/// same file as the working one.
+async fn ask(prompt: &str) -> Result<String> {
+    let named = named();
+    let said = call(prompt, &named).await;
+    discard(&named);
+    said
+}
+
+/// The call itself, up to the words that came back.
+///
+/// ⚠ **On stdin, not in the argument list.** The prompt carries every open
+/// title — 13,720 bytes when this was written — and an argument that size is at
+/// the mercy of a shell's limits and of anything that logs a command line.
+async fn call(prompt: &str, named: &str) -> Result<String> {
+    let mut child = tokio::process::Command::new("claude")
+        .current_dir(std::env::temp_dir())
+        .arg("-p")
+        .args(["--session-id", named])
+        .args(["--model", CHECKER])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .context("no `claude` on PATH")?;
+    let mut stdin = child.stdin.take().context("claude took no stdin")?;
+    stdin
+        .write_all(prompt.as_bytes())
+        .await
+        .context("writing the prompt")?;
+    stdin.flush().await.context("writing the prompt")?;
+    // Closed, because `-p` reads until end of file and would otherwise wait for
+    // the rest of a prompt that has already been sent in full.
+    drop(stdin);
+    let out = tokio::time::timeout(PATIENCE, child.wait_with_output())
+        .await
+        .with_context(|| format!("no answer in {}s", PATIENCE.as_secs()))?
+        .context("waiting for claude")?;
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// A session id for one of these calls.
+///
+/// A version-4 UUID by hand rather than a dependency: `rand` is already in the
+/// tree and this is the only place in the project that needs one.
+fn named() -> String {
+    let mut bytes = [0u8; 16];
+    rand::fill(&mut bytes);
+    // Version 4, variant 1 — the CLI validates the shape of what it is given.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
+}
+
+/// Remove the transcript one of these calls left behind.
+///
+/// Silent when there is nothing to remove. A CLI that never got as far as
+/// writing a file, or one that files them somewhere else entirely, is not a
+/// failure of the filing this was checking.
+fn discard(named: &str) {
+    let Ok(home) = std::env::var("HOME") else {
+        return;
+    };
+    let projects = std::path::Path::new(&home).join(".claude").join("projects");
+    if let Some(path) = tasks::agent_name::transcript_of(&projects, named) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 /// A `--body` value, with `-` meaning stdin.
 fn body(arg: &str) -> Result<String> {
     if arg != "-" {
@@ -856,6 +1000,7 @@ async fn main() -> Result<()> {
             unassessed: _,
             blocked_on,
             due,
+            no_duplicate_check,
         } => {
             client.writing()?;
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
@@ -882,6 +1027,20 @@ async fn main() -> Result<()> {
                 .json(&payload);
             let task = client.send(req).await?.context("no task came back")?;
             emit(cli.json, &task, || println!("{}", line(&task)));
+            // After the filing and never before it. The task is on the list by
+            // the time a model is asked anything, so a check that hangs, fails
+            // or is not installed costs a note and never a filing.
+            if !no_duplicate_check && let Some(filed) = task["id"].as_u64() {
+                match already_filed(&client, filed, &subject).await {
+                    Ok(found) if found.is_empty() => {}
+                    Ok(found) => eprint!("{}", duplicates::report(&found)),
+                    // ⚠ **Said out loud, because silence here is a claim.** If a
+                    // failed check printed nothing it would read exactly like a
+                    // clean one, and the session would file the second copy
+                    // believing the list had been searched.
+                    Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
+                }
+            }
         }
 
         Command::Start { id } => patch(&client, cli.json, id, json!({ "status": "doing" })).await?,

@@ -54,6 +54,25 @@ const NEEDLES: [&str; 2] = [
 /// the shape of the line, a name older than [`TAIL_WINDOW`]. The caller keeps
 /// whatever name the service already had, which is the behaviour that existed
 /// before this module.
+/// Where a session's transcript is, by id rather than by working out the path.
+///
+/// ⚠ **The directory under `projects/` is an undocumented encoding of the
+/// working directory**, and memview's `past.rs` opens with the account of
+/// guessing it wrong. The id is enough: every candidate is tried and the first
+/// that exists is the answer.
+///
+/// This exists for the one-shot sessions `task add`'s duplicate check runs —
+/// every `claude -p` call files a transcript, and memview measured that
+/// accumulate to 2,299 files and 57 MB in three days when nothing removed them.
+/// Naming the session is what makes the leftover findable.
+pub fn transcript_of(projects_root: &Path, session: &str) -> Option<std::path::PathBuf> {
+    std::fs::read_dir(projects_root)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path().join(format!("{session}.jsonl")))
+        .find(|path| path.exists())
+}
+
 pub fn from_projects(projects_root: &Path, session: &str) -> Option<String> {
     let Ok(entries) = std::fs::read_dir(projects_root) else {
         return None;

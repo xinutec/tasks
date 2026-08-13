@@ -118,6 +118,7 @@ task move <id> nobody           # put it back in the pile
 task add "One line" --priority P2 --body -   # yours, by default
 task add "One line" --priority P1 --to nobody  # for whoever picks it up
 task add "One line" --unassessed    # not yours to judge; whoever takes it decides
+task add "One line" --priority P2 --no-duplicate-check   # skip the check below
 task edit <id> --body -         # rewrite the prose
 task edit <id> --priority P0    # rank one that already exists
 task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
@@ -180,6 +181,30 @@ every turn, without opening anything.
 So: **the present tense at the top, the history under it.** Whoever opens this
 next wants to know where it stands, not how it got here — and the second
 question is only asked once the first is answered.
+
+## Filing something that is already on the list
+
+⚠ **You cannot see the other conversations' lists, so you will file a duplicate
+eventually.** `task add` now checks: once the filing has landed, the local
+`claude` reads your subject against every open task and prints what it thinks
+you may have re-filed. It goes to stderr, under the task, and looks like this:
+
+```text
+- [ ] #826  P4  health-bus-refresh has never actually run — the cron is suspended  (tasks)
+
+maybe already filed — a guess from titles, check before acting:
+  #760  health-bus-refresh cron is suspended and has never run
+```
+
+**It is a guess from titles, and it is often wrong about what is related.**
+`task show 760` before acting on one. If it is genuinely the same problem, `task
+drop` yours and add what you knew to the one that already exists — that is
+better than two half-descriptions of one thing.
+
+**Silence means it looked and found nothing.** A check that could not run says
+so explicitly (`duplicate check did not run: …`), because a failure that printed
+nothing would read exactly like a clean list. `--no-duplicate-check` skips it,
+which is worth doing when filing a batch — it costs 6–25 seconds a filing.
 
 ## What to do next: P0 to P4
 

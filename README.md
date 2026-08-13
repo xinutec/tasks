@@ -274,6 +274,16 @@ task digest                               # exactly what a prompt receives
 task rename <name>                        # tell the service what I call myself
 ```
 
+**`task add` says if something already covers it.** After the filing lands, the
+local `claude` is asked — as Haiku, on the caller's own subscription rather than
+an API key — whether the new subject is one of the open tasks in different words.
+That is the duplicate no one can catch by hand: sessions cannot see each other's
+lists, and the two spellings of one problem share no words. What comes back is
+printed on **stderr** under the task, so `--json` stdout stays parseable, and it
+is advisory in the strict sense — a failed, slow or missing `claude` says so and
+never costs the filing. `--no-duplicate-check` skips it; `src/tasks/duplicates.rs`
+carries the measurements that set its shape.
+
 `--body -` reads stdin, which is how a session writes a long one without fighting
 shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.
 **Never on argv** — a token in a command line is in every process listing on the
