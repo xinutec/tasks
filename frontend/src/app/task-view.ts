@@ -15,7 +15,7 @@ import {
   holderLabel,
   sessionLabel,
 } from './holder';
-import { Assignee, Priority, Status, TaskDetail } from './models';
+import { Assignee, Priority, Revision, Status, TaskDetail } from './models';
 import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
@@ -73,12 +73,66 @@ export class TaskView {
    *  a username written into a template. */
   readonly me = computed(() => this.store.personId());
 
+  /**
+   * The version this task's last edit replaced, once it has been asked for.
+   *
+   * ⚠ **Fetched on a tap, never on load.** It is a whole second body, and the
+   * reader who wants it is rare; `TaskDetail.restorable` is the cheap boolean
+   * that decides whether to offer the tap at all.
+   */
+  readonly previous = signal<Revision | null>(null);
+  readonly peeking = signal(false);
+
   constructor() {
     // An effect rather than `ngOnInit`, because the router reuses this
     // component when only the parameter changes: going from #4 to #7 through a
     // link would otherwise leave #4 on the screen with #7 in the address bar.
-    effect(() => this.load(Number(this.id())));
+    effect(() => {
+      // Cleared with the task, or #7 would open showing #4's previous version.
+      this.previous.set(null);
+      this.load(Number(this.id()));
+    });
     this.store.ensure();
+  }
+
+  /**
+   * Show what putting it back would put back.
+   *
+   * ⚠ **Two taps, and the first one only reads.** Undo overwrites the text
+   * currently on the page, so an accidental brush against a one-tap control
+   * would be the same class of accident this whole feature exists to repair —
+   * on a phone, where the thumb is imprecise, most of all. Showing the content
+   * rather than asking "are you sure?" also answers the question a reader
+   * actually has, which is *what would come back*.
+   */
+  peek(): void {
+    const task = this.task();
+    if (!task || this.peeking()) return;
+    this.peeking.set(true);
+    this.api.previous(task.id).subscribe({
+      next: (was) => {
+        this.previous.set(was);
+        this.peeking.set(false);
+      },
+      error: (err: unknown) => {
+        this.peeking.set(false);
+        this.failed.set(reason(err));
+      },
+    });
+  }
+
+  /** Put both columns back. Itself an ordinary edit, so it is undoable in turn
+   *  and the history records that it happened. */
+  restore(): void {
+    const was = this.previous();
+    if (!was) return;
+    this.previous.set(null);
+    this.change({ subject: was.subject, body: was.body });
+  }
+
+  /** Close the panel without restoring. */
+  dismiss(): void {
+    this.previous.set(null);
   }
 
   /** Hand it to the person. Hidden when a session is driving the page, which

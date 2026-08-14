@@ -133,6 +133,40 @@
       <p class="empty">No notes. The subject is the whole of it.</p>
     }
 
+    <!-- Offered only where there is something to put back, and never as one
+         tap: the first shows what would come back, the second does it. -->
+    @if (t.restorable) {
+      @if (previous(); as was) {
+        <section class="previous">
+          <h2>Before the last edit</h2>
+          <p class="whose">
+            Replaced {{ was.at | date: 'd MMM HH:mm' }} by {{ was.actor }}
+          </p>
+          <p class="was-subject">{{ was.subject }}</p>
+          <pre class="was-body">{{ was.body }}</pre>
+          <div class="row">
+            <button mat-flat-button [disabled]="saving()" (click)="restore()">
+              <mat-icon>undo</mat-icon>
+              Put this back
+            </button>
+            <button mat-button (click)="dismiss()">Keep what is there</button>
+          </div>
+        </section>
+      } @else {
+        <button mat-button class="peek" [disabled]="peeking()" (click)="peek()">
+          <!-- `restore`, not `history`: a Material icon renders its ligature as
+               literal text, so a `history` icon puts the word "History" in the
+               accessible tree beside this page's History heading. -->
+          <mat-icon>restore</mat-icon>
+          @if (peeking()) {
+            Reading…
+          } @else {
+            See what the last edit replaced
+          }
+        </button>
+      }
+    }
+
     @if (t.events.length > 0) {
       <section class="history">
         <h2>History</h2>

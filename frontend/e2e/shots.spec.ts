@@ -62,9 +62,26 @@ test('every screen, at phone width', async ({ page }) => {
   await shot(page, 'list', true);
 
   await page.goto(`/t/${TASKS[1].id}`);
-  await page.getByText('History').waitFor();
+  // By role, not by text: every Material icon contributes its ligature to the
+  // accessible tree, so a text query for a common word matches icons too.
+  await page.getByRole('heading', { name: 'History' }).waitFor();
   await shot(page, 'task', true);
 
+  // The undo panel, which is the one place the app shows a whole stored body as
+  // plain text. It is the tallest thing on the site and its two buttons sit
+  // UNDER it, so phone height is exactly where it can go wrong: a confirmation
+  // you have to scroll past is one nobody reads.
+  await page.getByRole('button', { name: /what the last edit replaced/ }).click();
+  await page.getByText('Before the last edit').waitFor();
+  await shot(page, 'undo', true);
+  // And the viewport alone, scrolled where the tap left it. ⚠ Scrolled
+  // deliberately: the panel opens below a whole task body, so a capture at the
+  // top of the page shows none of it and says nothing about whether the two
+  // buttons are reachable — which is the only question this shot is for.
+  await page.locator('.previous').scrollIntoViewIfNeeded();
+  await shot(page, 'undo-viewport');
+
+  await page.goto(`/t/${TASKS[1].id}`);
   // The move is what this app is for, and its menu is where the longest thing
   // on the site — a 36-character session id — has the least room.
   await page.locator('.move').click();
@@ -92,7 +109,9 @@ test('every screen, at phone width', async ({ page }) => {
 
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DROPPED }));
   await page.goto(`/t/${TASKS[1].id}`);
-  await page.getByText('History').waitFor();
+  // By role, not by text: every Material icon contributes its ligature to the
+  // accessible tree, so a text query for a common word matches icons too.
+  await page.getByRole('heading', { name: 'History' }).waitFor();
   await shot(page, 'dropped', true);
 
   await page.goto('/who');

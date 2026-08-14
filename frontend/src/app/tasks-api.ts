@@ -2,7 +2,17 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Change, Holder, Me, NewTask, Session, Task, TaskDetail, Updated } from './models';
+import {
+  Change,
+  Holder,
+  Me,
+  NewTask,
+  Revision,
+  Session,
+  Task,
+  TaskDetail,
+  Updated,
+} from './models';
 
 /** Thin client over the tasks backend. Same-origin in prod; via the dev proxy
  *  (proxy.conf.json) in `ng serve`. The session cookie rides along. */
@@ -34,6 +44,17 @@ export class TasksApi {
   /** A genuine partial update: send only what is changing. */
   change(id: number, change: Change): Observable<Updated> {
     return this.http.patch<Updated>(`/api/tasks/${id}`, change);
+  }
+
+  /**
+   * The task as it stood before its most recent edit.
+   *
+   * 404 when nothing has overwritten it. Only worth calling where
+   * `TaskDetail.restorable` is true — it carries a whole previous body, which is
+   * exactly what that flag exists to avoid fetching speculatively.
+   */
+  previous(id: number): Observable<Revision> {
+    return this.http.get<Revision>(`/api/tasks/${id}/previous`);
   }
 
   sessions(): Observable<Session[]> {

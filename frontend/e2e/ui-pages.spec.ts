@@ -74,7 +74,9 @@ test('a task — a 200-character subject, prose, and a raw session id in the his
   await mockApi(page);
   await page.goto('/t/92');
   await page.getByRole('heading', { name: 'Abstractly evaluate', exact: false }).waitFor();
-  await page.getByText('History').waitFor();
+  // By role: a Material icon renders its ligature into the accessible tree, so
+  // a text query for a common word can match an icon as well as the heading.
+  await page.getByRole('heading', { name: 'History' }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
   await expectNoClippedIcons(page, testInfo);

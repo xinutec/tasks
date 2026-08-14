@@ -648,6 +648,10 @@ pub struct TaskDetail {
     /// reading through the CLI wants the markdown it will edit.
     pub body_html: String,
     pub events: Vec<Event>,
+    /// Whether an edit has replaced text here, so there is something to put
+    /// back. Answered in SQL rather than by handing the client a revision it
+    /// mostly will not want — the same reasoning as [`Task::detailed`].
+    pub restorable: bool,
 }
 
 /// Something that happened to a task.

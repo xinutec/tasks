@@ -147,6 +147,18 @@ export interface TaskDetail extends Task {
   body: string;
   body_html: string;
   events: TaskEvent[];
+  /** Whether an edit has replaced text here, so there is a version to put back.
+   *  Answered by the server so the page need not fetch a whole previous body to
+   *  decide whether to offer the button. */
+  restorable: boolean;
+}
+
+/** A task as it stood before its most recent edit — `GET /api/tasks/{id}/previous`. */
+export interface Revision {
+  at: string;
+  actor: string;
+  subject: string;
+  body: string;
 }
 
 export interface Session {

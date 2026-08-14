@@ -182,3 +182,68 @@
 .failed {
   color: var(--mat-sys-on-surface-variant);
 }
+
+// What the last edit replaced, shown before it can be put back.
+//
+// ⚠ **The body is `pre`, and it is bounded.** This is the text as stored —
+// markdown, not rendered — because the question it answers is *what would come
+// back*, and rendering it would show something other than what the restore
+// writes. A stored body runs to thousands of characters, so it scrolls inside
+// its own box rather than pushing the two buttons off the end of a phone
+// screen: a confirmation you have to scroll past is one nobody reads.
+.previous {
+  margin-top: 1.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+
+  h2 {
+    margin: 0 0 0.25rem;
+    font: var(--mat-sys-title-small);
+  }
+
+  .whose,
+  .was-subject {
+    margin: 0 0 0.5rem;
+  }
+
+  .whose {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+  }
+
+  .was-subject {
+    font-weight: 500;
+  }
+
+  .was-body {
+    max-height: 40vh;
+    overflow: auto;
+    margin: 0 0 0.75rem;
+    padding: 0.5rem;
+    border-radius: var(--mat-sys-corner-small);
+    background: var(--mat-sys-surface);
+    // `pre` does not wrap, and a task body has lines far wider than a phone.
+    // Without this the box scrolls sideways under the thumb.
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    // The same reasoning `.md-content code` carries in styles.scss: monospace
+    // runs optically larger than Roboto at one size, so this tracks the text
+    // around it rather than adding a step to the scale.
+    // dev-lint: allow-font-size optical match to the enclosing text
+    font-size: 0.85em;
+    font-family: ui-monospace, monospace;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+}
+
+.peek {
+  margin-top: 1rem;
+}

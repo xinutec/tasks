@@ -140,11 +140,45 @@ export const TASKS = [
   },
 ];
 
+/** The version an edit replaced, as the undo panel shows it.
+ *
+ *  Long, and deliberately: a real task body runs to thousands of characters, and
+ *  the question this fixture answers is whether the panel's two buttons are
+ *  still reachable at phone height once a body that size is above them. */
+export const PREVIOUS = {
+  at: '2026-08-13T09:06:12Z',
+  actor: 'dev-lint',
+  subject: 'Abstractly evaluate a shell command, as far as the text determines and no further',
+  body: [
+    '## Where it stands, 2026-08-13',
+    '',
+    'The rule is COMPLETE, both layers wired, measured, and still switched off',
+    'behind `--recursion`. All three "what is left" items below are closed.',
+    '',
+    '## The one thing blocking adoption',
+    '',
+    '`main.rs:1604` probes for `cargo` and `opt` once, before any crate is',
+    'examined — deliberately, so a missing tool is not announced once per',
+    'manifest. But it happens before anything knows whether a crate opted in,',
+    'so a workspace that opted nothing in still pays for the probe and still',
+    'reports the tools as missing.',
+    '',
+    '| layer | file | tests |',
+    '| --- | --- | --- |',
+    '| 1 | totality-checks/src/ir.rs | 10 |',
+    '| 2 | totality-checks/src/descent.rs | 24 |',
+  ].join('\n'),
+};
+
 /** A task page with everything that can crowd the column: a long subject, a
  *  body with a fenced block and a table, and a history whose actor is a raw
  *  session id. */
 export const DETAIL = {
   ...TASKS[1],
+  // Something has overwritten this task, which is what puts the undo control on
+  // the screen at all. The task page is where a clobbered body is noticed, so
+  // the shot has to include it.
+  restorable: true,
   // Blocked here too, so the TASK screen's chip is drawn in the shot rather
   // than only the list's icon — they are different markup and only one of them
   // spells the ids out.
@@ -213,4 +247,7 @@ export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DETAIL }));
   await page.route('**/api/sessions', (r) => r.fulfill({ json: SESSIONS }));
   await page.route('**/api/holders', (r) => r.fulfill({ json: HOLDERS }));
+  // Registered after the task route: Playwright matches handlers newest-first,
+  // and this path is the one with an extra segment.
+  await page.route('**/api/tasks/*/previous', (r) => r.fulfill({ json: PREVIOUS }));
 }

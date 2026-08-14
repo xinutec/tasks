@@ -292,11 +292,24 @@ pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
         .context("reading a task body")?;
     let body = body.map(|(b,)| b).unwrap_or_default();
     let events = events(pool, id).await?;
+    // ⚠ **A boolean answered in SQL, for the reason `detailed` is.** The app has
+    // to know whether there is anything to put back before it can offer to;
+    // fetching the revision to find out would carry a second whole body to every
+    // reader who was never going to undo anything.
+    let restorable: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM task_revision r JOIN task_events e ON e.id = r.event_id \
+         WHERE e.task_id = ?)",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .context("looking for a previous version")?;
     Ok(Some(TaskDetail {
         task: row.into_task(),
         body_html: render_markdown(&body),
         body,
         events,
+        restorable,
     }))
 }
 

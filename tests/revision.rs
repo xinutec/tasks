@@ -275,3 +275,47 @@ async fn a_change_that_moves_no_text_reports_nothing_displaced() {
         "starting a task displaces no prose, and saying so would be a lie about a write"
     );
 }
+
+#[tokio::test]
+async fn the_task_says_whether_there_is_anything_to_put_back() {
+    // The app offers the control off this flag alone. Fetching a revision to
+    // find out would carry a whole second body to every reader who opens a task
+    // and was never going to undo anything.
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "as filed", "the first body").await;
+    let before = repo::get(&pool, id)
+        .await
+        .expect("reading")
+        .expect("the task");
+    assert!(!before.restorable, "nothing has overwritten it yet");
+
+    edit(&pool, id, body("something else")).await;
+    let after = repo::get(&pool, id)
+        .await
+        .expect("reading")
+        .expect("the task");
+    assert!(after.restorable, "an edit leaves something to put back");
+}
+
+#[tokio::test]
+async fn a_status_change_leaves_nothing_to_put_back() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "as filed", "the first body").await;
+    edit(
+        &pool,
+        id,
+        Change {
+            status: Some(Status::Doing),
+            ..Change::default()
+        },
+    )
+    .await;
+    let detail = repo::get(&pool, id)
+        .await
+        .expect("reading")
+        .expect("the task");
+    assert!(
+        !detail.restorable,
+        "starting a task overwrites no prose, and offering an undo would restore text nobody replaced"
+    );
+}
