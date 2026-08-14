@@ -8,6 +8,19 @@
   <mat-progress-bar mode="indeterminate" />
 } @else {
   <mat-toolbar class="bar">
+    <!-- ⚠ **A hamburger in the LEADING slot, and both halves of that matter.**
+         This menu holds destinations — finished work, who has what, signing out
+         — where the task screen's `more_vert` holds actions on the task in front
+         of you. Both used to be `more_vert`, which put two identical glyphs on
+         one screen with different scopes and nothing to tell them apart; every
+         other menu in this app is opened by an icon that says what it is
+         (`low_priority`, `swap_horiz`), and these two were the exception.
+         Changing the glyph alone was not enough: `DL-ANGULAR-NAV-ICON-POSITION`
+         fired, because a hamburger at the TRAILING edge just reads as an
+         overflow menu again. Navigation goes first, actions go last. -->
+    <button mat-icon-button [matMenuTriggerFor]="nav" aria-label="Menu">
+      <mat-icon>menu</mat-icon>
+    </button>
     <a routerLink="/" class="brand">tasks</a>
     <span class="spacer"></span>
     <!-- The one control that is always wanted, on the bar rather than behind a
@@ -16,9 +29,6 @@
     <a mat-icon-button routerLink="/new" aria-label="File a task">
       <mat-icon>add</mat-icon>
     </a>
-    <button mat-icon-button [matMenuTriggerFor]="nav" aria-label="Menu">
-      <mat-icon>more_vert</mat-icon>
-    </button>
     <mat-menu #nav="matMenu">
       <a mat-menu-item routerLink="/" [queryParams]="{ done: 1 }">
         <mat-icon>history</mat-icon>

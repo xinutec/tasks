@@ -81,6 +81,13 @@ test('every screen, at phone width', async ({ page }) => {
   await page.locator('.previous').scrollIntoViewIfNeeded();
   await shot(page, 'undo-viewport');
 
+  // The app bar's own menu, which had never been looked at — and is the reason
+  // the task screen's overflow needed a different glyph.
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Who has what' }).waitFor();
+  await shot(page, 'nav');
+
   await page.goto(`/t/${TASKS[1].id}`);
   // The move is what this app is for, and its menu is where the longest thing
   // on the site — a 36-character session id — has the least room.
