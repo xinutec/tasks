@@ -231,13 +231,16 @@ enum Command {
         due: Option<NaiveDate>,
         /// File it even though something open already says this.
         ///
-        /// One flag for both halves of the check, because they answer one
-        /// question: an open task with this exact subject refuses the filing,
-        /// and a Haiku call — 8-25 seconds, after the task has already landed —
-        /// reports the ones only a reader would spot. This is the way past
-        /// either. Worth it when filing a batch, or on a machine with no
-        /// `claude` on its PATH — though that case needs no flag, since a
-        /// missing binary is reported and ignored.
+        /// ⚠ **Both halves refuse, so this is the only way past either.** An
+        /// open task with the same subject is caught by string equality; the
+        /// ones only a reader would spot are caught by a Haiku call, which costs
+        /// 8-25 seconds before the task is filed. Neither is a guess you cannot
+        /// overrule — that is what this is for, and the body you were filing is
+        /// still in the command you just ran, so overruling is one re-run.
+        ///
+        /// Also the flag for filing a batch, and for a machine with no `claude`
+        /// on its PATH — though that case needs no flag, since a check that
+        /// cannot run files the task and says so.
         #[arg(long)]
         no_duplicate_check: bool,
     },
@@ -735,20 +738,16 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
         .collect())
 }
 
-/// Whether anything open already says what has just been filed.
+/// Whether anything open already says what is about to be filed.
 ///
-/// `corpus` was read before the filing, so it does not contain it — asking
-/// whether a task duplicates itself is the one answer guaranteed to be useless.
-async fn already_filed(
-    corpus: &[(u64, String)],
-    filed: u64,
-    subject: &str,
-) -> Result<Vec<duplicates::Match>> {
+/// `corpus` is read before the filing and so cannot contain it, which is what
+/// lets this refuse: there is nothing to undo yet.
+async fn already_filed(corpus: &[(u64, String)], subject: &str) -> Result<Vec<duplicates::Match>> {
     if corpus.is_empty() {
         return Ok(Vec::new());
     }
     let said = ask(&duplicates::prompt(subject, corpus)).await?;
-    Ok(duplicates::parse(&said, filed))
+    Ok(duplicates::parse(&said, corpus))
 }
 
 /// Put the question to a one-shot session and leave nothing behind.
@@ -1093,6 +1092,22 @@ async fn main() -> Result<()> {
             if let Some(already) = duplicates::same_subject(&subject, &corpus) {
                 bail!("{}", duplicates::collision(already));
             }
+            // ⚠ **The model runs BEFORE the POST, because a refusal it comes
+            // after is not a refusal.** This cost the filing 8-25 seconds of
+            // latency it used to spend after the task already existed; that is
+            // the price of the default Pippijn asked for on 2026-08-14.
+            //
+            // ⚠ **A check that could not run files the task.** Only a model that
+            // actually named something refuses. A missing `claude`, a timeout or
+            // an unreadable answer must never cost a filing — a session that
+            // cannot write things down is worse than any duplicate.
+            if !no_duplicate_check {
+                match already_filed(&corpus, &subject).await {
+                    Ok(found) if !found.is_empty() => bail!("{}", duplicates::refusal(&found)),
+                    Ok(_) => {}
+                    Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
+                }
+            }
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
             // Always present, and null when unassessed: the service refuses a
             // filing that never mentions it, so there is no "leave it out" arm
@@ -1120,17 +1135,6 @@ async fn main() -> Result<()> {
             // After the filing and never before it. The task is on the list by
             // the time a model is asked anything, so a check that hangs, fails
             // or is not installed costs a note and never a filing.
-            if !no_duplicate_check && let Some(filed) = task["id"].as_u64() {
-                match already_filed(&corpus, filed, &subject).await {
-                    Ok(found) if found.is_empty() => {}
-                    Ok(found) => eprint!("{}", duplicates::report(filed, &found)),
-                    // ⚠ **Said out loud, because silence here is a claim.** If a
-                    // failed check printed nothing it would read exactly like a
-                    // clean one, and the session would file the second copy
-                    // believing the list had been searched.
-                    Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
-                }
-            }
         }
 
         Command::Start { id } => patch(&client, cli.json, id, json!({ "status": "doing" })).await?,

@@ -13,28 +13,40 @@
 //! new subject against every open one; what comes back is printed under the
 //! task, for the session to act on or ignore.
 //!
-//! ## Advisory, and it has to be
+//! ## It refuses, and that was decided against the first measurement
 //!
-//! ⚠ **The model half never refuses a filing and must not learn how.** Measured against
-//! the live list on 2026-08-13, an all-pairs sweep over the 134 open titles
-//! returned nine confident groups of which **one** was a real duplicate — the
-//! rest were same-area, different-problem, which is the failure this exists to
-//! avoid making worse. At that precision a gate would refuse correct filings
-//! more often than it caught wrong ones, and a session that cannot file is a
-//! session that stops writing things down.
+//! Pippijn, 2026-08-14: *"The client should be able to override it and file it
+//! anyway, but by default it should not file duplicates."*
 //!
-//! Asked the narrower question — *one* new subject against the list, which is
-//! what actually happens at filing time — five replayed cases came back 5/5
-//! correct: it found the two real overlaps (#760→#255, #777→#726) and stayed
-//! quiet on the three that only looked related. That is the question this module
-//! asks, and the reason it is worth asking at all.
+//! ⚠ **This module shipped advisory on 2026-08-13 and the argument for that is
+//! still true — it just lost to what the advice cost.** An all-pairs sweep over
+//! the 134 open titles returned nine confident groups of which **one** was real;
+//! the rest were same-area, different-problem. That is the number a gate has to
+//! be judged against, and it says a gate will refuse correct filings.
 //!
-//! ## One exception, and it is not a guess
+//! What settled it is that the all-pairs number is not the question asked here.
+//! Asked the narrower one — *one* new subject against the list, which is what
+//! happens at filing time — five replayed cases came back 5/5, and the field
+//! record since is 3 real out of 4 warnings: #859→#853 was the false positive,
+//! #860→#859, #863→#822 and #875→#689 were all genuine. Three of four times the
+//! advice was right and the duplicate landed anyway, and somebody dropped it by
+//! hand afterwards.
 //!
-//! [`same_subject`] does refuse, before anything is filed. The rule above is
-//! about a *model reading titles* and the error rate that comes with it; string
-//! equality has no error rate. See its own note for the filing that made the
-//! distinction worth drawing.
+//! ⚠ **A refusal costs one re-run; a duplicate costs somebody's attention
+//! twice.** The false positive is not a lost filing — the caller re-runs with
+//! `--no-duplicate-check` and the body it was already holding. That asymmetry is
+//! why the trade goes this way at 3-in-4 and would not at 1-in-9.
+//!
+//! **What must never happen is a filing lost to a check that could not run.** A
+//! missing `claude`, a timeout, an unreadable answer: all of those file the task
+//! and say so. Only a model that actually names something refuses, and a session
+//! that cannot file is still the worst outcome available here.
+//!
+//! ## Two questions, and only one of them is a guess
+//!
+//! [`same_subject`] refuses on string equality, which has no error rate, and
+//! never reaches a model. [`prompt`] asks the model the harder question. Both
+//! now run before the filing; the override passes both.
 //!
 //! ## Open tasks only
 //!
@@ -140,16 +152,18 @@ pub fn prompt(subject: &str, corpus: &[(u64, String)]) -> String {
 
 /// The matches in what came back, and nothing else.
 ///
-/// ⚠ **Anything unparseable is dropped rather than shown.** This text is printed
-/// under a task a session has just filed, and a model that decided to explain
-/// itself would otherwise put a paragraph in every conversation's context. A
-/// line that does not begin with an id is not an answer to the question asked.
+/// ⚠ **Anything unparseable is dropped rather than shown.** A model that decided
+/// to explain itself would otherwise put a paragraph into a refusal. A line that
+/// does not begin with an id is not an answer to the question asked.
 ///
-/// `filed` is the id of the task that prompted this. It is excluded even though
-/// [`prompt`] already leaves it out of the corpus, because a model that echoes
-/// the number it was asked about would otherwise report a task as its own
-/// duplicate — which reads as a service defect rather than as a bad guess.
-pub fn parse(said: &str, filed: u64) -> Vec<Match> {
+/// ⚠ **An id that is not on the list it was given is discarded.** This became
+/// load-bearing when the answer started refusing filings rather than annotating
+/// them: a hallucinated number must not be able to block work, and the corpus is
+/// the only thing that says which numbers were real. It also subsumes the guard
+/// this function used to carry against a model echoing the id it was asked
+/// about — there is no such id now, because the check runs before the task
+/// exists.
+pub fn parse(said: &str, corpus: &[(u64, String)]) -> Vec<Match> {
     let mut found: Vec<Match> = Vec::new();
     for line in said.lines() {
         let line = line.trim();
@@ -159,7 +173,10 @@ pub fn parse(said: &str, filed: u64) -> Vec<Match> {
             break;
         }
         let Some(one) = one(line) else { continue };
-        if one.id == filed || found.iter().any(|seen| seen.id == one.id) {
+        if !corpus.iter().any(|(id, _)| *id == one.id) {
+            continue;
+        }
+        if found.iter().any(|seen| seen.id == one.id) {
             continue;
         }
         found.push(one);
@@ -219,30 +236,28 @@ fn one(line: &str) -> Option<Match> {
     (!why.is_empty()).then_some(Match { id, why })
 }
 
-/// How the matches are printed under a freshly filed task.
+/// What a refused filing says.
 ///
 /// ⚠ **It says who is talking.** Every other line this CLI prints is read off
-/// the service; this one is a guess by a small model from titles alone, and the
-/// difference has to survive being pasted into a conversation without its
-/// context.
+/// the service; this one is a small model's reading of titles, and a refusal on
+/// that basis has to admit its own basis. A caller told *this is a duplicate*
+/// checks nothing; a caller told *a model thinks so, here is what it matched*
+/// opens the task.
 ///
-/// ⚠ **It names the task it is about at both ends, and says how to undo it.**
-/// The row `task add` writes to stdout carries the new id; this goes to stderr,
-/// so a caller that pipes `2>&1 | tail -2` — the ordinary way a session keeps a
-/// long filing quiet — keeps this and loses the id. Measured 2026-08-14: a
-/// session filed #859, saw only a warning naming an unrelated #853, read it as
-/// a refusal, and filed the same task again, because nothing left on screen
-/// said a task had been created. Any tail of this is still actionable.
-pub fn report(filed: u64, found: &[Match]) -> String {
-    let mut out = format!(
-        "\n#{filed} is filed. Something already open may cover it — a guess from titles:\n"
-    );
+/// ⚠ **The override is spelled out in full, and the body is not lost.** The
+/// caller is holding the text it just tried to file — usually a heredoc in the
+/// command it just ran — so the remedy is one re-run, not a rewrite. Saying so
+/// is what keeps a false positive cheap, and a false positive is the price this
+/// refusal is paid for.
+pub fn refusal(found: &[Match]) -> String {
+    let mut out =
+        String::from("already filed, by a model's reading of the titles — nothing was filed:\n");
     for one in found {
         out.push_str(&format!("  #{:<4} {}\n", one.id, one.why));
     }
-    // Last, so that it is what survives `| tail -1`. The filing has already
-    // landed, so the useful thing to hand back is not a decision but the one
-    // command that reverses it.
-    out.push_str(&format!("if one of them does: task drop {filed}\n"));
+    out.push_str(
+        "`task show <id>` to check one. If this really is different work, re-run the same \
+         command with --no-duplicate-check.",
+    );
     out
 }
