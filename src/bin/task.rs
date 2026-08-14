@@ -212,12 +212,15 @@ enum Command {
         /// The day it has to be done by: YYYY-MM-DD.
         #[arg(long)]
         due: Option<NaiveDate>,
-        /// Skip the check for a task that says this already.
+        /// File it even though something open already says this.
         ///
-        /// The check costs one Haiku call and 8-25 seconds, after the filing has
-        /// already landed. Worth skipping when filing a batch, or on a machine
-        /// with no `claude` on its PATH — though that case needs no flag, since
-        /// a missing binary is reported and ignored.
+        /// One flag for both halves of the check, because they answer one
+        /// question: an open task with this exact subject refuses the filing,
+        /// and a Haiku call — 8-25 seconds, after the task has already landed —
+        /// reports the ones only a reader would spot. This is the way past
+        /// either. Worth it when filing a batch, or on a machine with no
+        /// `claude` on its PATH — though that case needs no flag, since a
+        /// missing binary is reported and ignored.
         #[arg(long)]
         no_duplicate_check: bool,
     },
@@ -687,37 +690,47 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 /// filed.
 const PATIENCE: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Whether anything open already says what is being filed.
+/// Every open task, as the id and title a duplicate would be spotted by.
 ///
 /// ⚠ **Every open task, not this session's.** The duplicate that matters is the
 /// one another conversation filed — it is the only kind nobody can see — so this
 /// deliberately asks the widest question the list supports, and is the one place
 /// in this CLI that does. `--all`'s reasoning in `selection.rs` is about what
 /// costs a prompt its bytes; this costs one command's stderr.
-async fn already_filed(
-    client: &Client,
-    filed: u64,
-    subject: &str,
-) -> Result<Vec<duplicates::Match>> {
+///
+/// ⚠ **Read before the POST, not after.** It used to run afterwards and filter
+/// the new id back out of its own answer. Reading it first is what lets
+/// [`duplicates::same_subject`] refuse a collision while there is still nothing
+/// to undo; the slow half is unaffected, because it runs against this same list
+/// once the filing has landed.
+async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
     let query = list_query(true, false, false, false, None)?;
     let req = client
         .request(reqwest::Method::GET, "/api/tasks")
         .query(&query);
     let open = client.send(req).await?.unwrap_or(json!([]));
-    let corpus: Vec<(u64, String)> = open
+    Ok(open
         .as_array()
         .map(Vec::as_slice)
         .unwrap_or_default()
         .iter()
         .filter_map(|task| Some((task["id"].as_u64()?, task["subject"].as_str()?.to_string())))
-        // The task just filed is on this list. Asking whether it duplicates
-        // itself is the one answer guaranteed to be useless.
-        .filter(|(id, _)| *id != filed)
-        .collect();
+        .collect())
+}
+
+/// Whether anything open already says what has just been filed.
+///
+/// `corpus` was read before the filing, so it does not contain it — asking
+/// whether a task duplicates itself is the one answer guaranteed to be useless.
+async fn already_filed(
+    corpus: &[(u64, String)],
+    filed: u64,
+    subject: &str,
+) -> Result<Vec<duplicates::Match>> {
     if corpus.is_empty() {
         return Ok(Vec::new());
     }
-    let said = ask(&duplicates::prompt(subject, &corpus)).await?;
+    let said = ask(&duplicates::prompt(subject, corpus)).await?;
     Ok(duplicates::parse(&said, filed))
 }
 
@@ -1003,6 +1016,24 @@ async fn main() -> Result<()> {
             no_duplicate_check,
         } => {
             client.writing()?;
+            // The list comes first, and two separate questions are asked of it:
+            // whether something open carries this exact subject, which is
+            // answered here and refuses; and, once the task is on the list,
+            // whether a model sees the same problem in different words.
+            //
+            // ⚠ **A list that could not be read costs a note, never a filing.**
+            // Moving this ahead of the POST would otherwise have turned every
+            // transport failure into a refused filing.
+            let corpus = match no_duplicate_check {
+                true => Vec::new(),
+                false => open_now(&client).await.unwrap_or_else(|why| {
+                    eprintln!("(duplicate check did not run: {why:#})");
+                    Vec::new()
+                }),
+            };
+            if let Some(already) = duplicates::same_subject(&subject, &corpus) {
+                bail!("{}", duplicates::collision(already));
+            }
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
             // Always present, and null when unassessed: the service refuses a
             // filing that never mentions it, so there is no "leave it out" arm
@@ -1031,9 +1062,9 @@ async fn main() -> Result<()> {
             // the time a model is asked anything, so a check that hangs, fails
             // or is not installed costs a note and never a filing.
             if !no_duplicate_check && let Some(filed) = task["id"].as_u64() {
-                match already_filed(&client, filed, &subject).await {
+                match already_filed(&corpus, filed, &subject).await {
                     Ok(found) if found.is_empty() => {}
-                    Ok(found) => eprint!("{}", duplicates::report(&found)),
+                    Ok(found) => eprint!("{}", duplicates::report(filed, &found)),
                     // ⚠ **Said out loud, because silence here is a claim.** If a
                     // failed check printed nothing it would read exactly like a
                     // clean one, and the session would file the second copy

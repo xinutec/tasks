@@ -15,7 +15,7 @@
 //!
 //! ## Advisory, and it has to be
 //!
-//! ⚠ **This never refuses a filing and must not learn how.** Measured against
+//! ⚠ **The model half never refuses a filing and must not learn how.** Measured against
 //! the live list on 2026-08-13, an all-pairs sweep over the 134 open titles
 //! returned nine confident groups of which **one** was a real duplicate — the
 //! rest were same-area, different-problem, which is the failure this exists to
@@ -28,6 +28,13 @@
 //! correct: it found the two real overlaps (#760→#255, #777→#726) and stayed
 //! quiet on the three that only looked related. That is the question this module
 //! asks, and the reason it is worth asking at all.
+//!
+//! ## One exception, and it is not a guess
+//!
+//! [`same_subject`] does refuse, before anything is filed. The rule above is
+//! about a *model reading titles* and the error rate that comes with it; string
+//! equality has no error rate. See its own note for the filing that made the
+//! distinction worth drawing.
 //!
 //! ## Open tasks only
 //!
@@ -47,6 +54,42 @@
 //! `console/src/gist.rs` settled on in memview, and for the same reason: a
 //! confidently wrong sentence about work somebody has not opened is worse than
 //! no sentence.
+
+/// The open task whose subject is already the one being filed, if there is one.
+///
+/// ⚠ **This is the half that is allowed to refuse, because it is not a guess.**
+/// The module rule above — never block a filing — was measured on a model
+/// reading titles, at a precision where a gate would have refused correct
+/// filings more often than it caught wrong ones. Nothing in that measurement
+/// reaches string equality, and equality is what the observed duplicate
+/// actually was: #859 and #860 carried byte-identical subjects 46 seconds
+/// apart, and only a model was looking for it.
+///
+/// Case and surrounding space are ignored. Neither distinguishes two pieces of
+/// work — a subject that differs only in capitalisation is one sentence typed
+/// twice — and both are exactly what a second attempt at one filing varies by.
+pub fn same_subject(subject: &str, corpus: &[(u64, String)]) -> Option<u64> {
+    let want = subject.trim();
+    corpus
+        .iter()
+        .find(|(_, open)| open.trim().eq_ignore_ascii_case(want))
+        .map(|(id, _)| *id)
+}
+
+/// What a refused filing says.
+///
+/// ⚠ **It names the three ways out, because two of them are the point.** A
+/// collision is usually not "file it somewhere else" — it is an *update* to a
+/// task that already exists, which is `task edit`. The override is last and
+/// spelled in full so that nobody has to go and find it in `--help` while
+/// holding a body on stdin.
+pub fn collision(already: u64) -> String {
+    format!(
+        "#{already} is already open with this exact subject. Nothing was filed. \
+         `task show {already}` to read it, `task edit {already}` if this is an update to it, \
+         or re-run with --no-duplicate-check if they really are two tasks."
+    )
+}
 
 /// A task the model thinks the new one might already be.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,11 +225,24 @@ fn one(line: &str) -> Option<Match> {
 /// the service; this one is a guess by a small model from titles alone, and the
 /// difference has to survive being pasted into a conversation without its
 /// context.
-pub fn report(found: &[Match]) -> String {
-    let mut out =
-        String::from("\nmaybe already filed — a guess from titles, check before acting:\n");
+///
+/// ⚠ **It names the task it is about at both ends, and says how to undo it.**
+/// The row `task add` writes to stdout carries the new id; this goes to stderr,
+/// so a caller that pipes `2>&1 | tail -2` — the ordinary way a session keeps a
+/// long filing quiet — keeps this and loses the id. Measured 2026-08-14: a
+/// session filed #859, saw only a warning naming an unrelated #853, read it as
+/// a refusal, and filed the same task again, because nothing left on screen
+/// said a task had been created. Any tail of this is still actionable.
+pub fn report(filed: u64, found: &[Match]) -> String {
+    let mut out = format!(
+        "\n#{filed} is filed. Something already open may cover it — a guess from titles:\n"
+    );
     for one in found {
         out.push_str(&format!("  #{:<4} {}\n", one.id, one.why));
     }
+    // Last, so that it is what survives `| tail -1`. The filing has already
+    // landed, so the useful thing to hand back is not a decision but the one
+    // command that reverses it.
+    out.push_str(&format!("if one of them does: task drop {filed}\n"));
     out
 }

@@ -13,7 +13,7 @@
 //! dropped rows were included. See the module's own documentation — this file
 //! pins that whatever comes back is read correctly.
 
-use tasks::tasks::duplicates::{Match, parse, prompt, report};
+use tasks::tasks::duplicates::{Match, collision, parse, prompt, report, same_subject};
 
 /// The id the replayed filings carried, so a test says which task is asking.
 const FILED: u64 = 812;
@@ -162,11 +162,80 @@ fn the_report_says_it_is_a_guess() {
     // ⚠ Not decoration. Every other line this CLI prints is read off the
     // service; this one is inference from titles alone, and the difference has
     // to survive being pasted somewhere without its context.
-    let text = report(&[Match {
-        id: 255,
-        why: "the same suspended cron".into(),
-    }]);
+    let text = report(
+        FILED,
+        &[Match {
+            id: 255,
+            why: "the same suspended cron".into(),
+        }],
+    );
     assert!(text.contains("a guess"), "{text}");
     assert!(text.contains("#255"), "{text}");
     assert!(text.contains("the same suspended cron"), "{text}");
+}
+
+#[test]
+fn every_tail_of_the_report_names_the_new_task() {
+    // ⚠ **The failure this pins.** The report goes to stderr and the row
+    // carrying the new id goes to stdout, so `2>&1 | tail -n` keeps this and
+    // loses the id — which on 2026-08-14 read as a refusal and produced #859
+    // and #860, one filing 46 seconds apart. Both the first line and the last
+    // have to be usable on their own.
+    let text = report(
+        FILED,
+        &[
+            Match {
+                id: 255,
+                why: "the same suspended cron".into(),
+            },
+            Match {
+                id: 726,
+                why: "the same backup host".into(),
+            },
+        ],
+    );
+    for tail in 1..=text.lines().count() {
+        let kept: Vec<&str> = text.lines().rev().take(tail).collect();
+        assert!(
+            kept.iter().any(|line| line.contains("812")),
+            "tail -{tail} lost the filed id:\n{}",
+            kept.join("\n")
+        );
+    }
+    assert!(text.trim_end().ends_with("task drop 812"), "{text}");
+}
+
+#[test]
+fn the_same_subject_twice_is_found_without_a_model() {
+    // The pair that made this exist: identical subjects, 46 seconds apart,
+    // caught only by a Haiku call that ran after the second one was already on
+    // the list.
+    let subject = "health is public and carries your home location to ~100 m";
+    let corpus = [
+        (
+            853,
+            "DONE: three place names renamed to synthetics".to_string(),
+        ),
+        (859, subject.to_string()),
+    ];
+    assert_eq!(same_subject(subject, &corpus), Some(859));
+    assert!(collision(859).contains("task edit 859"));
+}
+
+#[test]
+fn case_and_surrounding_space_do_not_make_a_second_task() {
+    let corpus = [(859, "  MEMORY.md is 21.7KB  ".to_string())];
+    assert_eq!(same_subject("memory.md IS 21.7KB", &corpus), Some(859));
+}
+
+#[test]
+fn a_subject_that_merely_starts_the_same_is_not_a_collision() {
+    // ⚠ **Only equality refuses.** Anything looser is the model's question, and
+    // the module's measurement is why it may not block a filing: two tasks that
+    // open with the same words are the ordinary case, not a mistake.
+    let corpus = [(859, "MEMORY.md is 21.7KB".to_string())];
+    assert_eq!(
+        same_subject("MEMORY.md is 21.7KB and still growing", &corpus),
+        None
+    );
 }
