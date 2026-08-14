@@ -30,6 +30,9 @@ allowBuilds:
 # The @babel/core floor is inherited from the fleet's Angular scaffold rather
 # than reasoned from this app, and may be vestigial. Settling that means
 # resolving without it and diffing the version set.
+# nanoid: vite's postcss pulls a 3.3.x below 3.3.18, which GHSA covers. The
+# range ^3.3.17 already permits the fix; nothing in the tree asked for it.
 overrides:
+  nanoid: ^3.3.18
   esbuild: ^0.28.1
   '@babel/core': ^7.29.6
