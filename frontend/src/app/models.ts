@@ -108,6 +108,32 @@ export interface Task {
  */
 export interface Updated extends Task {
   changed: string[];
+  /**
+   * What this write overwrote, present only when it moved prose.
+   *
+   * Absent — not null — for a change that only moved a status, a rank or a
+   * holder, which is the shape the server sends and the reason this is
+   * optional rather than nullable.
+   */
+  replaced?: Replaced;
+}
+
+/**
+ * The provenance of text an edit landed on: when it was last written, by whom,
+ * and how much of it there was before and after.
+ *
+ * ⚠ **It exists to be shown at the moment of the write, and it refuses
+ * nothing.** A body rewritten from a stale copy looks exactly like a correct
+ * edit until somebody sees that the text being replaced was written by another
+ * holder more recently than the writer believed. `task undo <id>` is the
+ * remedy; the API route behind it is `GET /api/tasks/{id}/previous`.
+ */
+export interface Replaced {
+  at: string;
+  by: string;
+  /** Body length before and after, in characters. */
+  was: number;
+  now: number;
 }
 
 export interface TaskEvent {
