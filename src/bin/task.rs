@@ -26,7 +26,8 @@
 //!
 //! ```text
 //! task list [--all|--mine|--pile] [--done] yours and the pile; wider; narrower; spare
-//! task show <id>                            one task, its prose and its history
+//! task show <id> [--previous]               one task, its prose and its history
+//! task undo <id>                            put back what the last edit replaced
 //! task add <subject> [--body -] [--to me|pippijn|<session>|nobody] [--priority P3]
 //! task start <id> / task done <id> [--to W] move it along
 //! task drop <id>                            close it without doing it
@@ -169,7 +170,23 @@ enum Command {
         /// consists of.
         #[arg(long, conflicts_with = "json")]
         body: bool,
+        /// Show the task as it stood before its most recent edit.
+        ///
+        /// Composes with `--body`, which is the shape a diff wants:
+        /// `task show 25 --previous --body > was.md`.
+        #[arg(long)]
+        previous: bool,
     },
+    /// Put back the subject and body the most recent edit replaced.
+    ///
+    /// ⚠ **Undo is itself an edit**, recorded in the history like any other and
+    /// leaving its own previous version behind — so undoing an undo works, and
+    /// nothing here is a special path that steps around the record.
+    ///
+    /// It restores **both** the subject and the body, because that is what a
+    /// revision is: the task as it stood, not a column. Look first with
+    /// `task show <id> --previous` if that is not what you want.
+    Undo { id: TaskRef },
     /// File a task.
     ///
     /// ⚠ **A filing must state urgency**, either `--priority` or
@@ -970,6 +987,48 @@ async fn main() -> Result<()> {
         Command::Show {
             id,
             body: only_body,
+            previous,
+        } if previous => {
+            let was = fetch_previous(&client, id).await?;
+            if only_body {
+                print!("{}", was["body"].as_str().unwrap_or_default());
+                return Ok(());
+            }
+            emit(cli.json, &was, || {
+                // The header says WHEN this stopped being the task, not when it
+                // was written: a previous version's only useful timestamp is the
+                // edit that displaced it, which is what `task undo` reverses.
+                println!(
+                    "#{} as it stood until {} ({})",
+                    id.id(),
+                    was["at"].as_str().unwrap_or(""),
+                    was["actor"].as_str().unwrap_or("")
+                );
+                println!("{}", was["subject"].as_str().unwrap_or(""));
+                let body = was["body"].as_str().unwrap_or("").trim();
+                if !body.is_empty() {
+                    println!("\n{body}");
+                }
+                println!("\nput it back: task undo {}", id.id());
+            });
+        }
+
+        Command::Undo { id } => {
+            client.writing()?;
+            let was = fetch_previous(&client, id).await?;
+            patch(
+                &client,
+                cli.json,
+                id,
+                json!({ "subject": was["subject"], "body": was["body"] }),
+            )
+            .await?;
+        }
+
+        Command::Show {
+            id,
+            body: only_body,
+            previous: _,
         } => {
             let req = client.request(reqwest::Method::GET, &id.path());
             let task = client.send(req).await?.context("no such task")?;
@@ -1239,6 +1298,28 @@ async fn main() -> Result<()> {
 /// task already yours is meant to be quiet — and a non-zero exit would turn a
 /// silent success into a spurious failure. The service reports which
 /// `task_events` it wrote; empty means none.
+/// The task as it stood before its last edit, or why there is no such thing.
+///
+/// ⚠ **The service answers 404 for two different states** — a task that does
+/// not exist, and one nothing has ever overwritten — and from here they are the
+/// same answer: there is nothing to put back. The message says both, because a
+/// reader who mistypes an id and a reader whose task predates the revision
+/// table would otherwise draw opposite conclusions from one line.
+async fn fetch_previous(client: &Client, id: TaskRef) -> Result<Value> {
+    let req = client.request(reqwest::Method::GET, &format!("{}/previous", id.path()));
+    client
+        .send(req)
+        .await
+        .with_context(|| {
+            format!(
+                "no previous version of #{} is kept: either no such task, or nothing has \
+                 overwritten it since one has been stored",
+                id.id()
+            )
+        })?
+        .context("the service answered with nothing")
+}
+
 async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<()> {
     client.writing()?;
     let id = id.id();
@@ -1251,6 +1332,34 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
         if task["changed"].as_array().is_some_and(|c| c.is_empty()) {
             println!("nothing changed — it was already like that");
         }
+        if let Some(was) = displaced(&task, id) {
+            println!("{was}");
+        }
     });
     Ok(())
+}
+
+/// What an edit landed on, said back to whoever made it.
+///
+/// ⚠ **This is the line that would have stopped the loss, and it stops
+/// nothing.** On 2026-08-14 a session rewrote a body from a snapshot it had
+/// read three days earlier; it believed the body was from 08-11, and the task
+/// had been rewritten twice since. Told at the moment of the write that it had
+/// just replaced text written *yesterday, by somebody else*, the mismatch is
+/// there to see. Refusing instead is the wrong trade for the same reason
+/// `duplicates.rs` gives: rewriting another session's words is a permitted
+/// operation performed often, and a gate on a frequent correct operation
+/// teaches everyone to pass it.
+///
+/// The undo comes with it, because knowing a mistake was made is only half of
+/// it — this is the moment the remedy is wanted, and it is one command.
+fn displaced(task: &Value, id: u64) -> Option<String> {
+    let was = task.get("replaced")?;
+    let (before, after) = (was["was"].as_u64()?, was["now"].as_u64()?);
+    Some(format!(
+        "replaced text last written {} by {} ({before} → {after} chars) — task undo {} puts it back",
+        was["at"].as_str().unwrap_or(""),
+        was["by"].as_str().unwrap_or(""),
+        id
+    ))
 }

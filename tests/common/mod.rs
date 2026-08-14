@@ -46,6 +46,11 @@ pub(crate) async fn fresh_db() -> MySqlPool {
     // `&'static str`, and asserting a formatted string safe to save three lines
     // is exactly the audit that bound exists to force.
     for statement in [
+        // Before `task_events`, which it hangs off. The FK cascades, so this is
+        // belt and braces — but the order this list is written in is the
+        // documentation of the shape, and a reader should not have to check a
+        // migration to know which way the arrows point.
+        "DELETE FROM task_revision",
         "DELETE FROM task_events",
         "DELETE FROM tasks",
         "DELETE FROM sessions",

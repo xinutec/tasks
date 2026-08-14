@@ -21,6 +21,7 @@ pub fn router(state: AppState) -> Router {
         .route("/digest", get(api::digest))
         .route("/tasks", get(api::list).post(api::create))
         .route("/tasks/{id}", get(api::detail).patch(api::update))
+        .route("/tasks/{id}/previous", get(api::previous))
         .route("/sessions", get(api::session_list))
         .route("/holders", get(api::holders))
         .route("/sessions/{id}", patch(api::rename))

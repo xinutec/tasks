@@ -11,8 +11,8 @@ use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 
 use crate::error::AppError;
 use crate::tasks::types::{
-    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Ranking, Status, Task, TaskDetail,
-    Updated,
+    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Ranking, Replaced, Revision,
+    Status, Task, TaskDetail, Updated,
 };
 use crate::{due_soon, still_open};
 
@@ -338,16 +338,83 @@ pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
             at: utc(row.at),
             kind: row.kind,
             detail: row.detail,
-            // Name, then id, then the bare kind. Each fallback is a real state:
-            // a session that never named itself, and — for a person — no
-            // `sessions` row to join to at all.
-            actor: row
-                .actor_name
-                .filter(|name| !name.is_empty())
-                .or(row.actor_id)
-                .unwrap_or(row.actor_kind),
+            actor: actor_label(row.actor_name, row.actor_id, row.actor_kind),
         })
         .collect())
+}
+
+/// Name, then id, then the bare kind.
+///
+/// Each fallback is a real state: a session that never named itself, and — for
+/// a person — no `sessions` row to join to at all.
+fn actor_label(name: Option<String>, id: Option<String>, kind: String) -> String {
+    name.filter(|name| !name.is_empty()).or(id).unwrap_or(kind)
+}
+
+#[derive(sqlx::FromRow)]
+struct RevisionRow {
+    at: NaiveDateTime,
+    actor_kind: String,
+    actor_id: Option<String>,
+    actor_name: Option<String>,
+    subject: String,
+    body: String,
+}
+
+/// The task as it stood before its most recent edit.
+///
+/// `None` for a task nothing has overwritten — a task filed and never edited,
+/// and every task that existed before `0008_revision`, which is not a state
+/// worth distinguishing from "no previous version" because in both there is
+/// nothing to put back.
+///
+/// ⚠ **Newest by `event_id`, not by `at`.** `task_events.at` is a `DATETIME` at
+/// one-second resolution and a session doing a subject sweep writes several
+/// edits inside one second; ordering by time would then pick an arbitrary one
+/// of them as "the last". The id is the only total order there is.
+pub async fn previous(pool: &MySqlPool, id: u64) -> Result<Option<Revision>> {
+    let row: Option<RevisionRow> = sqlx::query_as(
+        "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, r.subject, r.body \
+         FROM task_revision r JOIN task_events e ON e.id = r.event_id \
+         LEFT JOIN sessions s ON s.id = e.actor_id \
+         WHERE e.task_id = ? ORDER BY r.event_id DESC LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .context("reading a previous version")?;
+    Ok(row.map(|row| Revision {
+        at: utc(row.at),
+        actor: actor_label(row.actor_name, row.actor_id, row.actor_kind),
+        subject: row.subject,
+        body: row.body,
+    }))
+}
+
+/// When the text an edit is about to replace was last written, and by whom.
+///
+/// `created` counts, so a body nobody has edited still has provenance — filing
+/// a task is how its first body got there.
+async fn last_written(
+    tx: &mut Transaction<'_, MySql>,
+    id: u64,
+) -> Result<Option<(DateTime<Utc>, String)>> {
+    let row: Option<EventRow> = sqlx::query_as(
+        "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, e.kind, e.detail \
+         FROM task_events e LEFT JOIN sessions s ON s.id = e.actor_id \
+         WHERE e.task_id = ? AND e.kind IN ('created', 'edited') \
+         ORDER BY e.id DESC LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await
+    .context("reading who last wrote a task")?;
+    Ok(row.map(|row| {
+        (
+            utc(row.at),
+            actor_label(row.actor_name, row.actor_id, row.actor_kind),
+        )
+    }))
 }
 
 /// A task being filed.
@@ -870,14 +937,20 @@ async fn label_of(tx: &mut Transaction<'_, MySql>, assignee: &Assignee) -> Resul
         .unwrap_or_else(|| id.to_string()))
 }
 
+/// Write one history row, and say which one it was.
+///
+/// The id is returned because [`task_revision`](../../migrations) hangs off it:
+/// what an edit replaced is stored against the event that recorded the edit, so
+/// the two cannot be written without each other. Callers that record something
+/// nothing hangs off ignore it.
 async fn record(
     tx: &mut Transaction<'_, MySql>,
     task_id: u64,
     actor: &Actor,
     kind: &str,
     detail: Option<String>,
-) -> Result<()> {
-    sqlx::query(
+) -> Result<u64> {
+    let done = sqlx::query(
         "INSERT INTO task_events (task_id, actor_kind, actor_id, kind, detail) \
          VALUES (?, ?, ?, ?, ?)",
     )
@@ -889,7 +962,7 @@ async fn record(
     .execute(&mut **tx)
     .await
     .context("recording a task event")?;
-    Ok(())
+    Ok(done.last_insert_id())
 }
 
 /// File a new task.
@@ -997,42 +1070,73 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // axis was added.
     let mut changed: Vec<&'static str> = Vec::new();
 
+    // ⚠ **The prior text is read ONCE, inside the transaction, whether or not
+    // it is about to change.** Two things need it and both need the same
+    // answer: the comparisons below, which is what keeps an edit that alters
+    // nothing out of the history, and the revision snapshot, which has to hold
+    // the *whole* previous task even when only one of the two moved. Reading it
+    // per-branch gave the body branch its own SELECT and left the subject
+    // branch with nothing to snapshot.
+    //
+    // This is on the write path only; it never touches the digest, which is the
+    // one query charged per turn.
+    let (was_subject, was_body): (String, String) =
+        sqlx::query_as("SELECT subject, body FROM tasks WHERE id = ?")
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .context("reading a task before changing it")?;
+
+    // Asked before this update writes its own events, or it would answer with
+    // the edit currently being made.
+    let wrote_it = last_written(&mut tx, id).await?;
+
+    // The event a revision hangs off: the first `edited` this update writes.
+    // `None` until something textual actually moves, which is also the test for
+    // whether a snapshot is owed at all.
+    let mut edit_event: Option<u64> = None;
+
     if let Some(subject) = &change.subject {
         let subject = check_subject(subject)?;
-        if subject != before.subject {
+        if subject != was_subject {
             sqlx::query("UPDATE tasks SET subject = ? WHERE id = ?")
                 .bind(&subject)
                 .bind(id)
                 .execute(&mut *tx)
                 .await
                 .context("changing a subject")?;
-            record(&mut tx, id, actor, "edited", Some(subject)).await?;
+            let event = record(&mut tx, id, actor, "edited", Some(subject)).await?;
+            edit_event.get_or_insert(event);
             changed.push("edited");
         }
     }
 
-    // ⚠ **Compared first, like the subject beside it.** This branch used to write
-    // and record unconditionally, which put an `edited` in the history for
-    // saving a body somebody had not touched — and, once a write began
-    // REPORTING what it moved, would have made it claim an edit that never
-    // happened. The extra read is on the write path only; it never touches the
-    // digest, which is the one thing charged per turn.
-    if let Some(body) = &change.body {
-        let current: Option<(String,)> = sqlx::query_as("SELECT body FROM tasks WHERE id = ?")
+    if let Some(body) = &change.body
+        && body != &was_body
+    {
+        sqlx::query("UPDATE tasks SET body = ? WHERE id = ?")
+            .bind(body)
             .bind(id)
-            .fetch_optional(&mut *tx)
+            .execute(&mut *tx)
             .await
-            .context("reading a body before changing it")?;
-        if current.map(|(b,)| b).as_deref() != Some(body.as_str()) {
-            sqlx::query("UPDATE tasks SET body = ? WHERE id = ?")
-                .bind(body)
-                .bind(id)
-                .execute(&mut *tx)
-                .await
-                .context("changing a body")?;
-            record(&mut tx, id, actor, "edited", Some("body".into())).await?;
-            changed.push("edited");
-        }
+            .context("changing a body")?;
+        let event = record(&mut tx, id, actor, "edited", Some("body".into())).await?;
+        edit_event.get_or_insert(event);
+        changed.push("edited");
+    }
+
+    // ⚠ **One snapshot per update, not per event.** A `task edit --subject
+    // --body` writes two history rows and must leave ONE previous version
+    // behind: `task undo` restores a task as it stood, and two half-revisions
+    // would make it restore a subject from one moment and a body from another.
+    if let Some(event) = edit_event {
+        sqlx::query("INSERT INTO task_revision (event_id, subject, body) VALUES (?, ?, ?)")
+            .bind(event)
+            .bind(&was_subject)
+            .bind(&was_body)
+            .execute(&mut *tx)
+            .await
+            .context("recording what an edit replaced")?;
     }
 
     if let Some(status) = change.status
@@ -1236,9 +1340,23 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     }
 
     tx.commit().await.context("committing a task change")?;
+    // Only where text moved, and only where the task had a history to name.
+    // `now` is measured off what the change carried rather than re-read: the
+    // body branch above has already established they differ.
+    let replaced = edit_event.and(wrote_it).map(|(at, by)| Replaced {
+        at,
+        by,
+        was: was_body.chars().count(),
+        now: change
+            .body
+            .as_deref()
+            .map_or(was_body.chars().count(), |body| body.chars().count()),
+    });
+
     Ok(Updated {
         task: list_one(pool, id).await?,
         changed,
+        replaced,
     })
 }
 

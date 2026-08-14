@@ -595,6 +595,46 @@ pub struct Updated {
     pub task: Task,
     /// The event kinds written, in the order written.
     pub changed: Vec<&'static str>,
+    /// What this edit displaced, when it displaced any text. Absent for a
+    /// change that moved only a status, a rank or a holder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaced: Option<Replaced>,
+}
+
+/// What an edit overwrote, told to whoever made it.
+///
+/// ⚠ **This is the whole of the prevention, and it refuses nothing.** The loss
+/// on 2026-08-14 was a session writing a body from a three-day-old snapshot it
+/// had never re-read; a gate on that would have to refuse an ordinary,
+/// permitted operation — sessions rewrite each other's task words by standing
+/// permission — and the duplicate check in `duplicates.rs` records what
+/// refusing a frequent correct operation costs. So the write goes through and
+/// says what it landed on. A writer who believes a body is three days old, told
+/// it was rewritten yesterday by somebody else, has everything needed to stop.
+#[derive(Debug, Clone, Serialize)]
+pub struct Replaced {
+    /// When the text this edit replaced was last written.
+    pub at: DateTime<Utc>,
+    /// Who wrote it, resolved the same way a history line's actor is.
+    pub by: String,
+    /// Body length before and after, in characters. A rewrite that loses two
+    /// thirds of a body says so here even when nobody reads the dates.
+    pub was: usize,
+    pub now: usize,
+}
+
+/// A task as it stood before an edit — one complete previous version.
+///
+/// Both columns, always: a revision is restored as a unit, so there is no state
+/// in which a subject comes from one moment and a body from another.
+#[derive(Debug, Clone, Serialize)]
+pub struct Revision {
+    /// When the edit that displaced this text was made, and by whom. Read off
+    /// the event this revision hangs from rather than stored a second time.
+    pub at: DateTime<Utc>,
+    pub actor: String,
+    pub subject: String,
+    pub body: String,
 }
 
 /// One task with its prose and its history — what opening a task returns.

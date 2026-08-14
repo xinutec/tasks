@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
-use crate::tasks::types::{Task, TaskDetail, Updated};
+use crate::tasks::types::{Revision, Task, TaskDetail, Updated};
 use crate::wire::{RequiredKeys, Wire};
 
 /// Every `/api` path that is not a route.
@@ -162,6 +162,28 @@ pub async fn detail(
     Path(id): Path<u64>,
 ) -> Result<Json<TaskDetail>, AppError> {
     repo::get(&app.db, id)
+        .await?
+        .map(Json)
+        .ok_or(AppError::NotFound)
+}
+
+/// The task as it stood before its most recent edit.
+///
+/// ⚠ **A separate path rather than a field on `detail`.** A previous version is
+/// a second whole body, and `GET /api/tasks/{id}` is what the app opens a task
+/// with — putting it there would double that payload for every reader to serve
+/// the rare one who is undoing something. Asked for by id, it costs nothing
+/// until it is wanted.
+///
+/// 404 when nothing has overwritten this task, which is the same answer as a
+/// task that does not exist and means the same thing to a caller: there is
+/// nothing here to put back.
+pub async fn previous(
+    Access(_): Access,
+    State(app): State<AppState>,
+    Path(id): Path<u64>,
+) -> Result<Json<Revision>, AppError> {
+    repo::previous(&app.db, id)
         .await?
         .map(Json)
         .ok_or(AppError::NotFound)
