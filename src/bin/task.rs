@@ -132,6 +132,16 @@ struct Cli {
     /// that does not exist. `--pile` now answers that question directly; this
     /// says what the shape is for the questions that have no flag.
     ///
+    /// ⚠ **THAT IS THE LIST SHAPE, AND `show --json` IS A BIGGER ONE.** A row in
+    /// a list carries no prose — `detailed` is the BOOLEAN standing in for it,
+    /// answered in SQL so forty bodies do not cross the wire to report forty
+    /// yes/nos. `show --json` adds the real thing: `body`, `body_html`, `events`,
+    /// `restorable`. Reading `detailed` where you meant `body` yields `true`, and
+    /// piping that into `edit --body` writes the string `True` over the prose —
+    /// which happened on 2026-08-15 and cost a `task undo`. **`show <id> --body`
+    /// prints the body alone**, which is what a script patching one wants, and
+    /// `--previous --body` gives the version before the last edit to diff against.
+    ///
     /// ⚠ **The service's JSON, reprinted — not rebuilt here.** A second
     /// serialisation in this binary would be a second shape to keep level with
     /// the API by hand, and the whole value of the flag is that a script can
