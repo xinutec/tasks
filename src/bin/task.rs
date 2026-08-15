@@ -321,9 +321,18 @@ enum Command {
         id: TaskRef,
         #[arg(long)]
         subject: Option<String>,
-        /// `-` reads stdin.
+        /// `-` reads stdin. REPLACES the body; it does not append.
         #[arg(long)]
         body: Option<String>,
+        /// Mean it, where `--body` would leave almost nothing of a substantial
+        /// one.
+        ///
+        /// That write is refused by default, because it is far more often a
+        /// mistake than an edit — on 2026-08-15 a session took `detailed` from
+        /// `--json` for the prose and wrote `True` over 3,109 characters of
+        /// #900. Emptying a body on purpose is what this flag is for.
+        #[arg(long = "replace-body")]
+        replace_body: bool,
         /// Rank it: P0 to P4, listed under `task --help`.
         ///
         /// There is no way to UNRANK from here, deliberately: absence means
@@ -1025,11 +1034,18 @@ async fn main() -> Result<()> {
         Command::Undo { id } => {
             client.writing()?;
             let was = fetch_previous(&client, id).await?;
+            // `replace_body` because putting a body back is an informed
+            // replacement, and the guard on collapsing bodies would otherwise
+            // refuse the undo of an edit that had made one longer.
             patch(
                 &client,
                 cli.json,
                 id,
-                json!({ "subject": was["subject"], "body": was["body"] }),
+                json!({
+                    "subject": was["subject"],
+                    "body": was["body"],
+                    "replace_body": true,
+                }),
             )
             .await?;
         }
@@ -1175,6 +1191,7 @@ async fn main() -> Result<()> {
             id,
             subject,
             body: raw,
+            replace_body,
             priority,
             blocked_on,
             unblock,
@@ -1204,6 +1221,11 @@ async fn main() -> Result<()> {
             }
             if let Some(raw) = raw {
                 change["body"] = json!(body(&raw)?);
+                // Only alongside a body, so the flag cannot be left on a shell
+                // line that no longer writes one.
+                if replace_body {
+                    change["replace_body"] = json!(true);
+                }
             }
             if change.as_object().is_none_or(|o| o.is_empty()) {
                 bail!("nothing to change: pass --subject or --body");

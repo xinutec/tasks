@@ -127,7 +127,7 @@ export class TaskView {
     const was = this.previous();
     if (!was) return;
     this.previous.set(null);
-    this.change({ subject: was.subject, body: was.body });
+    this.change({ subject: was.subject, body: was.body, replace_body: true });
   }
 
   /** Close the panel without restoring. */

@@ -540,6 +540,17 @@ pub struct Change {
     pub blocked_on: Option<Vec<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
+    /// Say that a body which keeps almost nothing of the one it replaces is
+    /// meant. See [`collapses`] for what is refused without it, and why.
+    ///
+    /// ⚠ **Undo sets this, and has to.** Putting back what an edit replaced is
+    /// a PATCH of subject and body like any other, so undoing an edit that
+    /// *grew* a body restores a shorter one — the exact shape the guard
+    /// refuses. Refusing the one operation that exists to recover from a bad
+    /// write would be perverse. It is also an honest claim rather than a way
+    /// around the check: an undo has just read the text it is restoring.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub replace_body: bool,
 }
 
 /// Nothing is required of a change, and taking the default is how that is said.
@@ -571,6 +582,36 @@ fn check_subject(subject: &str) -> Result<String> {
         ));
     }
     Ok(subject.to_string())
+}
+
+/// A body worth guarding, and the share of it an edit has to leave standing.
+///
+/// Both numbers are deliberately far from anything a real rewrite does. The
+/// point is not to catch every loss — it is to catch the writes that were never
+/// edits at all, and to do it without asking anybody about the ordinary ones.
+const WORTH_GUARDING: usize = 500;
+const KEEPS_AT_LEAST: usize = 4; // i.e. a quarter
+
+/// Whether a new body keeps so little of the old one that it is more likely a
+/// mistake than a rewrite.
+///
+/// ⚠ **This gates edits, which [`crate::tasks::duplicates`] argues against
+/// doing — and the argument does not reach this.** That one is about whose
+/// words and how old: overwriting another session's recent text is frequent and
+/// legitimate, and a gate on a frequent correct operation only teaches everyone
+/// to pass gates. A 3,109-character body becoming 4 characters is neither
+/// frequent nor legitimate. That is what happened to #900 on 2026-08-15, when a
+/// session read `--json`, took `detailed` for the prose, and wrote `True` over
+/// the lot.
+///
+/// Measured before it was built, over the 35 revisions the store held on
+/// 2026-08-15 — its whole history at the time, one day after it shipped. This
+/// fires on none of them; 27 of the 35 grew or held their body. Worth rerunning
+/// once there is more history, and worth loosening if it ever fires on an edit
+/// somebody meant.
+fn collapses(was: &str, now: &str) -> bool {
+    let (was, now) = (was.chars().count(), now.chars().count());
+    was > WORTH_GUARDING && now * KEEPS_AT_LEAST < was
 }
 
 /// Split an assignee into the three columns that store it.
@@ -1127,13 +1168,32 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     if let Some(body) = &change.body
         && body != &was_body
     {
+        if !change.replace_body && collapses(&was_body, body) {
+            return Err(AppError::BadRequest(format!(
+                "that would leave {} characters of a {}-character body, so nothing was written. \
+                 Read what is there with `task show {id} --body`. If the body really should go, \
+                 say so with --replace-body.",
+                body.chars().count(),
+                was_body.chars().count()
+            )));
+        }
         sqlx::query("UPDATE tasks SET body = ? WHERE id = ?")
             .bind(body)
             .bind(id)
             .execute(&mut *tx)
             .await
             .context("changing a body")?;
-        let event = record(&mut tx, id, actor, "edited", Some("body".into())).await?;
+        // ⚠ **The size of the change belongs in the row, not only in the reply.**
+        // The reply says `3109 → 4 chars` to whoever made the edit and is then
+        // gone with their scrollback; stored, it is what tells the next reader
+        // that a body was once emptied. It was `body` alone until 2026-08-15,
+        // and #900's history gave no sign of what had happened to it.
+        let detail = format!(
+            "body {} → {} chars",
+            was_body.chars().count(),
+            body.chars().count()
+        );
+        let event = record(&mut tx, id, actor, "edited", Some(detail)).await?;
         edit_event.get_or_insert(event);
         changed.push("edited");
     }

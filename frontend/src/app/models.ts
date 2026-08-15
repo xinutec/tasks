@@ -254,4 +254,12 @@ export interface Change {
    *  removing one needs its own field rather than a meaningful null. */
   clear_due?: boolean;
   assignee?: Assignee | null;
+  /** Say that a `body` keeping almost nothing of the one it replaces is meant.
+   *  Without it the server refuses that write, because it is far more often a
+   *  mistake than an edit.
+   *
+   *  ⚠ **Restoring sets this, and has to.** Putting back what an edit replaced
+   *  is a change of subject and body like any other, so undoing an edit that
+   *  *grew* a body sends a shorter one — the exact shape the guard refuses. */
+  replace_body?: boolean;
 }
