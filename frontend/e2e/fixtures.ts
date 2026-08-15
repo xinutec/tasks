@@ -148,6 +148,10 @@ export const TASKS = [
 export const PREVIOUS = {
   at: '2026-08-13T09:06:12Z',
   actor: 'dev-lint',
+  // Somebody else's edit, matching `actor` — the case the CLI refuses and this
+  // page shows instead. A fixture saying `mine: true` beside a foreign actor
+  // would be a shape no server can produce.
+  mine: false,
   subject: 'Abstractly evaluate a shell command, as far as the text determines and no further',
   body: [
     '## Where it stands, 2026-08-13',

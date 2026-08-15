@@ -196,7 +196,16 @@ enum Command {
     /// It restores **both** the subject and the body, because that is what a
     /// revision is: the task as it stood, not a column. Look first with
     /// `task show <id> --previous` if that is not what you want.
-    Undo { id: TaskRef },
+    ///
+    /// ⚠ **It reverts THE last edit, not YOUR last edit** — one version is kept
+    /// per task, not per actor. Where the last edit was somebody else's this
+    /// refuses; `--anyway` is how to mean it.
+    Undo {
+        id: TaskRef,
+        /// Revert the last edit even though another conversation made it.
+        #[arg(long)]
+        anyway: bool,
+    },
     /// File a task.
     ///
     /// ⚠ **A filing must state urgency**, either `--priority` or
@@ -1031,9 +1040,19 @@ async fn main() -> Result<()> {
             });
         }
 
-        Command::Undo { id } => {
+        Command::Undo { id, anyway } => {
             client.writing()?;
             let was = fetch_previous(&client, id).await?;
+            // Read before the write, so a refusal costs nothing. `mine` is the
+            // service's answer about stored identity — the label beside it is
+            // for reading, not for comparing.
+            if !anyway {
+                let was: tasks::tasks::types::Revision = serde_json::from_value(was.clone())
+                    .context("the service's previous version did not parse")?;
+                if tasks::tasks::undo::needs_saying(&was) {
+                    bail!(tasks::tasks::undo::refusal(&was, id.id()));
+                }
+            }
             // `replace_body` because putting a body back is an informed
             // replacement, and the guard on collapsing bodies would otherwise
             // refuse the undo of an edit that had made one longer.

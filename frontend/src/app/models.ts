@@ -157,6 +157,14 @@ export interface TaskDetail extends Task {
 export interface Revision {
   at: string;
   actor: string;
+  /** Whether the edit this would revert was made by whoever is asking.
+   *
+   *  ⚠ **Restoring reverts THE last edit, not YOUR last edit** — one version is
+   *  kept per task, not per actor. The CLI refuses on this and takes `--anyway`,
+   *  because it has nothing on screen to read. This page does not: it shows
+   *  `Replaced <when> by <actor>` above the two buttons, so the same fact is in
+   *  front of whoever taps, before they tap. */
+  mine: boolean;
   subject: string;
   body: string;
 }

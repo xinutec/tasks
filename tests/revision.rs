@@ -61,7 +61,10 @@ async fn a_task_nothing_has_overwritten_has_no_previous_version() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "the first body").await;
     assert!(
-        repo::previous(&pool, id).await.expect("reading").is_none(),
+        repo::previous(&pool, id, &pippijn())
+            .await
+            .expect("reading")
+            .is_none(),
         "filing a task is not overwriting one"
     );
 }
@@ -72,7 +75,7 @@ async fn an_edited_body_leaves_the_one_it_replaced_behind() {
     let id = file(&pool, "as filed", "the first body").await;
     edit(&pool, id, body("something else entirely")).await;
 
-    let was = repo::previous(&pool, id)
+    let was = repo::previous(&pool, id, &pippijn())
         .await
         .expect("reading")
         .expect("an edit leaves a previous version");
@@ -102,7 +105,7 @@ async fn a_subject_edit_snapshots_the_body_it_did_not_touch() {
     )
     .await;
 
-    let was = repo::previous(&pool, id)
+    let was = repo::previous(&pool, id, &pippijn())
         .await
         .expect("reading")
         .expect("a revision");
@@ -141,7 +144,7 @@ async fn one_update_changing_both_leaves_exactly_one_revision() {
     .expect("counting revisions");
     assert_eq!(kept.0, 1, "one update, one previous version");
 
-    let was = repo::previous(&pool, id)
+    let was = repo::previous(&pool, id, &pippijn())
         .await
         .expect("reading")
         .expect("a revision");
@@ -171,7 +174,10 @@ async fn a_change_that_moves_no_text_leaves_no_revision() {
         edit(&pool, id, change).await;
     }
     assert!(
-        repo::previous(&pool, id).await.expect("reading").is_none(),
+        repo::previous(&pool, id, &pippijn())
+            .await
+            .expect("reading")
+            .is_none(),
         "ranking, starting and re-saving identical prose overwrite nothing"
     );
 }
@@ -193,7 +199,7 @@ async fn the_newest_revision_is_the_one_that_comes_back() {
         .await
         .expect("flattening the timestamps");
 
-    let was = repo::previous(&pool, id)
+    let was = repo::previous(&pool, id, &pippijn())
         .await
         .expect("reading")
         .expect("a revision");
@@ -209,7 +215,7 @@ async fn putting_a_version_back_is_an_edit_like_any_other() {
     let id = file(&pool, "as filed", "the first body").await;
     edit(&pool, id, body("the clobbering body")).await;
 
-    let was = repo::previous(&pool, id)
+    let was = repo::previous(&pool, id, &pippijn())
         .await
         .expect("reading")
         .expect("a revision");
@@ -230,7 +236,7 @@ async fn putting_a_version_back_is_an_edit_like_any_other() {
         .expect("the task");
     assert_eq!(detail.body, "the first body", "restored");
 
-    let now = repo::previous(&pool, id)
+    let now = repo::previous(&pool, id, &pippijn())
         .await
         .expect("reading")
         .expect("a revision");

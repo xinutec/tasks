@@ -385,7 +385,12 @@ struct RevisionRow {
 /// one-second resolution and a session doing a subject sweep writes several
 /// edits inside one second; ordering by time would then pick an arbitrary one
 /// of them as "the last". The id is the only total order there is.
-pub async fn previous(pool: &MySqlPool, id: u64) -> Result<Option<Revision>> {
+///
+/// ⚠ **Takes the asker**, because the one thing a caller needs before restoring
+/// is whether the edit it would revert is its own — see [`Revision::mine`]. A
+/// read that could not say would push the comparison onto every client, and the
+/// only identity a client has is the rendered label.
+pub async fn previous(pool: &MySqlPool, id: u64, who: &Actor) -> Result<Option<Revision>> {
     let row: Option<RevisionRow> = sqlx::query_as(
         "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, r.subject, r.body \
          FROM task_revision r JOIN task_events e ON e.id = r.event_id \
@@ -398,6 +403,10 @@ pub async fn previous(pool: &MySqlPool, id: u64) -> Result<Option<Revision>> {
     .context("reading a previous version")?;
     Ok(row.map(|row| Revision {
         at: utc(row.at),
+        // Both halves, or a person and a session sharing an id would read as
+        // each other. `actor_id` is NULL only for rows written before the
+        // column existed, and an absent id matches nobody.
+        mine: row.actor_kind == who.kind() && row.actor_id.as_deref() == Some(who.id()),
         actor: actor_label(row.actor_name, row.actor_id, row.actor_kind),
         subject: row.subject,
         body: row.body,

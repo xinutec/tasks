@@ -180,7 +180,7 @@ async fn putting_back_a_body_an_edit_had_grown() {
     // replacing 4,000, well under the share the guard wants kept. It is let
     // through because whoever restores has just read what they are restoring,
     // which is the one thing the collapsing write never did.
-    let was = repo::previous(&pool, id)
+    let was = repo::previous(&pool, id, &pippijn())
         .await
         .expect("a revision")
         .expect("there");

@@ -179,11 +179,11 @@ pub async fn detail(
 /// task that does not exist and means the same thing to a caller: there is
 /// nothing here to put back.
 pub async fn previous(
-    Access(_): Access,
+    Access(who): Access,
     State(app): State<AppState>,
     Path(id): Path<u64>,
 ) -> Result<Json<Revision>, AppError> {
-    repo::previous(&app.db, id)
+    repo::previous(&app.db, id, &who.actor())
         .await?
         .map(Json)
         .ok_or(AppError::NotFound)

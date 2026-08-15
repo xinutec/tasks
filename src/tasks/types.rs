@@ -627,12 +627,28 @@ pub struct Replaced {
 ///
 /// Both columns, always: a revision is restored as a unit, so there is no state
 /// in which a subject comes from one moment and a body from another.
-#[derive(Debug, Clone, Serialize)]
+/// `Deserialize` as well as `Serialize`, unlike its neighbours: the CLI reads
+/// this one back to decide whether restoring is safe, and a hand-rolled read of
+/// `mine` out of a `Value` would be a second copy of the shape to keep level.
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct Revision {
     /// When the edit that displaced this text was made, and by whom. Read off
     /// the event this revision hangs from rather than stored a second time.
     pub at: DateTime<Utc>,
     pub actor: String,
+    /// Whether the edit this would revert was made by whoever is asking.
+    ///
+    /// ⚠ **Answered here rather than by comparing [`actor`](Self::actor)**, which
+    /// is a rendered label — a session's display name, or a person's id. Two
+    /// conversations can be renamed to the same words, and a rename would make a
+    /// caller's own edit stop looking like theirs. The comparison is on the
+    /// stored identity, which is why it is the server's answer and not the
+    /// client's.
+    ///
+    /// Restoring is not undoing *your* last edit — it is undoing *the* last
+    /// edit, whoever made it, because one version is kept per task and not per
+    /// actor. This is what lets a caller tell those apart before it acts.
+    pub mine: bool,
     pub subject: String,
     pub body: String,
 }
