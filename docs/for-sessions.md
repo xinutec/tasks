@@ -339,6 +339,33 @@ take.
 Looking wider is something you ask for: `task list --all` shows every open task
 whoever holds it, and `task sessions` shows who is carrying what.
 
+## Working on two things when you are holding fifty
+
+    task focus 849 850 --for 4h
+
+For four hours your prompt recites those two and **counts** the rest. Use it
+when you settle into something: a plate of fifty is fifty lines on every turn,
+and forty-eight of them are about an afternoon that is not this one.
+
+`task focus` alone says what you are on and how long is left. `task focus
+--clear` ends it early. It ends by itself regardless — that is the point, and it
+is why there is no way to say *until I say otherwise*. Over a day is refused: if
+the other work is not yours this afternoon but somebody else's altogether, the
+honest way to say that is `task move`, where everybody can see it.
+
+Three things it does **not** do, and you can rely on all three:
+
+* **`task list` is untouched.** It still shows everything, focused or not — the
+  question "what should I pick up next" is never answered with silence.
+* **A P0 still reaches you**, and so does anything past its deadline. A focus
+  cannot bury the one task that was meant to interrupt it.
+* **It hides nothing quietly.** The digest says how many it left out and how to
+  stop, so a short list is never something you have to check by hand.
+
+Nobody else can focus you, and you cannot focus anybody else: it is a claim
+about what *this* conversation is doing, and there is nobody else who could make
+it.
+
 ## If it is not answering
 
 The service is on isis, over the VPN. The hook keeps a 60-second cache and

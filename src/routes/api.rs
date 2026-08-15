@@ -1,5 +1,7 @@
 //! The JSON API, plus the one endpoint that answers in plain text.
 
+use std::collections::BTreeSet;
+
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
@@ -11,6 +13,7 @@ use crate::digest;
 use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
+use crate::tasks::focus;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Revision, Task, TaskDetail, Updated};
 use crate::wire::{RequiredKeys, Wire};
@@ -102,13 +105,85 @@ pub async fn digest(
         None => Filter::default(),
     };
     let tasks = repo::list(&app.db, &filter).await?;
+    // What this session said it was working on, if it said so and the hour has
+    // not passed. A person reading a digest without naming a session has no
+    // focus to apply — there is no conversation whose afternoon it is.
+    let focus = match &session {
+        Some(id) => focus::current(&app.db, id).await?,
+        None => None,
+    };
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
             "text/plain; charset=utf-8",
         )],
-        digest::render(&tasks),
+        digest::render(&tasks, focus.as_ref()),
     ))
+}
+
+/// What a session says it is working on, for how long.
+#[derive(Deserialize)]
+pub struct NewFocus {
+    tasks: BTreeSet<u64>,
+    /// How long, in minutes. A number rather than `4h`: the spelling is the
+    /// CLI's business and [`focus::parse`] is where it is read, so the wire
+    /// carries the quantity and one side does the reading.
+    minutes: i64,
+}
+
+/// Enter a focus period.
+///
+/// ⚠ **A session may only focus itself.** A focus is a claim about what one
+/// conversation is doing this afternoon, so there is nobody else who could make
+/// it — and a route that let one session quiet another's prompt would be the
+/// worst-shaped feature in the service. The person reading the app has no focus
+/// for the same reason: a browser is not a conversation.
+pub async fn start_focus(
+    Access(viewer): Access,
+    State(app): State<AppState>,
+    Json(new): Json<NewFocus>,
+) -> Result<Json<focus::Focus>, AppError> {
+    let session = own_session(&viewer)?;
+    let focus = focus::enter(
+        &app.db,
+        &session,
+        &new.tasks,
+        chrono::Duration::minutes(new.minutes),
+    )
+    .await?;
+    Ok(Json(focus))
+}
+
+/// End one early, or report that there was not one.
+pub async fn end_focus(
+    Access(viewer): Access,
+    State(app): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let session = own_session(&viewer)?;
+    let was = focus::current(&app.db, &session).await?;
+    focus::leave(&app.db, &session).await?;
+    Ok(Json(json!({ "was": was })))
+}
+
+/// What this session is focused on, if anything.
+pub async fn read_focus(
+    Access(viewer): Access,
+    State(app): State<AppState>,
+) -> Result<Json<Option<focus::Focus>>, AppError> {
+    let session = own_session(&viewer)?;
+    Ok(Json(focus::current(&app.db, &session).await?))
+}
+
+/// The conversation making the request, or a refusal naming why there is none.
+fn own_session(viewer: &Viewer) -> Result<String, AppError> {
+    match viewer {
+        Viewer::Session(id) => Ok(id.clone()),
+        Viewer::Owner(_) => Err(AppError::BadRequest(
+            "a focus belongs to a conversation, and this request is a person's. \
+             There is nothing to narrow a browser's reading to."
+                .into(),
+        )),
+    }
 }
 
 #[derive(Deserialize)]

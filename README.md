@@ -82,6 +82,27 @@ behind the one command a session runs to decide what to do next — 135 lines an
 digest's question: your own, and the pile. `--mine` drops the pile, `--all` is
 the old behaviour, and both are named because all three are real questions.
 
+⚠ **A session can narrow its own digest further, for a few hours** —
+`task focus 849 850 --for 4h`, and for four hours its prompt recites those two
+and counts the rest. It answers the case the cap above does not: a conversation
+holding fifty open tasks pays for all fifty on every turn and is working on two
+of them, and nothing else in the service lets it say which two. `src/tasks/focus.rs`
+is the only thing here that hides an **open** task, so three rules hold and none
+of them is negotiable:
+
+* **It expires**, and cannot be set to "until I say otherwise". A focus nobody
+  clears stops applying at its hour; longer than a day is refused, because that
+  is not an afternoon's work but a handover, and `task move` is how work changes
+  hands where everybody can see it.
+* **What is hidden is counted** and the notice names `task focus --clear` — the
+  same rule the pile cap follows, for the same reason.
+* **P0 and overdue break through**, on the effective rank rather than the chosen
+  one, so a focus cannot bury the task an escalation exists to raise.
+
+It touches the digest and nothing else: `task list` still shows everything,
+because the digest is the channel nobody asked for and a list somebody typed is
+one they wanted.
+
 ⚠ **What changed is what happens to a finished task.** The file scheme *deleted*
 it, because keeping it is what turned 48 live items into 366, and git recorded the
 completion better than a flag did. There is no git here — so the database keeps
@@ -270,6 +291,8 @@ task drop <id>                            # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
 task move <id> me|pippijn|<session>|nobody  # hand it over
 task edit <id> [--subject S] [--body -] [--priority P0]   # change the words, rank it
+task focus <id>… --for 4h                 # for four hours my prompt shows only these
+task focus [--clear]                      # what I am on, how long is left; end it now
 task digest                               # exactly what a prompt receives
 task rename <name>                        # tell the service what I call myself
 ```

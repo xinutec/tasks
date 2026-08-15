@@ -19,6 +19,15 @@ pub fn router(state: AppState) -> Router {
         // prints it — a hook that had to parse JSON to print eight lines would
         // be carrying a parser on the latency path of every prompt.
         .route("/digest", get(api::digest))
+        // What the calling conversation is working on this afternoon. No id in
+        // the path: a session may only focus itself, so the credential names
+        // the only subject this route has.
+        .route(
+            "/focus",
+            get(api::read_focus)
+                .post(api::start_focus)
+                .delete(api::end_focus),
+        )
         .route("/tasks", get(api::list).post(api::create))
         .route("/tasks/{id}", get(api::detail).patch(api::update))
         .route("/tasks/{id}/previous", get(api::previous))

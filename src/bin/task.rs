@@ -172,6 +172,42 @@ enum Command {
         #[arg(long)]
         done: bool,
     },
+    /// Work on a few things and let the rest go quiet for a while.
+    ///
+    ///     task focus 849 850 --for 4h
+    ///
+    /// For those four hours **your prompt** recites only those tasks and counts
+    /// the rest. A session with fifty open tasks pays for all fifty on every
+    /// turn and is working on two of them; this is how to say which two.
+    ///
+    /// ⚠ **`task list` is unaffected and still shows everything.** The digest is
+    /// the channel nobody asked for; a list you typed is one you wanted, and the
+    /// question "what should I pick up next" must never be answered with
+    /// silence.
+    ///
+    /// ⚠ **P0 and overdue break through**, so a focus cannot bury the one thing
+    /// that was meant to interrupt it.
+    ///
+    /// ⚠ **It expires and there is no way to say "until I say otherwise".** A
+    /// focus you forget stops applying at its hour. Longer than a day is not a
+    /// focus but a handover — `task move` is how work changes hands where
+    /// everybody can see it.
+    ///
+    /// Naming no task asks what the focus is; `--clear` ends it now.
+    Focus {
+        /// What you are working on. Repeat for several; the whole set is
+        /// replaced, so this states what you are on and never adds to it.
+        ids: Vec<TaskRef>,
+        /// How long: `4h`, `90m`, `2h30m`. A bare number is minutes.
+        ///
+        /// Required when naming tasks — there is no default, because the
+        /// expiry is the only thing that makes hiding an open task safe.
+        #[arg(long = "for")]
+        period: Option<String>,
+        /// End it now, before its hour.
+        #[arg(long, conflicts_with_all = ["ids", "period"])]
+        clear: bool,
+    },
     /// One task, with its prose and its history.
     Show {
         id: TaskRef,
@@ -1252,6 +1288,52 @@ async fn main() -> Result<()> {
             patch(&client, cli.json, id, change).await?;
         }
 
+        Command::Focus { ids, period, clear } => {
+            if clear {
+                let req = client.request(reqwest::Method::DELETE, "/api/focus");
+                let was = client.send(req).await?.unwrap_or(json!({}));
+                emit(cli.json, &was, || {
+                    match was["was"].is_null() {
+                        false => println!("focus ended — your prompt shows everything open again"),
+                        // Not an error: the caller asked to be unfocused and is.
+                        true => println!("there was no focus on"),
+                    }
+                });
+            } else if ids.is_empty() {
+                let req = client.request(reqwest::Method::GET, "/api/focus");
+                let focus = client.send(req).await?.unwrap_or(Value::Null);
+                emit(cli.json, &focus, || match parse_focus(&focus) {
+                    Some(focus) => println!("{}", describe(&focus)),
+                    None => println!(
+                        "not focused — your prompt shows everything open. \
+                         `task focus <id>… --for 4h` narrows it."
+                    ),
+                });
+            } else {
+                let period = period.context(
+                    "how long? `--for 4h`. There is no default: the expiry is what makes \
+                     hiding an open task safe.",
+                )?;
+                let period = tasks::tasks::focus::parse(&period)?;
+                let body = json!({
+                    "tasks": ids.iter().map(|id| id.id()).collect::<Vec<_>>(),
+                    "minutes": period.num_minutes(),
+                });
+                let req = client
+                    .request(reqwest::Method::POST, "/api/focus")
+                    .json(&body);
+                let focus = client.send(req).await?.unwrap_or(Value::Null);
+                emit(cli.json, &focus, || match parse_focus(&focus) {
+                    Some(focus) => println!("{}", describe(&focus)),
+                    // Nothing to fall back to: a POST that answered 2xx with a
+                    // shape this cannot read is a disagreement about the API,
+                    // and saying "focused" anyway would report a state nobody
+                    // has confirmed.
+                    None => println!("the service accepted the focus but did not describe it"),
+                });
+            }
+        }
+
         Command::Digest => {
             let query: Vec<(String, String)> = Vec::new();
             let req = client
@@ -1373,6 +1455,31 @@ async fn fetch_previous(client: &Client, id: TaskRef) -> Result<Value> {
             )
         })?
         .context("the service answered with nothing")
+}
+
+/// The focus a route answered with, when it answered with one.
+///
+/// `null` is the ordinary answer — almost no session is focused at any moment —
+/// so this is an absence rather than a failure, and the caller says what "not
+/// focused" reads like in its own context.
+fn parse_focus(value: &Value) -> Option<tasks::tasks::focus::Focus> {
+    serde_json::from_value(value.clone()).ok()
+}
+
+/// A focus as one line: what, until when, and how much is left of it.
+///
+/// ⚠ **The countdown is here and never in the digest.** This runs the moment
+/// somebody types the command, where "1h48m left" is true; the digest is cached
+/// for sixty seconds and read minutes later, so it prints the hour instead.
+fn describe(focus: &tasks::tasks::focus::Focus) -> String {
+    let ids: Vec<String> = focus.tasks.iter().map(|id| format!("#{id}")).collect();
+    format!(
+        "focused on {} until {} UTC — {} left. P0 and overdue still break through; \
+         `task list` still shows everything.",
+        ids.join(" "),
+        focus.until.format("%H:%M"),
+        tasks::tasks::focus::spell(focus.until - chrono::Utc::now()),
+    )
 }
 
 async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<()> {

@@ -52,6 +52,9 @@ pub(crate) async fn fresh_db() -> MySqlPool {
         // migration to know which way the arrows point.
         "DELETE FROM task_revision",
         "DELETE FROM task_events",
+        // Hangs off BOTH of the two below it, which is why it is above both.
+        // `sessions.focus_until` goes with the session row and needs no line.
+        "DELETE FROM session_focus",
         "DELETE FROM tasks",
         "DELETE FROM sessions",
     ] {

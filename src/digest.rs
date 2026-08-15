@@ -50,10 +50,18 @@
 //! cost this module refuses behind the one command a session runs to decide
 //! what to do next: 12,804 bytes, against one line for the session that ran it.
 //!
+//! **A session can narrow this further, for a few hours, and only itself.**
+//! `task focus 849 850 --for 4h` — see [`crate::tasks::focus`], which is the
+//! only thing in the service that hides an *open* task and carries the three
+//! rules that make that safe. The two trims here compose in one direction:
+//! focus runs first and the pile cap runs on what survives, or the five pile
+//! lines would be spent on tasks the focus then hid.
+//!
 //! The selection lives in [`Filter::digest_for`](crate::tasks::repo::Filter),
 //! not here — this module is handed a list and renders it. Which is why the
 //! render tests can stay about cost.
 
+use crate::tasks::focus::{self, Focus};
 use crate::tasks::types::{AssigneeKind, Status, Task};
 
 /// A guard, not a policy. An index is meant to be an index; past this somebody
@@ -91,15 +99,27 @@ pub const PILE_LINES: usize = 5;
 /// One flat list, in id order. This grouped by repository until `0004`, and the
 /// grouping is not worth reinstating under another key: the header cost a line
 /// per group on every turn to tell a reader something the subject already says.
-/// The pile cap does not reshuffle it either — the tasks that survive the cap
-/// stay where their ids put them, interleaved with the session's own.
-pub fn render(tasks: &[Task]) -> String {
+/// Neither trim reshuffles it either — the tasks that survive the pile cap and
+/// the focus stay where their ids put them, interleaved with the session's own.
+///
+/// ⚠ **A focus is applied as given and its expiry is not checked here.** This
+/// renders; [`focus::current`] decides whether a period still holds, and it is
+/// the only place that reads the clock. The digest is cached for sixty seconds
+/// and read minutes later, so a renderer comparing against its own `now` would
+/// answer a question about a moment that had passed — the same reason the due
+/// date is printed as a date and never as a countdown.
+pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     if tasks.is_empty() {
         return String::new();
     }
 
     let doing = tasks.iter().filter(|t| t.status == Status::Doing).count();
 
+    // Focus first, then the pile cap on what survives it: capping first would
+    // spend the five pile lines on tasks the focus then hides, and report a
+    // pile shorter than it is.
+    let mut focus_hidden_own = 0usize;
+    let mut focus_hidden_pile = 0usize;
     // The pile, trimmed. Counted in id order, so what survives is the oldest
     // of it: a task nobody has taken in a fortnight is the one at risk of being
     // forgotten, and the newest is the one whoever filed it still remembers.
@@ -107,7 +127,19 @@ pub fn render(tasks: &[Task]) -> String {
     let mut pile_hidden = 0usize;
     let mut selected: Vec<&Task> = Vec::with_capacity(tasks.len());
     for task in tasks {
-        if task.assignee.kind == AssigneeKind::Nobody {
+        let unheld = task.assignee.kind == AssigneeKind::Nobody;
+        if let Some(focus) = focus
+            && !focus.tasks.contains(&task.id)
+            && !focus::breaks_through(task)
+        {
+            if unheld {
+                focus_hidden_pile += 1;
+            } else {
+                focus_hidden_own += 1;
+            }
+            continue;
+        }
+        if unheld {
             piled += 1;
             if piled > PILE_LINES {
                 pile_hidden += 1;
@@ -158,6 +190,31 @@ pub fn render(tasks: &[Task]) -> String {
         }
         bytes += line.len() + 1;
         out.push(line);
+    }
+
+    // ⚠ **A focus that hid something must say so, and say how to stop.** The
+    // whole risk of this feature is a session reading a short list as an empty
+    // plate; the count is what makes the short list legible, and naming the
+    // breakthrough rule is what makes it trustworthy — a session that does not
+    // know P0 still arrives will run `task list` every turn to check, which
+    // costs far more than the sentence does. Emitted whenever a focus holds,
+    // including when it happens to be hiding nothing: it is the explanation for
+    // the shape of everything above it.
+    if let Some(focus) = focus {
+        let mut says = format!("⚠ focused until {} UTC", focus.until.format("%H:%M"));
+        match (focus_hidden_own, focus_hidden_pile) {
+            (0, 0) => says.push_str(": nothing else of yours is open."),
+            (own, 0) => says.push_str(&format!(": {own} more of yours not shown.")),
+            (0, pile) => says.push_str(&format!(": {pile} in the pile not shown.")),
+            (own, pile) => says.push_str(&format!(
+                ": {own} more of yours and {pile} in the pile not shown."
+            )),
+        }
+        if focus_hidden_own + focus_hidden_pile > 0 {
+            says.push_str(" P0 and overdue still break through.");
+        }
+        says.push_str(" `task focus --clear` ends it, `task list` shows everything.");
+        out.push(says);
     }
 
     // Two notices, never merged: they are different failures with different

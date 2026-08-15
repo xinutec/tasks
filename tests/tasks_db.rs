@@ -723,7 +723,7 @@ async fn a_dropped_task_is_not_open_anywhere() {
 
     // The digest reads that same list, and this is the property the whole
     // service is built to keep: a dropped task never reaches a prompt.
-    let digest = tasks::digest::render(&open);
+    let digest = tasks::digest::render(&open, None);
     assert!(
         !digest.contains("Overtaken by events"),
         "a dropped task reached the digest: {digest}"

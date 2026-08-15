@@ -7,8 +7,15 @@
 //! every turn, and nothing anywhere said so.
 
 use chrono::{TimeZone, Utc};
-use tasks::digest::{MAX_BYTES, PILE_LINES, render};
+use tasks::digest::{MAX_BYTES, PILE_LINES};
 use tasks::tasks::types::{Assignee, AssigneeKind, Priority, Status, Task};
+
+/// The digest of a session that has not focused on anything — which is every
+/// session almost all of the time, and the shape every assertion below about
+/// cost is about. A focus is passed explicitly where it is the subject.
+fn render(tasks: &[Task]) -> String {
+    tasks::digest::render(tasks, None)
+}
 
 fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
     let at = Utc.with_ymd_and_hms(2026, 8, 8, 12, 0, 0).unwrap();
