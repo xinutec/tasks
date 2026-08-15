@@ -90,6 +90,20 @@ async fn a_long_body_may_not_be_replaced_by_almost_nothing() {
 }
 
 #[tokio::test]
+async fn the_refusal_counts_one_character_as_one() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, &prose(3000)).await;
+
+    let said = refusal(
+        repo::update(&pool, id, body("x"), &pippijn())
+            .await
+            .expect_err("one character replaced 3,000"),
+    );
+
+    assert!(said.contains("1 character of"), "{said}");
+}
+
+#[tokio::test]
 async fn a_refused_edit_leaves_no_trace() {
     let pool = common::fresh_db().await;
     let id = file(&pool, &prose(3000)).await;

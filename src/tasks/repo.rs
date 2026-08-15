@@ -1169,11 +1169,12 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         && body != &was_body
     {
         if !change.replace_body && collapses(&was_body, body) {
+            let now = body.chars().count();
             return Err(AppError::BadRequest(format!(
-                "that would leave {} characters of a {}-character body, so nothing was written. \
-                 Read what is there with `task show {id} --body`. If the body really should go, \
-                 say so with --replace-body.",
-                body.chars().count(),
+                "that would leave {now} character{} of a {}-character body, so nothing was \
+                 written. Read what is there with `task show {id} --body`. If the body really \
+                 should go, say so with --replace-body.",
+                if now == 1 { "" } else { "s" },
                 was_body.chars().count()
             )));
         }
