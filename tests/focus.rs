@@ -400,6 +400,16 @@ async fn a_period_outside_the_bounds_is_refused_with_the_bounds_named() {
         assert!(said.contains("15m"), "{said}");
         assert!(said.contains("24h"), "{said}");
         assert!(said.contains(&focus::spell(period)), "{said}");
+        // ⚠ **And the reason has to match which bound was missed.** One
+        // sentence for both told a caller who asked for five minutes that a
+        // focus longer than a day is really a handover. Measured on prod,
+        // 2026-08-15, before this arm existed.
+        let handover = said.contains("handover");
+        assert_eq!(
+            handover,
+            period > focus::MAX,
+            "the refusal explains the wrong bound: {said}"
+        );
     }
 
     // And nothing was written on the way to refusing.

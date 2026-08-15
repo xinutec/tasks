@@ -164,10 +164,18 @@ pub async fn enter(
         ));
     }
     if period < MIN || period > MAX {
+        // ⚠ **Two bounds, two different mistakes, and the advice for one is
+        // nonsense for the other.** A single sentence about handovers told a
+        // caller who had asked for five minutes that their focus was too long.
+        let why = if period > MAX {
+            "Longer than a day is not a focus but a handover — `task move <id> <who>` is \
+             how work changes hands where everybody can see it."
+        } else {
+            "A shorter one lapses before the work starts, and an expired focus reads \
+             exactly like a broken one."
+        };
         return Err(AppError::BadRequest(format!(
-            "a focus runs from {} to {}, and {} is outside that. Longer than a day is not \
-             a focus but a handover — `task move <id> <who>` is how work changes hands where \
-             everybody can see it.",
+            "a focus runs from {} to {}, and {} is outside that. {why}",
             spell(MIN),
             spell(MAX),
             spell(period),
