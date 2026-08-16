@@ -1590,14 +1590,22 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 
     tx.commit().await.context("committing a task change")?;
     // Only where text moved, and only where the task had a history to name.
-    // `now` is measured off what the change carried rather than re-read: the
-    // body branch above has already established they differ.
+    // `now` is measured off the RESOLVED body rather than re-read: the body
+    // branch above has already established they differ.
+    //
+    // ⚠ **It read `change.body`, and that was the before-size on every
+    // `--prepend`/`--append`.** Those two leave `change.body` at None — the text
+    // they produce is `body`, assembled from `joined` — so the `map_or` fallback
+    // fired and the line said `1619 → 1619 chars` over an addition of two
+    // thousand. Correct while `--body` was the only spelling, wrong from
+    // `346120c`, and wrong in the reassuring direction: [`displaced`] exists to
+    // make a session look twice at what it just overwrote, and it was reporting
+    // that nothing had been overwritten at all.
     let replaced = edit_event.and(wrote_it).map(|(at, by)| Replaced {
         at,
         by,
         was: was_body.chars().count(),
-        now: change
-            .body
+        now: body
             .as_deref()
             .map_or(was_body.chars().count(), |body| body.chars().count()),
     });

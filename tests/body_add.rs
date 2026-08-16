@@ -338,6 +338,35 @@ async fn the_history_counts_an_addition_as_what_it_is() {
 }
 
 #[tokio::test]
+async fn the_reply_counts_the_body_that_was_written_not_the_one_that_was_sent() {
+    // ⚠ **The reply said `10 → 10 chars` over an addition, from `346120c` until
+    // 2026-08-16.** `Replaced.now` was read off `change.body`, which an addition
+    // leaves at None — so its `map_or` fallback handed back the BEFORE size and
+    // the line reported that nothing had moved.
+    //
+    // That line is `displaced()` in the client, and its whole job is to make a
+    // session look twice at text it just replaced. Saying an addition displaced
+    // nothing is the one wrong answer that reads as reassurance, so the case
+    // that broke is the case where being wrong costs most.
+    //
+    // The history line was right throughout — see
+    // `the_history_counts_an_addition_as_what_it_is` — because the write and
+    // the event were both built from the resolved body. Only the reply read the
+    // request instead.
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "the filing").await;
+
+    let replaced = repo::update(&pool, id, prepend("DONE."), &pippijn())
+        .await
+        .expect("prepending")
+        .replaced
+        .expect("an addition displaces the body it grew from");
+
+    assert_eq!(replaced.was, 10);
+    assert_eq!(replaced.now, 17, "the reply ignored the added text");
+}
+
+#[tokio::test]
 async fn replacing_and_adding_at_once_is_refused_as_a_contradiction() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
