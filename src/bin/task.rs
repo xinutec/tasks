@@ -362,13 +362,37 @@ enum Command {
     /// a ticket about copying a disk. Lead with where it stands; the history
     /// goes under it. Better still, put the state in `--subject`, which is the
     /// only part anybody reads without opening the task.
+    ///
+    /// ⚠ **`--prepend` is how to do that in one command, and `--body` is not.**
+    /// `--body` replaces everything; recording an outcome with it deletes the
+    /// filing unless the old text is read out and pasted back first. On
+    /// 2026-08-15 that read was skipped twice in one afternoon by the session
+    /// that maintains this tool — once caught by the guard on `--body`, once
+    /// under its threshold at 52% kept, where nothing catches it.
     Edit {
         id: TaskRef,
         #[arg(long)]
         subject: Option<String>,
-        /// `-` reads stdin. REPLACES the body; it does not append.
-        #[arg(long)]
+        /// `-` reads stdin. REPLACES the whole body — `--prepend` is how to
+        /// keep it.
+        #[arg(long, conflicts_with_all = ["prepend", "append"])]
         body: Option<String>,
+        /// Put text ABOVE the body, keeping every word of it. `-` reads stdin.
+        ///
+        ///     task edit 42 --prepend "DONE in a2c3ab6 — deployed and verified."
+        ///
+        /// ⚠ **This is almost always the one you want**, and not only because
+        /// it is safe: a body grows in the order things happened, so what is
+        /// still true sinks to the bottom. Lead with where it stands and let
+        /// the history sit under it.
+        #[arg(long)]
+        prepend: Option<String>,
+        /// Put text BELOW the body, keeping every word of it. `-` reads stdin.
+        ///
+        /// For when what you are adding really is the next thing that happened
+        /// rather than the conclusion. Composes with `--prepend`.
+        #[arg(long)]
+        append: Option<String>,
         /// Mean it, where `--body` would leave almost nothing of a substantial
         /// one.
         ///
@@ -1246,6 +1270,8 @@ async fn main() -> Result<()> {
             id,
             subject,
             body: raw,
+            prepend,
+            append,
             replace_body,
             priority,
             blocked_on,
@@ -1281,6 +1307,19 @@ async fn main() -> Result<()> {
                 if replace_body {
                     change["replace_body"] = json!(true);
                 }
+            }
+            // ⚠ **There is one stdin, so only one of these may claim it.** The
+            // second `body("-")` would read an exhausted stream and add an
+            // empty string, which the service then refuses with a message about
+            // an empty variable — true, and no help at all in finding this.
+            if prepend.as_deref() == Some("-") && append.as_deref() == Some("-") {
+                bail!("only one of --prepend and --append can read stdin — give the other inline");
+            }
+            if let Some(text) = prepend {
+                change["prepend"] = json!(body(&text)?);
+            }
+            if let Some(text) = append {
+                change["append"] = json!(body(&text)?);
             }
             if change.as_object().is_none_or(|o| o.is_empty()) {
                 bail!("nothing to change: pass --subject or --body");

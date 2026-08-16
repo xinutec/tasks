@@ -119,13 +119,29 @@ task add "One line" --priority P2 --body -   # yours, by default
 task add "One line" --priority P1 --to nobody  # for whoever picks it up
 task add "One line" --unassessed    # not yours to judge; whoever takes it decides
 task add "One line" --priority P2 --no-duplicate-check   # skip the check below
-task edit <id> --body -         # rewrite the prose
+task edit <id> --prepend "DONE in <sha>."  # add ABOVE the body, keeping all of it
+task edit <id> --append -       # add BELOW it; `-` reads stdin
+task edit <id> --body -         # REPLACE the prose entirely
 task edit <id> --priority P0    # rank one that already exists
 task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
 task edit <id> --unblock        # it is not waiting any more
 task edit <id> --due 2026-09-01 # when it has to be done by
 task edit <id> --no-due         # no deadline after all
 ```
+
+⚠ **`--body` replaces everything; `--prepend` is how you record an outcome.**
+Closing a task usually means writing a paragraph and keeping thousands of
+characters of filing, and `--body` deletes the filing unless you read it out and
+paste it back first. On 2026-08-15 that read was skipped twice in one afternoon
+by the session that maintains this tool — once caught by the guard, once at 52%
+kept, which is under the threshold and which nothing catches:
+
+    task edit 42 --prepend "DONE in a2c3ab6 — deployed, verified on prod."
+
+Above rather than below, because a body grows in the order things happened and
+what is still true sinks to the bottom. The addition is resolved server-side
+against the row it locks, so two conversations adding to one task cannot lose
+each other's text — do NOT rebuild this by reading the body and sending it back.
 
 ⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
 takes it on, and `task start` claims it **out of the pile** — the same way `task

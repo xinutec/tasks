@@ -291,6 +291,8 @@ task drop <id>                            # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
 task move <id> me|pippijn|<session>|nobody  # hand it over
 task edit <id> [--subject S] [--body -] [--priority P0]   # change the words, rank it
+task edit <id> --prepend "DONE in <sha>."                 # put text ABOVE the body, keeping it
+task edit <id> --append -                                 # and BELOW; `-` reads stdin
 task focus <id>… --for 4h                 # for four hours my prompt shows only these
 task focus [--clear]                      # what I am on, how long is left; end it now
 task digest                               # exactly what a prompt receives

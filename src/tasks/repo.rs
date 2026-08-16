@@ -514,6 +514,35 @@ pub struct Change {
     pub subject: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    /// Text to put ABOVE the body there already is, keeping all of it.
+    ///
+    /// ⚠ **This is the field that stops the mistake `body` invites.** Recording
+    /// an outcome on a task means writing a paragraph and keeping thousands of
+    /// characters of filing, and the only way to say that was to read the body
+    /// out, concatenate by hand, and send the whole thing back as a
+    /// replacement. Twice on 2026-08-15 the read half was skipped and the
+    /// paragraph landed as the entire body — once caught by [`collapses`], once
+    /// under its threshold at 52% kept, which nothing catches.
+    ///
+    /// ⚠ **Above rather than below is the ordinary case, and deliberately.** A
+    /// body grows in the order things happened, so what is still true sinks:
+    /// measured across every task with prose, #704's verdict sat 98% down its
+    /// 132 lines. `task edit --help` has said *lead with where it stands* since
+    /// before this existed; this is the field that makes doing so cheap.
+    ///
+    /// **Resolved against the body inside the same transaction that reads it**,
+    /// so two conversations adding to one task cannot lose each other's text —
+    /// a client-side read-modify-write could, and sessions here really do edit
+    /// the same task seconds apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepend: Option<String>,
+    /// Text to put BELOW the body there already is, keeping all of it.
+    ///
+    /// The twin of [`prepend`](Self::prepend), for the case where what is being
+    /// added really is the next thing that happened rather than the conclusion.
+    /// Both may be sent at once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub append: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
     /// ⚠ **Absent means leave it alone, so this cannot CLEAR a priority.** That
@@ -621,6 +650,52 @@ const KEEPS_AT_LEAST: usize = 4; // i.e. a quarter
 fn collapses(was: &str, now: &str) -> bool {
     let (was, now) = (was.chars().count(), now.chars().count());
     was > WORTH_GUARDING && now * KEEPS_AT_LEAST < was
+}
+
+/// What a body becomes once something is added above or below it.
+///
+/// ⚠ **Exactly one blank line at each seam, however many newlines were there.**
+/// Not cosmetic: markdown joins adjacent lines into one paragraph, so a
+/// one-line note butted straight onto a body that opens with prose silently
+/// becomes the first sentence of it — the added text and the text it was meant
+/// to head would read as one claim.
+///
+/// ⚠ **Newlines only, never spaces or tabs.** Whitespace inside a line is
+/// markdown content: two trailing spaces are a hard line break, and leading
+/// spaces set indentation and continuation. A plain `trim` at the seam looks
+/// equivalent and is not — it deleted the indentation of a body's first line in
+/// the first version of this, which is a change to what the task SAYS made by a
+/// command that promised to keep it.
+///
+/// An empty body takes the addition alone, with no seam to normalise: prepending
+/// to a task filed with no prose must not leave it starting with a blank line.
+///
+/// ⚠ **The existing body is trimmed only on a side that gained a neighbour.**
+/// Trimming both ends unconditionally would let an `append` quietly restyle the
+/// TOP of a body it never touched — a change nobody asked for, showing up in the
+/// history as characters moved.
+fn joined(was: &str, prepend: Option<&str>, append: Option<&str>) -> String {
+    const SEAM: [char; 2] = ['\n', '\r'];
+
+    let mut middle = was;
+    if prepend.is_some() {
+        middle = middle.trim_start_matches(SEAM);
+    }
+    if append.is_some() {
+        middle = middle.trim_end_matches(SEAM);
+    }
+
+    let mut parts: Vec<&str> = Vec::with_capacity(3);
+    parts.extend(prepend.map(|text| text.trim_matches(SEAM)));
+    parts.push(middle);
+    parts.extend(append.map(|text| text.trim_matches(SEAM)));
+    parts
+        .into_iter()
+        // A part that is only whitespace contributes nothing but would still
+        // open a seam, leaving the blank line it was supposed to prevent.
+        .filter(|part| !part.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 /// Split an assignee into the three columns that store it.
@@ -1143,8 +1218,22 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     //
     // This is on the write path only; it never touches the digest, which is the
     // one query charged per turn.
+    //
+    // ⚠ **`FOR UPDATE`, and a transaction alone is NOT enough.** `prepend` and
+    // `append` build the new body out of this read, so the row has to be held
+    // from here until the write. Under InnoDB's REPEATABLE READ a plain
+    // `SELECT` is a non-locking snapshot: two conversations adding to one task
+    // would both read the body as it was, and whichever committed second would
+    // store a version the other's text had never been in. The `UPDATE` below
+    // does take a lock and does not save it — by then the losing body has
+    // already been built.
+    //
+    // The lock is held for the rest of this transaction, which is a handful of
+    // statements against one row on a path that runs when somebody types a
+    // command. `tests/body_add.rs` drives the interleaving by hand, because two
+    // gentler versions of that test passed against the unlocked read.
     let (was_subject, was_body): (String, String) =
-        sqlx::query_as("SELECT subject, body FROM tasks WHERE id = ?")
+        sqlx::query_as("SELECT subject, body FROM tasks WHERE id = ? FOR UPDATE")
             .bind(id)
             .fetch_one(&mut *tx)
             .await
@@ -1174,7 +1263,54 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         }
     }
 
-    if let Some(body) = &change.body
+    // ⚠ **Adding to a body is resolved HERE, against the text just read, inside
+    // the transaction.** Doing it in the client — GET the body, concatenate,
+    // PATCH the result — is a read-modify-write across two round trips, and two
+    // conversations adding to one task would silently drop one of the two
+    // additions. That is not hypothetical here: #921 took an edit from another
+    // session eleven seconds after its own.
+    //
+    // Resolving it into `body` also means everything downstream is unchanged
+    // and stays correct for free: the collapse guard (which can never fire on
+    // text that only grows), the `N → M chars` history line, and the revision
+    // snapshot that `task undo` restores.
+    // ⚠ **Adding nothing is refused, not quietly ignored.** These fields are
+    // usually filled from a heredoc, a variable or a piped command, and the way
+    // they come out empty is that the thing meant to produce the text produced
+    // none. Doing nothing and reporting success is how that goes unnoticed.
+    for (flag, text) in [("--prepend", &change.prepend), ("--append", &change.append)] {
+        if text.as_ref().is_some_and(|t| t.trim().is_empty()) {
+            return Err(AppError::BadRequest(format!(
+                "{flag} was given nothing to add, so the task is untouched. If that text \
+                 came from a command or a variable, it is empty."
+            )));
+        }
+    }
+
+    let added = joined(
+        &was_body,
+        change.prepend.as_deref(),
+        change.append.as_deref(),
+    );
+    let body = match (
+        &change.body,
+        change.prepend.is_some() || change.append.is_some(),
+    ) {
+        // Both spellings at once contradict each other — one replaces the body
+        // and the other keeps it — so this is refused rather than ordered.
+        (Some(_), true) => {
+            return Err(AppError::BadRequest(
+                "--body replaces the whole body and --prepend/--append keep it, so sending \
+                 both says two different things. Pick one."
+                    .into(),
+            ));
+        }
+        (Some(body), false) => Some(body.clone()),
+        (None, true) => Some(added),
+        (None, false) => None,
+    };
+
+    if let Some(body) = &body
         && body != &was_body
     {
         if !change.replace_body && collapses(&was_body, body) {

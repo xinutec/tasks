@@ -248,6 +248,21 @@ export interface NewTask {
 export interface Change {
   subject?: string | null;
   body?: string | null;
+  /**
+   * Text to put above the existing body, keeping all of it.
+   *
+   * ⚠ **Resolved server-side, against the body inside the same transaction that
+   * reads it.** Do NOT reimplement it here as read-concatenate-PATCH: that is a
+   * read-modify-write across two round trips, and two clients adding to one
+   * task would drop one of the two additions.
+   *
+   * Sending this together with `body` is a **400** — one replaces the body and
+   * the other keeps it.
+   */
+  prepend?: string | null;
+  /** Text to put below the existing body. The twin of `prepend`; both may be
+   *  sent at once, and the same rules apply. */
+  append?: string | null;
   status?: Status | null;
   /** Absent means leave it alone, so this cannot UNRANK a task — the same rule
    *  every other field here follows. Ranking it again is the correction. */
