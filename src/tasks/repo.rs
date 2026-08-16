@@ -644,9 +644,39 @@ const KEEPS_AT_LEAST: usize = 4; // i.e. a quarter
 ///
 /// Measured before it was built, over the 35 revisions the store held on
 /// 2026-08-15 — its whole history at the time, one day after it shipped. This
-/// fires on none of them; 27 of the 35 grew or held their body. Worth rerunning
-/// once there is more history, and worth loosening if it ever fires on an edit
-/// somebody meant.
+/// fires on none of them; 27 of the 35 grew or held their body.
+///
+/// ⚠ **Re-measured 2026-08-16 over every edit the history records with sizes:
+/// 95 real edits, 89 of them over [`WORTH_GUARDING`]. This still fires on
+/// ZERO of them, and it must NOT be tightened.** The question asked was whether
+/// to raise the share, because a slip on #921 kept 34% and one on #923 kept 53%
+/// — both under a threshold that would have caught them. The distribution says
+/// no. Every guarded edit that shrank, tightest first:
+///
+/// | kept | edits |
+/// | --- | --- |
+/// | under 25% | **none** |
+/// | 33–53% | #929, #921, #916, #905, #857, #822, #904, #923 |
+/// | 60–98% | #931, #849, #874, #735, #903, #856, #783, #908 |
+///
+/// All eight in the middle band were read. **Every one is a conclusion-on-top
+/// rewrite** — they now open `DONE in ab45002…`, `**CLOSED: the console is not
+/// at fault**`, `Body rewritten the same night…` — written by four different
+/// conversations. That is not a near-miss population: it is precisely what
+/// `task edit --help` instructs, and putting the verdict above a history halves
+/// a body by construction. A cut at 55% would fire on nine edits to catch two
+/// mistakes, which is a gate on a frequent correct operation — the thing the
+/// paragraph above says not to build.
+///
+/// So the 25% line stays, and the 25–60% band is answered by removing the
+/// NEED to rewrite rather than by policing it: `Change::prepend` (`346120c`)
+/// puts a conclusion on top while keeping every word, so the same act no longer
+/// shrinks anything. That predicts this band empties as sessions adopt it,
+/// which is the thing to look at when this is measured again.
+///
+/// ⚠ **The window is one day wide.** 779 further body edits predate the sizes
+/// being written into `task_events.detail`, and their details say only `body` —
+/// unmeasurable, and not recoverable, since only one revision is kept per task.
 fn collapses(was: &str, now: &str) -> bool {
     let (was, now) = (was.chars().count(), now.chars().count());
     was > WORTH_GUARDING && now * KEEPS_AT_LEAST < was
