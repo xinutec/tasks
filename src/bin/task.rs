@@ -1180,9 +1180,9 @@ async fn main() -> Result<()> {
         } => {
             client.writing()?;
             // The list comes first, and two separate questions are asked of it:
-            // whether something open carries this exact subject, which is
-            // answered here and refuses; and, once the task is on the list,
-            // whether a model sees the same problem in different words.
+            // whether something open carries this exact subject, and whether a
+            // model sees the same problem in different words. Both are answered
+            // before the POST and both refuse.
             //
             // ⚠ **A list that could not be read costs a note, never a filing.**
             // Moving this ahead of the POST would otherwise have turned every

@@ -201,26 +201,34 @@ question is only asked once the first is answered.
 ## Filing something that is already on the list
 
 ⚠ **You cannot see the other conversations' lists, so you will file a duplicate
-eventually.** `task add` now checks: once the filing has landed, the local
-`claude` reads your subject against every open task and prints what it thinks
-you may have re-filed. It goes to stderr, under the task, and looks like this:
+eventually.** `task add` checks before it files: the local `claude` reads your
+subject against every open task, and a match **ends the command with nothing
+written**. It looks like this:
 
 ```text
-- [ ] #826  P4  health-bus-refresh has never actually run — the cron is suspended  (tasks)
-
-maybe already filed — a guess from titles, check before acting:
-  #760  health-bus-refresh cron is suspended and has never run
+Error: already filed, by a model's reading of the titles — nothing was filed:
+  #961  both about prepend/append operations on tasks and body change tracking
+`task show <id>` to check one. If this really is different work, re-run the same command with --no-duplicate-check.
 ```
 
-**It is a guess from titles, and it is often wrong about what is related.**
-`task show 760` before acting on one. If it is genuinely the same problem, `task
-drop` yours and add what you knew to the one that already exists — that is
-better than two half-descriptions of one thing.
+⚠ **Read that last line rather than moving on.** Nothing was filed, so there is
+no task to come back to and no `task drop` to do — if you treat this like a
+warning you have lost the filing. Two answers are open and both are one command:
+`task show 961` and fold your text into that one, or re-run **the same command**
+with `--no-duplicate-check`, which is what you want when it matched your topic
+rather than your work. You are still holding the body; it is a re-run, not a
+rewrite.
+
+**It is a guess from titles, so it is often wrong about what is related.** Two
+tasks on one subsystem read as one task to it. That is the price of catching the
+duplicate nobody can catch by hand, and it is paid by the override being cheap.
 
 **Silence means it looked and found nothing.** A check that could not run says
-so explicitly (`duplicate check did not run: …`), because a failure that printed
-nothing would read exactly like a clean list. `--no-duplicate-check` skips it,
-which is worth doing when filing a batch — it costs 6–25 seconds a filing.
+so explicitly (`duplicate check did not run: …`) **and files the task anyway** —
+only a model that actually names something refuses, because a session that
+cannot write things down is worse than any duplicate. `--no-duplicate-check`
+skips the wait, which is worth doing when filing a batch: it costs 8–25 seconds
+a filing, and it now costs it *before* the task exists rather than after.
 
 ## What to do next: P0 to P4
 

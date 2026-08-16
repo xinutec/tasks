@@ -299,15 +299,21 @@ task digest                               # exactly what a prompt receives
 task rename <name>                        # tell the service what I call myself
 ```
 
-**`task add` says if something already covers it.** After the filing lands, the
-local `claude` is asked — as Haiku, on the caller's own subscription rather than
-an API key — whether the new subject is one of the open tasks in different words.
-That is the duplicate no one can catch by hand: sessions cannot see each other's
-lists, and the two spellings of one problem share no words. What comes back is
-printed on **stderr** under the task, so `--json` stdout stays parseable, and it
-is advisory in the strict sense — a failed, slow or missing `claude` says so and
-never costs the filing. `--no-duplicate-check` skips it; `src/tasks/duplicates.rs`
-carries the measurements that set its shape.
+**`task add` REFUSES what something already covers.** Before the filing goes
+anywhere, the local `claude` is asked — as Haiku, on the caller's own
+subscription rather than an API key — whether the new subject is one of the open
+tasks in different words. That is the duplicate no one can catch by hand:
+sessions cannot see each other's lists, and the two spellings of one problem
+share no words. A match ends the command, `nothing was filed`, naming what it
+matched and the override in the same breath: `--no-duplicate-check` re-runs it
+past both halves, and the caller is still holding the body it tried to file.
+
+⚠ **Only a model that names something refuses.** A failed, slow or missing
+`claude`, or a list that could not be read, prints `duplicate check did not run:
+…` on stderr and **files the task** — a session that cannot write things down is
+worse than any duplicate. That distinction is the whole of the design; it was
+advisory until 2026-08-14, and `src/tasks/duplicates.rs` carries both the
+measurement that argued for advisory and the one that overruled it.
 
 `--body -` reads stdin, which is how a session writes a long one without fighting
 shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.
