@@ -633,50 +633,31 @@ const KEEPS_AT_LEAST: usize = 4; // i.e. a quarter
 /// Whether a new body keeps so little of the old one that it is more likely a
 /// mistake than a rewrite.
 ///
-/// ⚠ **This gates edits, which [`crate::tasks::duplicates`] argues against
-/// doing — and the argument does not reach this.** That one is about whose
-/// words and how old: overwriting another session's recent text is frequent and
-/// legitimate, and a gate on a frequent correct operation only teaches everyone
-/// to pass gates. A 3,109-character body becoming 4 characters is neither
-/// frequent nor legitimate. That is what happened to #900 on 2026-08-15, when a
-/// session read `--json`, took `detailed` for the prose, and wrote `True` over
-/// the lot.
+/// ⚠ **This gates edits, which [`crate::tasks::duplicates`] argues against — and that
+/// argument does not reach this.** That one is about whose words and how old:
+/// overwriting another session's recent text is frequent and legitimate, and gating a
+/// frequent correct operation only teaches everyone to pass gates. A 3,109-character
+/// body becoming 4 characters is neither frequent nor legitimate. That is #900 on
+/// 2026-08-15, when a session read `--json`, took `detailed` for the prose, and wrote
+/// `True` over the lot.
 ///
-/// Measured before it was built, over the 35 revisions the store held on
-/// 2026-08-15 — its whole history at the time, one day after it shipped. This
-/// fires on none of them; 27 of the 35 grew or held their body.
+/// ⚠ **Measured over every edit the history records with sizes — 95 real edits, 89 of
+/// them over [`WORTH_GUARDING`]. This fires on ZERO of them, and must NOT be
+/// tightened.** Raising the share was considered, since slips on #921 and #923 kept
+/// 34% and 53%. The distribution says no: NO edit kept under 25%, and all eight that
+/// kept 33–53% were read — every one a conclusion-on-top rewrite, by four different
+/// conversations, which is precisely what `task edit --help` instructs. Putting the
+/// verdict above a history halves a body by construction, so a cut at 55% would fire
+/// on nine correct edits to catch two mistakes.
 ///
-/// ⚠ **Re-measured 2026-08-16 over every edit the history records with sizes:
-/// 95 real edits, 89 of them over [`WORTH_GUARDING`]. This still fires on
-/// ZERO of them, and it must NOT be tightened.** The question asked was whether
-/// to raise the share, because a slip on #921 kept 34% and one on #923 kept 53%
-/// — both under a threshold that would have caught them. The distribution says
-/// no. Every guarded edit that shrank, tightest first:
+/// So 25% stays, and the 25–60% band is answered by removing the NEED to rewrite
+/// rather than policing it: `Change::prepend` puts a conclusion on top while keeping
+/// every word. That predicts the band empties as sessions adopt it, which is what to
+/// look at when this is measured again.
 ///
-/// | kept | edits |
-/// | --- | --- |
-/// | under 25% | **none** |
-/// | 33–53% | #929, #921, #916, #905, #857, #822, #904, #923 |
-/// | 60–98% | #931, #849, #874, #735, #903, #856, #783, #908 |
-///
-/// All eight in the middle band were read. **Every one is a conclusion-on-top
-/// rewrite** — they now open `DONE in ab45002…`, `**CLOSED: the console is not
-/// at fault**`, `Body rewritten the same night…` — written by four different
-/// conversations. That is not a near-miss population: it is precisely what
-/// `task edit --help` instructs, and putting the verdict above a history halves
-/// a body by construction. A cut at 55% would fire on nine edits to catch two
-/// mistakes, which is a gate on a frequent correct operation — the thing the
-/// paragraph above says not to build.
-///
-/// So the 25% line stays, and the 25–60% band is answered by removing the
-/// NEED to rewrite rather than by policing it: `Change::prepend` (`346120c`)
-/// puts a conclusion on top while keeping every word, so the same act no longer
-/// shrinks anything. That predicts this band empties as sessions adopt it,
-/// which is the thing to look at when this is measured again.
-///
-/// ⚠ **The window is one day wide.** 779 further body edits predate the sizes
-/// being written into `task_events.detail`, and their details say only `body` —
-/// unmeasurable, and not recoverable, since only one revision is kept per task.
+/// ⚠ **The window is one day wide.** 779 earlier body edits predate sizes being written
+/// into `task_events.detail`, so they are unmeasurable and unrecoverable — only one
+/// revision is kept per task.
 fn collapses(was: &str, now: &str) -> bool {
     let (was, now) = (was.chars().count(), now.chars().count());
     was > WORTH_GUARDING && now * KEEPS_AT_LEAST < was
@@ -684,26 +665,22 @@ fn collapses(was: &str, now: &str) -> bool {
 
 /// What a body becomes once something is added above or below it.
 ///
-/// ⚠ **Exactly one blank line at each seam, however many newlines were there.**
-/// Not cosmetic: markdown joins adjacent lines into one paragraph, so a
-/// one-line note butted straight onto a body that opens with prose silently
-/// becomes the first sentence of it — the added text and the text it was meant
-/// to head would read as one claim.
+/// ⚠ **Exactly one blank line at each seam, however many newlines were there.** Not
+/// cosmetic: markdown joins adjacent lines into one paragraph, so a one-line note
+/// butted onto a body that opens with prose becomes the first sentence of it, and the
+/// two read as one claim.
 ///
-/// ⚠ **Newlines only, never spaces or tabs.** Whitespace inside a line is
-/// markdown content: two trailing spaces are a hard line break, and leading
-/// spaces set indentation and continuation. A plain `trim` at the seam looks
-/// equivalent and is not — it deleted the indentation of a body's first line in
-/// the first version of this, which is a change to what the task SAYS made by a
-/// command that promised to keep it.
+/// ⚠ **Newlines only, never spaces or tabs.** Whitespace inside a line is markdown
+/// content — two trailing spaces are a hard line break, leading spaces set indentation
+/// and continuation. A plain `trim` at the seam looks equivalent and is not: the first
+/// version deleted the indentation of a body's first line, changing what the task SAYS
+/// by a command that promised to keep it.
 ///
-/// An empty body takes the addition alone, with no seam to normalise: prepending
-/// to a task filed with no prose must not leave it starting with a blank line.
+/// An empty body takes the addition alone, with no seam to normalise: prepending to a
+/// task filed with no prose must not leave it starting with a blank line.
 ///
-/// ⚠ **The existing body is trimmed only on a side that gained a neighbour.**
-/// Trimming both ends unconditionally would let an `append` quietly restyle the
-/// TOP of a body it never touched — a change nobody asked for, showing up in the
-/// history as characters moved.
+/// ⚠ **The existing body is trimmed only on a side that gained a neighbour.** Trimming
+/// both ends would let an `append` quietly restyle the TOP of a body it never touched.
 fn joined(was: &str, prepend: Option<&str>, append: Option<&str>) -> String {
     const SEAM: [char; 2] = ['\n', '\r'];
 
@@ -786,41 +763,37 @@ fn parse_ids(joined: Option<&str>) -> Vec<u64> {
 
 /// Pippijn's rule on a blocked task, checked at both ends.
 ///
-/// *"It can be the same, but not higher priority than the thing it's blocked
-/// on."* (2026-08-11.) A task you cannot start must not claim to be the next
-/// thing anybody does — that is the single move that inflates a scale, and it is
-/// the one shape a machine can catch.
+/// *"It can be the same, but not higher priority than the thing it's blocked on."*
+/// (2026-08-11.) A task you cannot start must not claim to be the next thing anybody
+/// does — the single move that inflates a scale, and the one shape a machine can catch.
 ///
-/// ⚠ **The bound is the LEAST urgent open blocker**, which is the one that
-/// decides when this can actually start. Blocked on a `P1` and a `P3`, a task
-/// waits for the `P3`.
+/// ⚠ **The bound is the LEAST urgent open blocker**, since that is what decides when
+/// this can actually start: blocked on a `P1` and a `P3`, a task waits for the `P3`.
 ///
-/// ⚠ **Both ends, because either edit can break it.** Ranking the BLOCKED task
-/// up is the obvious one. Ranking a BLOCKER *down* is the one that would
-/// otherwise slip through: demote a `P1` to `P3` and everything waiting on it is
-/// silently left more urgent than what it waits for.
+/// ⚠ **Both ends, because either edit can break it.** Ranking the BLOCKED task up is
+/// the obvious one; ranking a BLOCKER *down* is the one that would slip through —
+/// demote a `P1` to `P3` and everything waiting on it is left more urgent than what it
+/// waits for.
 ///
-/// ⚠ **Refused, not cascaded.** Quietly demoting whatever waits on a demoted
-/// blocker would edit rows nobody asked about, and the caller would learn what
-/// happened by going and looking. The refusal names both tasks, so the person
+/// ⚠ **Refused, not cascaded.** Quietly demoting whatever waits on a demoted blocker
+/// would edit rows nobody asked about. The refusal names both tasks, so whoever is
 /// deciding sees the pair.
 ///
-/// ⚠ **Only while the blocker is OPEN.** A closed blocker constrains nothing —
-/// the work is free to start — and applying the rule to it would leave a
-/// finished dependency holding a rank down for ever.
+/// ⚠ **Only while the blocker is OPEN.** A closed blocker constrains nothing, and
+/// applying the rule to it would leave a finished dependency holding a rank down for
+/// ever.
 ///
-/// ⚠ **The rule binds a CLAIM, so an unranked task is never in violation.** This
-/// is the one asymmetry and it is deliberate. Unranked sorts as [`Priority::P2`]
-/// — that is the ordering — but it asserts nothing, and the rule is about
-/// asserting *do this next* for work you cannot start. Applying it to untriaged
-/// tasks would mean recording *"#726 waits for #697"* is refused until #726 is
-/// ranked, which turns writing down a fact into making a decision. That is the
-/// pressure that ends with everything ranked to satisfy a field, and a scale
-/// where every value has been satisfied rather than chosen says nothing.
+/// ⚠ **The rule binds a CLAIM, so an unranked task is never in violation** — the one
+/// deliberate asymmetry. Unranked sorts as [`Priority::P2`], but it asserts nothing,
+/// and the rule is about asserting *do this next* for work you cannot start. Applying
+/// it to untriaged tasks would refuse to record *"#726 waits for #697"* until #726 was
+/// ranked, turning writing down a fact into making a decision — the pressure that ends
+/// with everything ranked to satisfy a field, and a scale whose values were satisfied
+/// rather than chosen says nothing.
 ///
-/// So: the blocked task is checked only once somebody has ranked it. A
-/// BLOCKER's absent rank still counts as `P2`, because that is genuinely where
-/// it sits in the list and the claim above it has to clear something.
+/// So the blocked task is checked only once somebody has ranked it, while a BLOCKER's
+/// absent rank still counts as `P2`: that is genuinely where it sits, and the claim
+/// above it has to clear something.
 async fn blocking_is_consistent(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
