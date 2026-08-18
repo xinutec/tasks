@@ -82,6 +82,19 @@ behind the one command a session runs to decide what to do next — 135 lines an
 digest's question: your own, and the pile. `--mine` drops the pile, `--all` is
 the old behaviour, and both are named because all three are real questions.
 
+⚠ **`P4` is counted in the digest and never listed.** The rank means *kept as a
+record rather than a plan; it may never happen*, so reciting it on every turn
+contradicts what filing it said: it is the one level whose filer has stated it is
+not work, pushed at the holder more often than anything they chose to do.
+Measured 2026-08-17, the `life` session's whole 1112-byte digest was its P3/P4
+tail — 12 of its 13 open tasks were `P4`. The head still counts them and a notice
+names `task list`, which is the same rule the pile cap and focus follow. `P3` is
+deliberately not treated this way: it means a workaround exists and is in use,
+which is still a plan, and the eleven the `home` session carries get done
+*because* they are read. Hiding it would make filing at `P3` filing into a
+drawer, and invert the pressure until everything is ranked `P2` to stay visible —
+a change to what the ranks mean rather than to what a page shows.
+
 ⚠ **A session can narrow its own digest further, for a few hours** —
 `task focus 849 850 --for 4h`, and for four hours its prompt recites those two
 and counts the rest. It answers the case the cap above does not: a conversation

@@ -350,3 +350,98 @@ fn the_order_is_the_one_render_was_handed() {
         .collect();
     assert_eq!(ids, vec![1, 9], "render reordered by priority:\n{out}");
 }
+
+/// `P4` is *"kept as a record rather than a plan; it may never happen"* — the
+/// CLI's own definition. Reciting it on every turn contradicts it: it is the
+/// one rank the filer has said is not a plan, pushed at the holder more often
+/// than anything they chose to do.
+///
+/// Measured 2026-08-17, before this: the `life` session's digest was 1112 bytes
+/// of which **100%** was its P3/P4 tail — 12 of its 13 open tasks were P4.
+#[test]
+fn a_task_kept_as_a_record_is_counted_and_not_recited() {
+    let mut parked = held(2, "whole-house inventory, some day", "life");
+    parked.priority = Some(Priority::P4);
+    let out = render(&[held(1, "the actual work", "life"), parked]);
+
+    assert!(out.contains("**#1**"), "the plan went missing:\n{out}");
+    assert!(
+        !out.contains("**#2**"),
+        "a P4 was recited into every turn:\n{out}"
+    );
+}
+
+/// Rule 2 of every trim in this service: the party paying for it is told it
+/// happened. The head still counts the parked task, so the discrepancy between
+/// "2 open" and one line has to be explained on the page where it appears.
+#[test]
+fn what_is_parked_is_said_and_still_counted() {
+    let mut parked = held(2, "some day", "life");
+    parked.priority = Some(Priority::P4);
+    let out = render(&[held(1, "the actual work", "life"), parked]);
+
+    assert!(out.starts_with("2 open task(s)"), "{out}");
+    assert!(out.contains("1 at P4"), "the trim went silent:\n{out}");
+    assert!(out.contains("task list"), "no way back to it:\n{out}");
+}
+
+/// ⚠ **The effective rank, not the chosen one** — the same rule
+/// `focus::breaks_through` follows. A deadline inside the week raises a task to
+/// `P0` without anything being written, and reading `priority` here would let
+/// this trim bury exactly the task the escalation exists to raise.
+#[test]
+fn a_parked_task_a_deadline_has_raised_is_recited() {
+    let mut raised = held(2, "parked until the date got close", "life");
+    raised.priority = Some(Priority::P4);
+    raised.escalated_to = Some(Priority::P0);
+    let out = render(&[raised]);
+    assert!(
+        out.contains("**#2**"),
+        "an escalation was buried by the P4 trim:\n{out}"
+    );
+}
+
+/// Overdue is its own arm rather than a consequence, for the reason
+/// `breaks_through` gives: a task can be past its date with no rank at all, and
+/// a deadline that has already passed is the one thing that must not go quiet.
+#[test]
+fn a_parked_task_past_its_date_is_recited() {
+    let mut late = held(2, "parked and now late", "life");
+    late.priority = Some(Priority::P4);
+    late.overdue = true;
+    let out = render(&[late]);
+    assert!(out.contains("**#2**"), "an overdue task went quiet:\n{out}");
+}
+
+/// A focus is a session saying what it is working on, in so many words. If it
+/// names a parked task then that is the task it means, and a default trim must
+/// not overrule something typed on purpose.
+#[test]
+fn a_focus_that_names_a_parked_task_shows_it() {
+    let mut parked = held(2, "some day, but today", "life");
+    parked.priority = Some(Priority::P4);
+    let focus = tasks::tasks::focus::Focus {
+        tasks: [2].into_iter().collect(),
+        until: Utc.with_ymd_and_hms(2026, 8, 8, 16, 0, 0).unwrap(),
+    };
+    let out = tasks::digest::render(&[parked], Some(&focus));
+    assert!(
+        out.contains("**#2**"),
+        "a focus was overruled by the P4 trim:\n{out}"
+    );
+}
+
+/// The trim costs nothing on the sessions that have no parked work, which is
+/// most of them. Same argument as the priority marker above: stated as a
+/// number, because this file's assertions are about cost.
+#[test]
+fn nothing_parked_costs_nothing() {
+    let mut ordinary = held(1, "ordinary work", "health");
+    ordinary.priority = Some(Priority::P2);
+    let out = render(std::slice::from_ref(&ordinary));
+    assert!(
+        !out.contains("P4"),
+        "a session with no P4 paid for it:\n{out}"
+    );
+    assert_eq!(out.lines().count(), 2, "{out}");
+}

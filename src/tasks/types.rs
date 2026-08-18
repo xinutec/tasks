@@ -244,7 +244,7 @@ impl Priority {
             Priority::P1 => "nothing is accruing, but other work is waiting on this",
             Priority::P2 => "ordinary work, nothing waiting on it — where UNRANKED sits",
             Priority::P3 => "a workaround exists and is in use; what it costs is friction",
-            Priority::P4 => "kept as a record rather than a plan; it may never happen",
+            Priority::P4 => "kept as a record rather than a plan; not recited in your prompt",
         }
     }
 

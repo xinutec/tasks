@@ -257,6 +257,14 @@ Sorting the ranked first and the rest after would have got `P4` backwards:
 marking a task *when there is room* would have lifted it above four hundred
 tickets nobody had read.
 
+⚠ **`P4` has a consequence the other levels do not: it leaves your prompt.** A
+task ranked `P4` is counted in the digest and never listed, because the level
+says it is a record rather than a plan and reciting it every turn would say the
+opposite. It is still open, still in `task list`, and a deadline or an
+escalation brings it straight back. So `P4` is the right answer for work that
+may never happen, and the wrong one for work you simply are not doing this week
+— that is `P3`, which is still recited.
+
 ⚠ **Do not rank things to tidy up.** There were 700-odd tasks the day the column
 was added and none of them were ranked; that is the correct state, and it is why
 the column is nullable rather than defaulted. A rank is worth something because

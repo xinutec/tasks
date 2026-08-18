@@ -50,6 +50,14 @@
 //! cost this module refuses behind the one command a session runs to decide
 //! what to do next: 12,804 bytes, against one line for the session that ran it.
 //!
+//! **A fifth rule arrived with the ranks: `P4` is counted and never recited.**
+//! It is defined as *"kept as a record rather than a plan; it may never
+//! happen"*, and putting that in front of a session on every turn contradicts
+//! its own definition. Measured 2026-08-17, the `life` session's entire
+//! 1112-byte digest was its P3/P4 tail: 12 of 13 open tasks were `P4`, so it
+//! paid for a parked wishlist every turn and for nothing else. See [`parked`],
+//! which also records why `P3` is not treated the same way.
+//!
 //! **A session can narrow this further, for a few hours, and only itself.**
 //! `task focus 849 850 --for 4h` — see [`crate::tasks::focus`], which is the
 //! only thing in the service that hides an *open* task and carries the three
@@ -62,7 +70,7 @@
 //! render tests can stay about cost.
 
 use crate::tasks::focus::{self, Focus};
-use crate::tasks::types::{AssigneeKind, Status, Task};
+use crate::tasks::types::{AssigneeKind, Priority, Status, Task};
 
 /// A guard, not a policy. An index is meant to be an index; past this somebody
 /// has started writing content into the subjects, and the whole point is lost.
@@ -93,6 +101,32 @@ pub const MAX_BYTES: usize = 25_000;
 /// to browse when you have asked for it. Growing this is spending every
 /// conversation's context to save one `task list`.
 pub const PILE_LINES: usize = 5;
+
+/// Whether a task is kept as a record rather than recited as a plan.
+///
+/// `P4` is defined in `task --help` as *"kept as a record rather than a plan;
+/// it may never happen"*. Putting that in front of a session on every turn
+/// contradicts the definition: it is the one rank whose filer has said it is
+/// not work, pushed at the holder more often than anything they chose to do.
+/// Measured before this existed, the `life` session's whole 1112-byte digest
+/// was its P3/P4 tail — 12 of 13 open tasks were P4.
+///
+/// ⚠ **The effective rank, not the chosen one**, for the reason
+/// [`focus::breaks_through`] gives: a deadline inside the week raises a task
+/// without anything being written, and reading `priority` here would bury
+/// exactly the task the escalation exists to raise. Overdue is its own arm for
+/// the same reason it is one there — a date that has already passed must not go
+/// quiet, whatever rank it was filed at.
+///
+/// ⚠ **P3 is deliberately not here.** It means a workaround exists and is in
+/// use, which is still a plan, and the eleven P3s the `home` session was
+/// carrying get done *because* they are read. Hide the rank and filing at P3
+/// becomes filing into a drawer, so the pressure inverts and everything is
+/// ranked P2 to stay visible — a change to what the ranks mean rather than to
+/// what a page shows.
+fn parked(task: &Task) -> bool {
+    !task.overdue && task.escalated_to.or(task.priority) == Some(Priority::P4)
+}
 
 /// Render the index for a set of tasks, already filtered to the open ones.
 ///
@@ -125,18 +159,24 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // forgotten, and the newest is the one whoever filed it still remembers.
     let mut piled = 0usize;
     let mut pile_hidden = 0usize;
+    let mut parked_hidden = 0usize;
     let mut selected: Vec<&Task> = Vec::with_capacity(tasks.len());
     for task in tasks {
         let unheld = task.assignee.kind == AssigneeKind::Nobody;
-        if let Some(focus) = focus
-            && !focus.tasks.contains(&task.id)
-            && !focus::breaks_through(task)
-        {
+        // A focus names its tasks in so many words, so it outranks both trims
+        // below: if a session has said it is working on something parked, that
+        // is the task it means, and a default must not overrule it.
+        let named = focus.is_some_and(|focus| focus.tasks.contains(&task.id));
+        if focus.is_some() && !named && !focus::breaks_through(task) {
             if unheld {
                 focus_hidden_pile += 1;
             } else {
                 focus_hidden_own += 1;
             }
+            continue;
+        }
+        if !named && parked(task) {
+            parked_hidden += 1;
             continue;
         }
         if unheld {
@@ -220,6 +260,17 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // Two notices, never merged: they are different failures with different
     // remedies. The budget means a session's own plate has grown into content;
     // the pile means work is piling up that nobody has taken.
+    // ⚠ **Counted, never silent** — the third trim to follow the rule, and the
+    // reason the head still says the full number: a page that says "13 open"
+    // above one line has to explain itself where the discrepancy appears.
+    // Costs nothing at all on a session with nothing parked, which is most of
+    // them, and that is what makes it allowable in the one place every session
+    // pays on every turn.
+    if parked_hidden > 0 {
+        out.push(format!(
+            "⚠ {parked_hidden} at P4 not shown — kept as a record; `task list`."
+        ));
+    }
     if pile_hidden > 0 {
         out.push(format!("⚠ {pile_hidden} more in the pile — `task list`."));
     }
