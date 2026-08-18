@@ -7,7 +7,7 @@
 //! every turn, and nothing anywhere said so.
 
 use chrono::{TimeZone, Utc};
-use tasks::digest::{MAX_BYTES, PILE_LINES};
+use tasks::digest::{FOCUS_HINT_LINES, MAX_BYTES, PILE_LINES};
 use tasks::tasks::types::{Assignee, AssigneeKind, Priority, Status, Task};
 
 /// The digest of a session that has not focused on anything — which is every
@@ -444,4 +444,92 @@ fn nothing_parked_costs_nothing() {
         "a session with no P4 paid for it:\n{out}"
     );
     assert_eq!(out.lines().count(), 2, "{out}");
+}
+
+/// A session carrying 49 recited lines pays for all 49 on every turn and is
+/// working on two of them. `focus` is the only thing in the service that lets
+/// it say which two, and until this existed the digest never named it: the
+/// feature was reachable only from `task focus --help`, which nothing prompts
+/// anybody to run. Measured across every transcript on the machine, `focus`
+/// with real ids appeared in one episode, by one session, ever.
+#[test]
+fn a_session_carrying_too_much_is_told_focus_exists() {
+    let many: Vec<Task> = (1..=FOCUS_HINT_LINES as u64 + 1)
+        .map(|id| held(id, "work", "health"))
+        .collect();
+    let out = render(&many);
+    assert!(out.contains("task focus"), "no hint at the floor:\n{out}");
+}
+
+/// The header is the one line every session pays for on **every** turn, and
+/// this module's rule is to resist growing it. A conditional line is the only
+/// defensible form: it must cost exactly nothing on the sessions below the
+/// floor, which is most of them.
+#[test]
+fn a_session_below_the_floor_pays_nothing_for_the_hint() {
+    let few: Vec<Task> = (1..=FOCUS_HINT_LINES as u64)
+        .map(|id| held(id, "work", "health"))
+        .collect();
+    let out = render(&few);
+    assert!(
+        !out.contains("focus"),
+        "a short digest paid for the hint:\n{out}"
+    );
+}
+
+/// ⚠ **What the session HOLDS, not what the page shows.** The pile is a
+/// handover channel with a different denominator, capped at `PILE_LINES` and
+/// charged to everybody — and `focus` is not the remedy for it. Counting it
+/// here would tell a session with three of its own to go and focus.
+#[test]
+fn the_pile_does_not_push_a_session_over_the_floor() {
+    let mut tasks: Vec<Task> = (1..=FOCUS_HINT_LINES as u64)
+        .map(|id| held(id, "mine", "health"))
+        .collect();
+    tasks.extend((100..=140).map(|id| open(id, "unheld")));
+    let out = render(&tasks);
+    assert!(
+        !out.contains("task focus"),
+        "the pile was counted against the holder:\n{out}"
+    );
+}
+
+/// A task the digest did not recite is one the session is not paying for, so it
+/// cannot be part of the argument that it is paying too much. This is what makes
+/// the floor a statement about cost rather than about backlog size.
+#[test]
+fn what_was_never_recited_does_not_count_toward_the_floor() {
+    let mut tasks: Vec<Task> = (1..=FOCUS_HINT_LINES as u64)
+        .map(|id| held(id, "mine", "health"))
+        .collect();
+    for id in 100..=140 {
+        let mut parked = held(id, "some day", "health");
+        parked.priority = Some(Priority::P4);
+        tasks.push(parked);
+    }
+    let out = render(&tasks);
+    assert!(
+        !out.contains("task focus"),
+        "parked work was counted as cost:\n{out}"
+    );
+}
+
+/// Telling a session that has already focused to focus is noise, and worse, it
+/// contradicts the notice directly above it — which says how to *end* the thing
+/// the hint would be recommending.
+#[test]
+fn a_session_that_has_already_focused_is_not_told_to() {
+    let many: Vec<Task> = (1..=FOCUS_HINT_LINES as u64 + 1)
+        .map(|id| held(id, "work", "health"))
+        .collect();
+    let focus = tasks::tasks::focus::Focus {
+        tasks: (1..=20).collect(),
+        until: Utc.with_ymd_and_hms(2026, 8, 8, 16, 0, 0).unwrap(),
+    };
+    let out = tasks::digest::render(&many, Some(&focus));
+    assert_eq!(
+        out.matches("task focus").count(),
+        1,
+        "the hint doubled up on the focus notice:\n{out}"
+    );
 }

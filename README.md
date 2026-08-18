@@ -112,6 +112,19 @@ of them is negotiable:
 * **P0 and overdue break through**, on the effective rank rather than the chosen
   one, so a focus cannot bury the task an escalation exists to raise.
 
+⚠ **The digest names `focus` once a session is carrying more than
+`FOCUS_HINT_LINES` recited lines of its own**, because until 2026-08-18 it never
+did: the feature was reachable only from `task focus --help`, and across every
+transcript on the machine it had been used with real ids in a single episode, by
+one session, while another carried 49 lines on every turn. The floor counts what
+the session *holds and the digest recites* — not the pile, which has its own cap
+and its own denominator, and not anything already trimmed, which costs nothing to
+begin with. Twelve comes from the distribution rather than from taste, and the
+distribution it comes from is the one *after* the `P4` trim: 49, 15, then 10, 10,
+10 and a tail. The line says what `focus` does and stops there; a digest that
+told a session to hide its work would be pushing exactly the conversations most
+likely to hide something they should be doing.
+
 It touches the digest and nothing else: `task list` still shows everything,
 because the digest is the channel nobody asked for and a list somebody typed is
 one they wanted.

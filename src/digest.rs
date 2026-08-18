@@ -65,6 +65,14 @@
 //! focus runs first and the pile cap runs on what survives, or the five pile
 //! lines would be spent on tasks the focus then hid.
 //!
+//! **And it advertises itself once, above a floor.** A session carrying more
+//! than [`FOCUS_HINT_LINES`] recited lines of its own is told `focus` exists.
+//! This is the only feature the digest advertises, and it is here on the same
+//! ground the TaskCreate/TaskUpdate line stands on: a doc cannot win an
+//! argument with a per-turn reminder. Measured 2026-08-18, `task focus` with
+//! real ids appeared in one episode across every transcript on the machine,
+//! by one session, while another carried 49 lines on every turn.
+//!
 //! The selection lives in [`Filter::digest_for`](crate::tasks::repo::Filter),
 //! not here — this module is handed a list and renders it. Which is why the
 //! render tests can stay about cost.
@@ -101,6 +109,30 @@ pub const MAX_BYTES: usize = 25_000;
 /// to browse when you have asked for it. Growing this is spending every
 /// conversation's context to save one `task list`.
 pub const PILE_LINES: usize = 5;
+
+/// How many recited lines of its own a session carries before the digest says
+/// `focus` exists.
+///
+/// ⚠ **Recited lines it HOLDS, not open tasks.** A task that was trimmed —
+/// parked at `P4`, or past the pile cap — is one the session is not paying for,
+/// so it cannot be part of the argument that it is paying too much. And the
+/// pile is charged to everybody rather than to the holder, with `PILE_LINES`
+/// as its remedy; counting it here would tell a session with three of its own
+/// to go and focus on them.
+///
+/// **Twelve, from the distribution rather than from taste.** Measured
+/// 2026-08-18, once `P4` stopped being recited: 49 lines, 15, then 10, 10, 10,
+/// and a tail of 6, 6, 5, 4, 3, 3, 1. The break is between 15 and 10, so this
+/// fires for the two sessions genuinely paying and costs the other ten nothing.
+/// An earlier reading of the same fleet put the floor here too and would have
+/// caught five — that was the distribution *before* the `P4` trim, and it is
+/// why this number is written down with its date.
+///
+/// ⚠ **The hint is a capability, not advice.** It says what `focus` does and
+/// leaves the decision alone. A digest that tells a session to hide its work is
+/// pushing exactly the sessions most likely to hide something they should be
+/// doing, and it has no way of knowing which two tasks matter.
+pub const FOCUS_HINT_LINES: usize = 12;
 
 /// Whether a task is kept as a record rather than recited as a plan.
 ///
@@ -160,6 +192,9 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     let mut piled = 0usize;
     let mut pile_hidden = 0usize;
     let mut parked_hidden = 0usize;
+    // Counted as lines are selected rather than from `tasks`, because the floor
+    // below is about what this prompt costs and a trimmed task costs nothing.
+    let mut own = 0usize;
     let mut selected: Vec<&Task> = Vec::with_capacity(tasks.len());
     for task in tasks {
         let unheld = task.assignee.kind == AssigneeKind::Nobody;
@@ -185,6 +220,8 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
                 pile_hidden += 1;
                 continue;
             }
+        } else {
+            own += 1;
         }
         selected.push(task);
     }
@@ -279,6 +316,21 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
             "⚠ {omitted} more open task(s) not shown: this index is over its {MAX_BYTES}-byte \
              budget. Finish or delete something — an index that grows into content is the \
              thing this replaced."
+        ));
+    }
+    // ⚠ **Last, and never beside a focus.** A session that has already focused
+    // has the notice above telling it how to *end* the thing this would be
+    // recommending, and saying both is noise that contradicts itself.
+    //
+    // This is the one place the digest advertises a feature, and it is here
+    // because a doc cannot win an argument with a per-turn reminder — the same
+    // ground the TaskCreate/TaskUpdate line in the header stands on. `focus`
+    // was reachable only from `task focus --help`, and across every transcript
+    // on the machine it had been used with real ids once, by one session, while
+    // one conversation carried 49 lines on every turn.
+    if focus.is_none() && own > FOCUS_HINT_LINES {
+        out.push(format!(
+            "⚠ {own} of these are yours — `task focus <id>… --for 4h` recites only what you name."
         ));
     }
     out.join("\n")
