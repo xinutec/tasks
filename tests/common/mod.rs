@@ -50,6 +50,11 @@ pub(crate) async fn fresh_db() -> MySqlPool {
         // belt and braces — but the order this list is written in is the
         // documentation of the shape, and a reader should not have to check a
         // migration to know which way the arrows point.
+        // Nothing hangs off it and it hangs off nothing — see
+        // `migrations/0010_check_run.sql` — so it can go first or last. It is
+        // here because a suite that left rows behind would make every count in
+        // `tests/checks.rs` depend on file order.
+        "DELETE FROM check_run",
         "DELETE FROM task_revision",
         "DELETE FROM task_events",
         // Hangs off BOTH of the two below it, which is why it is above both.

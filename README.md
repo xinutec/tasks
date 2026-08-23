@@ -355,6 +355,13 @@ prepends adding 791,400 characters against 183 rewrites removing 26,593, and
 #982 ran 42 consecutive growing edits to 100,382 characters without once being
 consolidated.
 
+**Both checks write down what they did** (`check_run`, `POST /api/checks`): kind,
+characters put to the model, elapsed, and outcome — `quiet`, `spoke`, `timeout`
+or `error`. Neither could be counted before: the filing check's only trace was a
+line on the caller's stderr, and the density read swallows every failure by
+design. The table carries no foreign keys, because an instrument that its own
+subject can refuse or delete is not one.
+
 `--body -` reads stdin, which is how a session writes a long one without fighting
 shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.
 **Never on argv** — a token in a command line is in every process listing on the

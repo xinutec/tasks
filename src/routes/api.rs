@@ -13,6 +13,7 @@ use crate::digest;
 use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
+use crate::tasks::checks;
 use crate::tasks::focus;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Revision, Task, TaskDetail, Updated};
@@ -356,5 +357,32 @@ pub async fn rename(
         ));
     }
     sessions::touch(&app.db, &id, Some(name)).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// Record what a model check did.
+///
+/// ⚠ **A conversation's report about its own tooling, so a browser has nothing
+/// to say here.** The person reading the app never runs a check: the two that
+/// exist are spawned by the CLI, on the caller's machine, either side of a
+/// write. Refusing the owner keeps the table what it claims to be — every row a
+/// check that actually ran.
+///
+/// The clock and the session are taken from the request rather than from the
+/// body, because a caller that could name either could file a run as somebody
+/// else's or date it to a week ago, and both would be invisible in the numbers
+/// the table exists to produce.
+pub async fn check_ran(
+    Access(viewer): Access,
+    State(app): State<AppState>,
+    Wire(run): Wire<checks::Run>,
+) -> Result<axum::http::StatusCode, AppError> {
+    let Viewer::Session(session) = &viewer else {
+        return Err(AppError::BadRequest(
+            "a check belongs to the conversation that ran it, and this request is a person's."
+                .into(),
+        ));
+    };
+    checks::record(&app.db, session, &run).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

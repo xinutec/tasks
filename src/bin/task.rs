@@ -46,6 +46,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
+use tasks::tasks::checks;
 use tasks::tasks::density;
 use tasks::tasks::duplicates;
 use tasks::tasks::holder::{self, Holder};
@@ -829,11 +830,18 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 
 /// How long one check may take before it is abandoned.
 ///
-/// The measured spread over five replayed filings was 8–24 seconds against 134
-/// open tasks. This guards a call that never returns rather than one that is
-/// slow, and it is time a session spends waiting after its task is already
-/// filed.
-const PATIENCE: std::time::Duration = std::time::Duration::from_secs(60);
+/// ⚠ **120 seconds, because 60 was inside the spread rather than outside it.**
+/// The first bound came from five replayed filings at 8–24 seconds against 134
+/// open tasks. On 2026-08-23 the same call took 54 and 73 seconds on a 3.8 kB
+/// body while #982's 100 kB came back in 20, and five filings in the transcripts
+/// since 2026-08-14 died on the bound — against 280 filed. What varies is the
+/// one-shot session's startup, not the reading, so a bound near the median
+/// abandons calls that would have answered. Only that tail pays the wider one.
+///
+/// Provisional, and it is the last number here that will be a guess:
+/// [`checks`](tasks::tasks::checks) now records the elapsed time of every call,
+/// so the next reading comes from a distribution.
+const PATIENCE: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// The same, for reading a body rather than a list of titles.
 ///
@@ -878,12 +886,50 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
 ///
 /// `corpus` is read before the filing and so cannot contain it, which is what
 /// lets this refuse: there is nothing to undo yet.
-async fn already_filed(corpus: &[(u64, String)], subject: &str) -> Result<Vec<duplicates::Match>> {
+async fn already_filed(
+    client: &Client,
+    corpus: &[(u64, String)],
+    subject: &str,
+) -> Result<Vec<duplicates::Match>> {
     if corpus.is_empty() {
         return Ok(Vec::new());
     }
-    let said = ask(&duplicates::prompt(subject, corpus), PATIENCE).await?;
-    Ok(duplicates::parse(&said, corpus))
+    let asked = duplicates::prompt(subject, corpus);
+    let input_chars = asked.chars().count().min(u32::MAX as usize) as u32;
+    let (said, elapsed_ms) = ask(&asked, PATIENCE).await;
+    let found = match &said {
+        Ok(words) => duplicates::parse(words, corpus),
+        Err(_) => Vec::new(),
+    };
+    recorded(
+        client,
+        checks::Run {
+            kind: checks::Kind::Filing,
+            task_id: None,
+            input_chars,
+            accreted: None,
+            elapsed_ms,
+            outcome: checks::outcome(&said, !found.is_empty()),
+        },
+    )
+    .await;
+    // The failure is still the caller's to print: it is the line that says a
+    // filing went unchecked, and a row in a table nobody is reading tonight does
+    // not tell the session in front of it.
+    said?;
+    Ok(found)
+}
+
+/// Report one run, and never let reporting it cost anything.
+///
+/// Silent on every failure, for the same reason the checks themselves are: this
+/// runs after the call it describes, so there is nothing left to protect and a
+/// session that cannot reach the service has a worse problem than a missing row.
+async fn recorded(client: &Client, run: checks::Run) {
+    let req = client
+        .request(reqwest::Method::POST, "/api/checks")
+        .json(&run);
+    let _ = client.send(req).await;
 }
 
 /// Put the question to a one-shot session and leave nothing behind.
@@ -895,11 +941,15 @@ async fn already_filed(corpus: &[(u64, String)], subject: &str) -> Result<Vec<du
 /// is named here rather than left to the CLI, and the file goes the moment the
 /// answer is in hand — including on the failing paths, which leave exactly the
 /// same file as the working one.
-async fn ask(prompt: &str, patience: std::time::Duration) -> Result<String> {
+async fn ask(prompt: &str, patience: std::time::Duration) -> (Result<String>, u32) {
     let named = named();
+    let started = std::time::Instant::now();
     let said = call(prompt, &named, patience).await;
+    // Before `discard`, which is a file removal on the same path and no part of
+    // what was being measured.
+    let took = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
     discard(&named);
-    said
+    (said, took)
 }
 
 /// The call itself, up to the words that came back.
@@ -1255,7 +1305,7 @@ async fn main() -> Result<()> {
             // an unreadable answer must never cost a filing — a session that
             // cannot write things down is worse than any duplicate.
             if !no_duplicate_check {
-                match already_filed(&corpus, &subject).await {
+                match already_filed(&client, &corpus, &subject).await {
                     Ok(found) if !found.is_empty() => bail!("{}", duplicates::refusal(&found)),
                     Ok(_) => {}
                     Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
@@ -1625,9 +1675,25 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
         return;
     };
     let asked = density::prompt(id.id(), accreted as usize, body);
-    if let Ok(said) = ask(&asked, READING).await
-        && let Some(advice) = density::advice(&said, id.id())
-    {
+    let input_chars = asked.chars().count().min(u32::MAX as usize) as u32;
+    let (said, elapsed_ms) = ask(&asked, READING).await;
+    let advice = said
+        .as_ref()
+        .ok()
+        .and_then(|words| density::advice(words, id.id()));
+    recorded(
+        client,
+        checks::Run {
+            kind: checks::Kind::Density,
+            task_id: Some(id.id()),
+            input_chars,
+            accreted: Some(accreted.min(u64::from(u32::MAX)) as u32),
+            elapsed_ms,
+            outcome: checks::outcome(&said, advice.is_some()),
+        },
+    )
+    .await;
+    if let Some(advice) = advice {
         eprintln!("{advice}");
     }
 }

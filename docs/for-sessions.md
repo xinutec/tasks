@@ -261,9 +261,14 @@ a filing, and it now costs it *before* the task exists rather than after.
 ⚠ **That 8–25 was measured on 2026-08-14 and the spread is wider than it.**
 Three calls on 2026-08-23 through the same one-shot mechanism took 20, 54 and 73
 seconds, and the 20 was the one reading a 100 kB body — so what varies is the
-session's own startup rather than the work. The filing check abandons a call at
-60 seconds, which on those numbers is a filing that says `duplicate check did
-not run` for no reason but bad luck. Not re-measured on the filing path.
+session's own startup rather than the work. Five filings in the transcripts
+since 2026-08-14, out of 280, said `duplicate check did not run` on nothing but
+bad luck; the bound is 120 seconds now rather than 60, and only a call that
+would have died on the old one waits any longer.
+
+Both checks record what they did in `check_run` — kind, size, elapsed,
+outcome — so the next statement about either is a distribution rather than
+three samples and a grep.
 
 ## What to do next: P0 to P4
 
