@@ -360,7 +360,7 @@ Uncapped, one read of a 5 kB body took 220 seconds and 19,792 output tokens to
 reach two findings that the capped read reaches in 11 seconds; the live rows had
 a 79-second median and one abandoned run. Not zero, though — with thinking off,
 #982's 105 kB answered `DENSE`, meaning *this holds together*, in three of four
-runs at 2.3 seconds, which is a false all-clear on the task that most needs the
+runs, in 2.3 to 3.2 seconds — a false all-clear on the task that most needs the
 read.
 
 **Both checks write down what they did** (`check_run`, `POST /api/checks`): kind,

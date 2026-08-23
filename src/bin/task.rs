@@ -874,10 +874,11 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 /// The first bound came from five replayed filings at 8–24 seconds against 134
 /// open tasks; five filings since 2026-08-14 died on it, against 280 filed.
 ///
-/// ⚠ **What varies is how long the model deliberates, and it varies by 4×.**
-/// Measured 2026-08-23 through `claude -p --output-format json`: the SAME
-/// 16.1 kB prompt over 181 titles came back in 11.8 seconds after 712 output
-/// tokens and in 34.5 seconds after 2,976, both answering `NONE`. Starting the
+/// ⚠ **What varies is how long the model deliberates, and it varies 2.6×.**
+/// Measured 2026-08-23 through `claude -p --output-format json`: two runs of the
+/// SAME 16.1 kB prompt over 181 titles, at the same settings, came back in 16.1
+/// seconds after 1,152 output tokens and in 34.9 after 2,976 — both `NONE`.
+/// A body read varies the same way, 88 to 220 seconds. Starting the
 /// one-shot session is the stable part at 3.4–4.0 seconds. So the spread is not
 /// something a faster machine or a warm process shortens — it is the answer
 /// being written — and a bound near the median abandons calls that would have
@@ -899,7 +900,7 @@ const PATIENCE: std::time::Duration = std::time::Duration::from_secs(120);
 /// ⚠ **NOT zero, which is what the numbers first argued for.** With thinking
 /// off the 5 kB body was read correctly in 5 seconds three times out of three —
 /// and #982's 105 kB body answered `DENSE`, meaning *it holds together*, in
-/// THREE of four runs at 2.3 seconds each. A false all-clear on the one task
+/// THREE of four runs, in 2.3 to 3.2 seconds. A false all-clear on the one task
 /// that most needs the read, arriving too fast to doubt. At 1,024 the same body
 /// came back with specific findings twice, in 22 seconds both times.
 ///

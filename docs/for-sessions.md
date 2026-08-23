@@ -262,8 +262,8 @@ skips the wait, which is worth doing when filing a batch: it costs about 9
 seconds a filing, and it costs it *before* the task exists rather than after.
 
 ⚠ **What that wait is made of, measured 2026-08-23.** Not the reading: the same
-16.1 kB prompt over 181 titles was answered in 11.8 seconds after 712 output
-tokens and in 34.5 after 2,976, both times `NONE`. It is the length of the
+16.1 kB prompt over 181 titles, run twice at the same settings, was answered in
+16.1 seconds after 1,152 output tokens and in 34.9 after 2,976, both `NONE`. It is the length of the
 deliberation, which is now capped — `MAX_THINKING_TOKENS=1024` on both checks,
 after an uncapped body read took 220 seconds to reach two findings that the
 capped one reaches in 11. Proving that nothing matches is still the expensive
