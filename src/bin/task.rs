@@ -1315,8 +1315,12 @@ async fn main() -> Result<()> {
             // actually named something refuses. A missing `claude`, a timeout or
             // an unreadable answer must never cost a filing — a session that
             // cannot write things down is worse than any duplicate.
+            // ⚠ **After the collision check, never before it.** That one is
+            // string equality over every open title and must stay that way;
+            // this narrows only what the model is asked to judge.
+            let candidates = duplicates::candidates(&corpus, &blocked_on);
             if !no_duplicate_check {
-                match already_filed(&client, &corpus, &subject).await {
+                match already_filed(&client, &candidates, &subject).await {
                     Ok(found) if !found.is_empty() => bail!("{}", duplicates::refusal(&found)),
                     Ok(_) => {}
                     Err(why) => eprintln!("(duplicate check did not run: {why:#})"),

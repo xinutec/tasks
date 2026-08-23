@@ -13,7 +13,9 @@
 //! dropped rows were included. See the module's own documentation — this file
 //! pins that whatever comes back is read correctly.
 
-use tasks::tasks::duplicates::{Match, collision, parse, prompt, refusal, same_subject};
+use tasks::tasks::duplicates::{
+    Match, candidates, collision, parse, prompt, refusal, same_subject,
+};
 
 /// An id that is deliberately NOT in [`corpus`], so a test can assert that a
 /// number the model was never shown cannot come back as a match.
@@ -234,4 +236,51 @@ fn a_subject_that_merely_starts_the_same_is_not_a_collision() {
         same_subject("MEMORY.md is 21.7KB and still growing", &corpus),
         None
     );
+}
+
+/// A task cannot be a duplicate of the task it has just declared it waits for.
+///
+/// ⚠ **The edge is the filer's own statement that these are two different
+/// pieces of work, in the same command.** 2026-08-17: filing phonos's
+/// language-decision task with `--blocked-on 984` was refused for resembling
+/// #984. Overruling that costs one re-run — the damage is that a check which
+/// refuses for a reason the filer has already answered teaches sessions to
+/// reach for `--no-duplicate-check` by reflex, and then it catches nothing.
+#[test]
+fn what_a_filing_waits_for_is_not_shown_to_the_reader() {
+    let corpus = vec![
+        (984, "Decide the language phonos is written in".to_string()),
+        (985, "Something else entirely".to_string()),
+    ];
+    let shown = candidates(&corpus, &[984]);
+    assert_eq!(shown, vec![(985, "Something else entirely".to_string())]);
+}
+
+#[test]
+fn a_filing_that_waits_for_nothing_sees_the_whole_list() {
+    let corpus = vec![
+        (1, "one".to_string()),
+        (2, "two".to_string()),
+        (3, "three".to_string()),
+    ];
+    assert_eq!(candidates(&corpus, &[]), corpus);
+    // Order is the list's, not the filter's: `parse` reads ids back against
+    // this same slice, and a reordered corpus would still be correct but would
+    // make a diff of two runs unreadable.
+    assert_eq!(
+        candidates(&corpus, &[2]),
+        vec![(1, "one".to_string()), (3, "three".to_string())]
+    );
+}
+
+/// The other half of the guard, deliberately left alone.
+///
+/// ⚠ **An identical title is one task whatever edge was declared.** Filing
+/// `--blocked-on 42` a subject character-identical to #42's is a mistake being
+/// made twice, not an ordering, so string equality still refuses it — and it
+/// runs against the WHOLE list, before this filter narrows anything.
+#[test]
+fn an_identical_subject_is_still_a_collision_with_what_it_waits_for() {
+    let corpus = vec![(42, "Fix the parser".to_string())];
+    assert_eq!(same_subject("Fix the parser", &corpus), Some(42));
 }

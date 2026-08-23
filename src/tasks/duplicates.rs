@@ -130,6 +130,27 @@ const MOST: usize = 3;
 /// matter and returns every task in the same repository. Naming what is *not* a
 /// duplicate — same area, same file, same technology — is what moved the
 /// replayed cases from noise to 5/5.
+/// The list a model is shown, without the tasks this filing declares it waits
+/// for.
+///
+/// ⚠ **A `--blocked-on` edge is the filer saying, in the same command, that
+/// these are two different pieces of work and one comes first.** On 2026-08-17
+/// the check refused phonos's language-decision task for resembling #984 — the
+/// task that same command had just declared it blocked on. The reader could not
+/// see the edge, because a new task's `blocked_on` reaches the service only in
+/// the POST that follows this check.
+///
+/// ⚠ **[`same_subject`] runs against the WHOLE list and is not narrowed by
+/// this.** Two byte-identical subjects are one task however they are ordered,
+/// and that guard has no error rate to protect.
+pub fn candidates(corpus: &[(u64, String)], waiting_on: &[u64]) -> Vec<(u64, String)> {
+    corpus
+        .iter()
+        .filter(|(id, _)| !waiting_on.contains(id))
+        .cloned()
+        .collect()
+}
+
 pub fn prompt(subject: &str, corpus: &[(u64, String)]) -> String {
     let lines: String = corpus
         .iter()

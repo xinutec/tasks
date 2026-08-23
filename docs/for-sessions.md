@@ -231,8 +231,9 @@ for its measurements. Aim for density and let the length follow.
 
 ⚠ **You cannot see the other conversations' lists, so you will file a duplicate
 eventually.** `task add` checks before it files: the local `claude` reads your
-subject against every open task, and a match **ends the command with nothing
-written**. It looks like this:
+subject against every open task — except the ones you declared `--blocked-on`,
+since saying a task waits for another is saying they are two — and a match
+**ends the command with nothing written**. It looks like this:
 
 ```text
 Error: already filed, by a model's reading of the titles — nothing was filed:
