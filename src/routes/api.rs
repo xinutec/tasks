@@ -386,3 +386,29 @@ pub async fn check_ran(
     checks::record(&app.db, session, &run).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
+
+/// How far back to read the checks.
+#[derive(Deserialize)]
+pub struct ChecksQuery {
+    #[serde(default = "a_week")]
+    days: u32,
+}
+
+fn a_week() -> u32 {
+    7
+}
+
+/// What the checks have been doing, as rows.
+///
+/// **Rows rather than the summary.** `task checks` folds them into two lines,
+/// and the questions that made this table — what the density read fires on,
+/// where `PATIENCE` should sit — are asked of a distribution. A route that
+/// answered only in averages would have to be replaced by the first person who
+/// wanted a percentile.
+pub async fn checks_ran(
+    Access(_viewer): Access,
+    State(app): State<AppState>,
+    Query(window): Query<ChecksQuery>,
+) -> Result<Json<Vec<checks::Ran>>, AppError> {
+    Ok(Json(checks::recent(&app.db, window.days).await?))
+}

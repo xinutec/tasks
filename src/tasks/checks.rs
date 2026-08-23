@@ -15,6 +15,7 @@
 //! that failed, because a check that did not run is the finding.
 
 use anyhow::Context;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::MySqlPool;
 
@@ -150,4 +151,143 @@ pub fn outcome(said: &anyhow::Result<String>, spoke: bool) -> Outcome {
         }
         Err(_) => Outcome::Error,
     }
+}
+
+/// One recorded run, as it comes back out.
+///
+/// The same fields as [`Run`] plus the service's clock. Two shapes rather than
+/// one optional field: a client reports what it did and never when, so a struct
+/// that could carry a time on the way in is one somebody will eventually fill.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ran {
+    pub ran_at: DateTime<Utc>,
+    pub kind: Kind,
+    pub task_id: Option<u64>,
+    pub input_chars: u32,
+    pub accreted: Option<u32>,
+    pub elapsed_ms: u32,
+    pub outcome: Outcome,
+}
+
+impl Kind {
+    fn read(word: &str) -> Option<Kind> {
+        match word {
+            "filing" => Some(Kind::Filing),
+            "density" => Some(Kind::Density),
+            _ => None,
+        }
+    }
+}
+
+impl Outcome {
+    fn read(word: &str) -> Option<Outcome> {
+        match word {
+            "quiet" => Some(Outcome::Quiet),
+            "spoke" => Some(Outcome::Spoke),
+            "timeout" => Some(Outcome::Timeout),
+            "error" => Some(Outcome::Error),
+            _ => None,
+        }
+    }
+}
+
+/// Every run in the last `days`, newest first.
+///
+/// ⚠ **A word this module cannot read is an error, not a skipped row.** The
+/// only writer is this module, so an unknown `kind` means a newer version wrote
+/// the table — and dropping the row would quietly shrink exactly the counts
+/// somebody is reading the table to get.
+pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
+    /// A row as the table holds it: the two words are strings there, and
+    /// reading them back into the enums is what this function is for.
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        ran_at: chrono::NaiveDateTime,
+        kind: String,
+        task_id: Option<u64>,
+        input_chars: u32,
+        accreted: Option<u32>,
+        elapsed_ms: u32,
+        outcome: String,
+    }
+
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT ran_at, kind, task_id, input_chars, accreted, elapsed_ms, outcome \
+         FROM check_run WHERE ran_at > NOW() - INTERVAL ? DAY ORDER BY ran_at DESC",
+    )
+    .bind(days)
+    .fetch_all(pool)
+    .await
+    .context("reading what the checks did")?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(Ran {
+                ran_at: row.ran_at.and_utc(),
+                kind: Kind::read(&row.kind)
+                    .with_context(|| format!("`{}` is not a check this version knows", row.kind))?,
+                task_id: row.task_id,
+                input_chars: row.input_chars,
+                accreted: row.accreted,
+                elapsed_ms: row.elapsed_ms,
+                outcome: Outcome::read(&row.outcome).with_context(|| {
+                    format!("`{}` is not an outcome this version knows", row.outcome)
+                })?,
+            })
+        })
+        .collect()
+}
+
+/// What one kind of check did over the period.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tally {
+    pub kind: Kind,
+    pub runs: usize,
+    /// Counted separately rather than summed into "ran" and "did not": the
+    /// difference between them is the finding.
+    pub quiet: usize,
+    pub spoke: usize,
+    pub timeout: usize,
+    pub error: usize,
+    /// Milliseconds, by nearest rank over every run including the abandoned
+    /// ones — a timeout took the whole patience and pretending otherwise would
+    /// make the bound look comfortable.
+    pub median_ms: u32,
+    pub p90_ms: u32,
+    pub worst_ms: u32,
+}
+
+/// Nearest rank, on a slice that is already sorted.
+fn rank(sorted: &[u32], part: f64) -> u32 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let at = ((sorted.len() as f64) * part).ceil() as usize;
+    sorted[at.clamp(1, sorted.len()) - 1]
+}
+
+/// Fold runs into one line per kind, in the order the kinds are declared.
+pub fn tally(runs: &[Ran]) -> Vec<Tally> {
+    [Kind::Filing, Kind::Density]
+        .into_iter()
+        .filter_map(|kind| {
+            let mine: Vec<&Ran> = runs.iter().filter(|r| r.kind == kind).collect();
+            if mine.is_empty() {
+                return None;
+            }
+            let mut spent: Vec<u32> = mine.iter().map(|r| r.elapsed_ms).collect();
+            spent.sort_unstable();
+            let count = |what: Outcome| mine.iter().filter(|r| r.outcome == what).count();
+            Some(Tally {
+                kind,
+                runs: mine.len(),
+                quiet: count(Outcome::Quiet),
+                spoke: count(Outcome::Spoke),
+                timeout: count(Outcome::Timeout),
+                error: count(Outcome::Error),
+                median_ms: rank(&spent, 0.5),
+                p90_ms: rank(&spent, 0.9),
+                worst_ms: *spent.last().unwrap_or(&0),
+            })
+        })
+        .collect()
 }

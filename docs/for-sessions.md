@@ -128,6 +128,7 @@ task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
 task edit <id> --unblock        # it is not waiting any more
 task edit <id> --due 2026-09-01 # when it has to be done by
 task edit <id> --no-due         # no deadline after all
+task checks                     # what the two model checks have been doing
 ```
 
 ⚠ **`--body` replaces everything; `--prepend` is how you record an outcome.**

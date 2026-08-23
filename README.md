@@ -360,7 +360,10 @@ characters put to the model, elapsed, and outcome — `quiet`, `spoke`, `timeout
 or `error`. Neither could be counted before: the filing check's only trace was a
 line on the caller's stderr, and the density read swallows every failure by
 design. The table carries no foreign keys, because an instrument that its own
-subject can refuse or delete is not one.
+subject can refuse or delete is not one. `task checks` folds the last week into
+one line per kind — runs, outcomes, and the latency spread including the calls
+that were abandoned, since leaving those out is what makes a bound that fires
+look comfortable.
 
 `--body -` reads stdin, which is how a session writes a long one without fighting
 shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.

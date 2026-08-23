@@ -483,6 +483,12 @@ enum Command {
     },
     /// Tell the service what this session now calls itself.
     Rename { name: String },
+    /// What the duplicate check and the density read have been doing.
+    Checks {
+        /// How far back to look.
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+    },
 }
 
 /// The shared secret, from the environment or the file the Mac keeps it in.
@@ -1505,6 +1511,23 @@ async fn main() -> Result<()> {
             eprintln!("\n({bytes} bytes)");
         }
 
+        Command::Checks { days } => {
+            let req = client
+                .request(reqwest::Method::GET, "/api/checks")
+                .query(&[("days", days)]);
+            let rows = client.send(req).await?.unwrap_or(json!([]));
+            let runs: Vec<checks::Ran> =
+                serde_json::from_value(rows.clone()).context("reading what the checks did")?;
+            emit(cli.json, &rows, || {
+                if runs.is_empty() {
+                    println!("nothing recorded in the last {days} days");
+                    return;
+                }
+                for line in checks::tally(&runs) {
+                    println!("{}", tallied(&line));
+                }
+            });
+        }
         Command::Sessions { all } => {
             // Two questions, two routes. `/api/holders` is who is carrying what
             // and leaves out the conversations that have never carried
@@ -1721,4 +1744,45 @@ fn displaced(task: &Value, id: u64) -> Option<String> {
         was["by"].as_str().unwrap_or(""),
         id
     ))
+}
+
+/// One kind of check, as a line.
+///
+/// ⚠ **A timeout is printed even when it is the only thing that happened.** The
+/// zero counts are dropped because a line of `0 error` is noise, but the four
+/// outcomes are not interchangeable: `quiet` and `timeout` both end in silence
+/// and one of them means the check never ran.
+fn tallied(line: &checks::Tally) -> String {
+    let kind = match line.kind {
+        checks::Kind::Filing => "filing",
+        checks::Kind::Density => "density",
+    };
+    let outcomes: Vec<String> = [
+        ("quiet", line.quiet),
+        ("spoke", line.spoke),
+        ("timeout", line.timeout),
+        ("error", line.error),
+    ]
+    .into_iter()
+    .filter(|(_, n)| *n > 0)
+    .map(|(what, n)| format!("{n} {what}"))
+    .collect();
+    format!(
+        "{kind:8} {:3} runs · {} · {} median, {} p90, {} worst",
+        line.runs,
+        outcomes.join(", "),
+        spell(line.median_ms),
+        spell(line.p90_ms),
+        spell(line.worst_ms),
+    )
+}
+
+/// Milliseconds as somebody would say them.
+fn spell(ms: u32) -> String {
+    let seconds = f64::from(ms) / 1000.0;
+    if seconds < 10.0 {
+        format!("{seconds:.1}s")
+    } else {
+        format!("{}s", seconds.round() as u32)
+    }
 }
