@@ -84,3 +84,24 @@ fn the_pile_is_not_offered_as_the_cautious_choice() {
         "nothing warns the pile off being used as a hedge:\n{help}"
     );
 }
+
+#[test]
+fn editing_states_the_standard_a_body_is_held_to() {
+    // ⚠ **The rules are graded against, so they have to be READABLE BEFORE
+    // WRITING.** The same three reach a model that reads a body which has grown
+    // without being consolidated; stated only there, they arrive after the
+    // writing, which is the one moment they cannot prevent anything.
+    let help = help(&["edit", "--help"]);
+    let collapsed: String = tasks::tasks::density::RUBRIC
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        help.contains(&collapsed),
+        "`task edit --help` must print the rubric the judge grades against"
+    );
+    assert!(
+        help.contains("never refuses the write"),
+        "a standard that reads as a gate teaches sessions to work around it"
+    );
+}

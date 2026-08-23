@@ -198,6 +198,33 @@ So: **the present tense at the top, the history under it.** Whoever opens this
 next wants to know where it stands, not how it got here — and the second
 question is only asked once the first is answered.
 
+## When a body has grown without anyone rewriting it
+
+⚠ **`--prepend` is cheap and reading is not, so bodies accrete.** Once a task's
+body has gained 3,000 characters since the last edit that made it smaller, your
+next `task edit` puts the whole thing to a model against three rules and prints
+what it found. It has already written your edit: this is advice on stderr, it
+refuses nothing, and `--no-density-check` skips the wait.
+
+The three rules, which are also under `task edit --help`:
+
+1. Every paragraph earns its place one of three ways: it tells the holder what
+   to do, it is the evidence for that, or it records a refutation that stops
+   somebody redoing dead work.
+2. No claim without its measurement, and no sentence that only restates one.
+3. Deletion beats compression — look for what a later section has superseded,
+   not for words to trim.
+
+**The answer is to rewrite, not to trim.** #749 went from 16,405 characters to
+3,928 because 76% of it was superseded, including a section headed *"read this
+before the 08-12 table below, which is stale"* — a session had noticed and
+prepended anyway. Nothing of value was lost. Rewording would have saved a fifth
+of that.
+
+⚠ **Do NOT aim for "as few words as possible".** Cut to a word budget and the
+numbers go first, because prose reads like the argument — and a body is believed
+for its measurements. Aim for density and let the length follow.
+
 ## Filing something that is already on the list
 
 ⚠ **You cannot see the other conversations' lists, so you will file a duplicate

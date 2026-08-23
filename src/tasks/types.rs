@@ -621,6 +621,20 @@ pub struct Replaced {
     /// thirds of a body says so here even when nobody reads the dates.
     pub was: usize,
     pub now: usize,
+    /// How much this body has grown, in characters, since the last edit that
+    /// made it smaller — this one included.
+    ///
+    /// ⚠ **Characters since the last consolidation, which is neither a size nor
+    /// a count of edits.** An absolute size cannot tell a long body somebody has
+    /// just rewritten from a short one that has doubled since anyone read it,
+    /// and a count of edits cannot tell three typo fixes from three
+    /// two-thousand-character dumps. What is being measured is the text nobody
+    /// has read as a whole, which is exactly the text that goes stale in place:
+    /// #749 was 76% superseded when it was finally read end to end, including a
+    /// section headed "read this before the 08-12 table below, which is stale".
+    ///
+    /// Zero on the edit that consolidates, because that edit is the answer.
+    pub accreted: usize,
 }
 
 /// A task as it stood before an edit — one complete previous version.

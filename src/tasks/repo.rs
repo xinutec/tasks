@@ -1574,20 +1574,66 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // `346120c`, and wrong in the reassuring direction: [`displaced`] exists to
     // make a session look twice at what it just overwrote, and it was reporting
     // that nothing had been overwritten at all.
-    let replaced = edit_event.and(wrote_it).map(|(at, by)| Replaced {
-        at,
-        by,
-        was: was_body.chars().count(),
-        now: body
-            .as_deref()
-            .map_or(was_body.chars().count(), |body| body.chars().count()),
-    });
+    let now = body
+        .as_deref()
+        .map_or(was_body.chars().count(), |body| body.chars().count());
+    let replaced = match edit_event.and(wrote_it) {
+        Some((at, by)) => Some(Replaced {
+            at,
+            by,
+            was: was_body.chars().count(),
+            now,
+            accreted: accreted(pool, id, now).await?,
+        }),
+        None => None,
+    };
 
     Ok(Updated {
         task: list_one(pool, id).await?,
         changed,
         replaced,
     })
+}
+
+/// How much this body has grown since anything last made it smaller.
+///
+/// ⚠ **Read out of `task_revision`, not parsed out of the history.**
+/// `task_events.detail` holds one rendered line — `body 4807 → 6019 chars` —
+/// and reading a number back out of a sentence written for a person would make
+/// that sentence a wire format. The revisions hold the text itself, so the
+/// sizes are `CHAR_LENGTH` in SQL and only integers cross the wire; a
+/// hundred-kilobyte body is never loaded to be measured.
+///
+/// The oldest revision's body is the task as it was FILED, which is where the
+/// count starts: a body somebody wrote in one go is not accretion, however long
+/// it is.
+async fn accreted(pool: &MySqlPool, id: u64, now: usize) -> Result<usize> {
+    let stored: Vec<i64> = sqlx::query_scalar(
+        "SELECT CHAR_LENGTH(r.body) FROM task_revision r \
+         JOIN task_events e ON e.id = r.event_id \
+         WHERE e.task_id = ? ORDER BY e.id",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .context("reading what a body has grown from")?;
+
+    let mut sizes: Vec<usize> = stored.into_iter().map(|n| n.max(0) as usize).collect();
+    sizes.push(now);
+    // Backwards from the size it has now: every step that added text counts,
+    // and the first step that removed any ends the run — what a rewrite swept
+    // up has been read, and counting it again would warn about a body somebody
+    // has just consolidated. A step of ZERO must not end the run: an update
+    // that moved only the subject stores a revision like any other, and reading
+    // that as a consolidation would let a rename clear the count.
+    let mut grown = 0;
+    for step in sizes.windows(2).rev() {
+        match step[1].checked_sub(step[0]) {
+            Some(added) => grown += added,
+            None => break,
+        }
+    }
+    Ok(grown)
 }
 
 /// One task without its prose or history — the read every write does first,

@@ -46,6 +46,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
+use tasks::tasks::density;
 use tasks::tasks::duplicates;
 use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
@@ -99,6 +100,49 @@ place: oldest first, which is what makes old work get fixed rather than buried.
 The escape is there so the required flag cannot be satisfied by typing P2 at a
 question you did not answer. Everything on P0 and everything on P2 fail the same
 way — the rank stops carrying information."
+    )
+}
+
+/// What `task edit --help` says under the flags.
+///
+/// ⚠ **Assembled, because [`density::RUBRIC`] is graded against.** The same
+/// three rules are put to the model that reads a body which has grown without
+/// being consolidated, and a second copy here is the copy that drifts — leaving
+/// sessions written to one standard and marked against another. A standard
+/// stated only to the judge arrives after the writing; here it arrives before,
+/// which is the only place it can prevent anything.
+fn edit_about() -> String {
+    format!(
+        "Change a task's words.
+
+⚠ **Rewriting is the moment to put the conclusion back on top.** A body grows in
+the order things happened, so what is still true sinks to the bottom: measured
+across every task with one, #704's verdict sat 98% down its 132 lines and #697's
+plan for a new machine was the last paragraph of a ticket about copying a disk.
+Lead with where it stands; the history goes under it. Better still, put the
+state in `--subject`, which is the only part anybody reads without opening the
+task.
+
+⚠ **`--prepend` is how to do that in one command, and `--body` is not.** `--body`
+replaces everything; recording an outcome with it deletes the filing unless the
+old text is read out and pasted back first. On 2026-08-15 that read was skipped
+twice in one afternoon by the session that maintains this tool — once caught by
+the guard on `--body`, once under its threshold at 52% kept, where nothing
+catches it.
+
+WHAT A BODY IS HELD TO. Once one has grown {sampler} characters since anybody
+last rewrote it, a model reads it against these three rules and says what it
+finds. It never refuses the write:
+
+{rubric}
+
+⚠ **Never write to \"as few words as possible\".** Told to compress, a model drops
+the numbers and keeps the prose, because prose reads like the argument — and a
+body is believed for its measurements. Density is the target and length is its
+consequence, which is why rule 2 is one-sided: it cuts restatement and never
+evidence.",
+        sampler = density::SAMPLER,
+        rubric = density::RUBRIC,
     )
 }
 
@@ -354,21 +398,7 @@ enum Command {
     /// office, and it costs every session's prompt rather than one.
     Move { id: TaskRef, to: To },
     /// Change a task's words.
-    ///
-    /// ⚠ **Rewriting is the moment to put the conclusion back on top.** A body
-    /// grows in the order things happened, so what is still true sinks to the
-    /// bottom: measured across every task with one, #704's verdict sat 98% down
-    /// its 132 lines and #697's plan for a new machine was the last paragraph of
-    /// a ticket about copying a disk. Lead with where it stands; the history
-    /// goes under it. Better still, put the state in `--subject`, which is the
-    /// only part anybody reads without opening the task.
-    ///
-    /// ⚠ **`--prepend` is how to do that in one command, and `--body` is not.**
-    /// `--body` replaces everything; recording an outcome with it deletes the
-    /// filing unless the old text is read out and pasted back first. On
-    /// 2026-08-15 that read was skipped twice in one afternoon by the session
-    /// that maintains this tool — once caught by the guard on `--body`, once
-    /// under its threshold at 52% kept, where nothing catches it.
+    #[command(long_about = edit_about())]
     Edit {
         id: TaskRef,
         #[arg(long)]
@@ -393,6 +423,13 @@ enum Command {
         /// rather than the conclusion. Composes with `--prepend`.
         #[arg(long)]
         append: Option<String>,
+        /// Skip the read a model gives a body that has grown without being
+        /// consolidated.
+        ///
+        /// It never refuses a write, so this is for a script that wants neither
+        /// the wait nor the words — not for getting an edit past it.
+        #[arg(long = "no-density-check")]
+        no_density_check: bool,
         /// Mean it, where `--body` would leave almost nothing of a substantial
         /// one.
         ///
@@ -1242,19 +1279,23 @@ async fn main() -> Result<()> {
             // or is not installed costs a note and never a filing.
         }
 
-        Command::Start { id } => patch(&client, cli.json, id, json!({ "status": "doing" })).await?,
+        Command::Start { id } => {
+            patch(&client, cli.json, id, json!({ "status": "doing" })).await?;
+        }
         Command::Done { id, to } => {
             let mut change = json!({ "status": "done" });
             if let Some(to) = to {
                 let to = client.resolve(to).await?;
                 change["assignee"] = assignee(&to, client.me()?);
             }
-            patch(&client, cli.json, id, change).await?
+            patch(&client, cli.json, id, change).await?;
         }
         Command::Drop { id } => {
-            patch(&client, cli.json, id, json!({ "status": "dropped" })).await?
+            patch(&client, cli.json, id, json!({ "status": "dropped" })).await?;
         }
-        Command::Reopen { id } => patch(&client, cli.json, id, json!({ "status": "open" })).await?,
+        Command::Reopen { id } => {
+            patch(&client, cli.json, id, json!({ "status": "open" })).await?;
+        }
         Command::Move { id, to } => {
             let to = client.resolve(to).await?;
             patch(
@@ -1263,7 +1304,7 @@ async fn main() -> Result<()> {
                 id,
                 json!({ "assignee": assignee(&to, client.me()?) }),
             )
-            .await?
+            .await?;
         }
 
         Command::Edit {
@@ -1272,6 +1313,7 @@ async fn main() -> Result<()> {
             body: raw,
             prepend,
             append,
+            no_density_check,
             replace_body,
             priority,
             blocked_on,
@@ -1324,7 +1366,13 @@ async fn main() -> Result<()> {
             if change.as_object().is_none_or(|o| o.is_empty()) {
                 bail!("nothing to change: pass --subject or --body");
             }
-            patch(&client, cli.json, id, change).await?;
+            let updated = patch(&client, cli.json, id, change).await?;
+            // After the write and never before it, like the duplicate check
+            // after a filing: this is advice about prose, and a check that
+            // hangs, fails or is not installed must cost a note at most.
+            if !no_density_check && !cli.json {
+                accreting(&client, id, &updated).await;
+            }
         }
 
         Command::Focus { ids, period, clear } => {
@@ -1521,7 +1569,7 @@ fn describe(focus: &tasks::tasks::focus::Focus) -> String {
     )
 }
 
-async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<()> {
+async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<Value> {
     client.writing()?;
     let id = id.id();
     let req = client
@@ -1537,7 +1585,40 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
             println!("{was}");
         }
     });
-    Ok(())
+    Ok(task)
+}
+
+/// A model's reading of a body that has grown without anybody rewriting it.
+///
+/// ⚠ **Every failure here is silence.** The edit has already landed, so there is
+/// nothing left for this to protect: a missing `claude`, a timeout, a body that
+/// could not be re-read are all reasons to say nothing rather than to spend a
+/// session's attention on the checker. `duplicates.rs` may cost a filing an
+/// error line because it runs BEFORE the write and can still stop one; this
+/// cannot stop anything, so it is advice or it is quiet.
+async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
+    let Some(accreted) = updated["replaced"]["accreted"].as_u64() else {
+        return;
+    };
+    if !density::worth_asking(accreted as usize) {
+        return;
+    }
+    // Re-read rather than reassembled from what was sent: `--prepend` and
+    // `--append` each carry a fragment, and the thing being judged is the whole
+    // document as it now stands.
+    let req = client.request(reqwest::Method::GET, &id.path());
+    let Ok(Some(task)) = client.send(req).await else {
+        return;
+    };
+    let Some(body) = task["body"].as_str() else {
+        return;
+    };
+    let asked = density::prompt(id.id(), accreted as usize, body);
+    if let Ok(said) = ask(&asked).await
+        && let Some(advice) = density::advice(&said)
+    {
+        eprintln!("{advice}");
+    }
 }
 
 /// What an edit landed on, said back to whoever made it.

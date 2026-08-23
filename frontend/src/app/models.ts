@@ -134,6 +134,19 @@ export interface Replaced {
   /** Body length before and after, in characters. */
   was: number;
   now: number;
+  /**
+   * How much this body has grown, in characters, since the last edit that made
+   * it smaller — this one included.
+   *
+   * ⚠ **Neither a size nor a count of edits.** An absolute size cannot tell a
+   * long body somebody has just rewritten from a short one that has doubled
+   * since anyone read it, and a count of edits cannot tell three typo fixes
+   * from three two-thousand-character dumps. What this measures is the text
+   * nobody has read as a whole, which is the text that goes stale in place.
+   *
+   * Zero on the edit that consolidates, because that edit is the answer.
+   */
+  accreted: number;
 }
 
 export interface TaskEvent {

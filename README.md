@@ -341,6 +341,20 @@ worse than any duplicate. That distinction is the whole of the design; it was
 advisory until 2026-08-14, and `src/tasks/duplicates.rs` carries both the
 measurement that argued for advisory and the one that overruled it.
 
+**A body that has grown without being rewritten is read back to you.** Once one
+has gained 3,000 characters since the last edit that made it smaller, `task edit`
+puts it to the same local Haiku against the three rules `task edit --help`
+prints, and says what came back on stderr. It never refuses and never delays the
+write — the edit has already landed, so a missing, slow or unreadable `claude` is
+silence rather than an error, and `--no-density-check` skips the wait. The unit
+is characters since the last consolidation rather than a size or a count of
+edits: a size cannot tell a long body somebody has just rewritten from a short
+one that has doubled since anyone read it. Measured 2026-08-23 over nine days of
+`task_revision`: 667 body-changing edits, of which 459 were exact appends or
+prepends adding 791,400 characters against 183 rewrites removing 26,593, and
+#982 ran 42 consecutive growing edits to 100,382 characters without once being
+consolidated.
+
 `--body -` reads stdin, which is how a session writes a long one without fighting
 shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.
 **Never on argv** — a token in a command line is in every process listing on the
