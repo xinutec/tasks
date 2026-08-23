@@ -121,7 +121,8 @@ task add "One line" --unassessed    # not yours to judge; whoever takes it decid
 task add "One line" --priority P2 --no-duplicate-check   # skip the check below
 task edit <id> --prepend "DONE in <sha>."  # add ABOVE the body, keeping all of it
 task edit <id> --append -       # add BELOW it; `-` reads stdin
-task edit <id> --body -         # REPLACE the prose entirely
+task edit <id> --body -         # REPLACE the prose entirely — this is how you consolidate
+task edit <id> --no-density-check  # skip the read a grown body gets, below
 task edit <id> --priority P0    # rank one that already exists
 task edit <id> --blocked-on 697 --blocked-on 14   # what it waits for
 task edit <id> --unblock        # it is not waiting any more
@@ -256,6 +257,13 @@ only a model that actually names something refuses, because a session that
 cannot write things down is worse than any duplicate. `--no-duplicate-check`
 skips the wait, which is worth doing when filing a batch: it costs 8–25 seconds
 a filing, and it now costs it *before* the task exists rather than after.
+
+⚠ **That 8–25 was measured on 2026-08-14 and the spread is wider than it.**
+Three calls on 2026-08-23 through the same one-shot mechanism took 20, 54 and 73
+seconds, and the 20 was the one reading a 100 kB body — so what varies is the
+session's own startup rather than the work. The filing check abandons a call at
+60 seconds, which on those numbers is a filing that says `duplicate check did
+not run` for no reason but bad luck. Not re-measured on the filing path.
 
 ## What to do next: P0 to P4
 
