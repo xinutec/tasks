@@ -130,8 +130,17 @@ pub fn advice(said: &str, id: u64) -> Option<String> {
         return None;
     }
     let mut out = String::from("a model read this body, and it is a guess:\n");
-    for line in said.lines().take(4) {
-        out.push_str(&format!("  {}\n", line.trim()));
+    // ⚠ **Blank lines are not findings, and taking four LINES gave two.** Asked
+    // for one finding per line on 2026-08-23, the model separated them with
+    // blank ones and half the answer fell off the end of the bound meant to
+    // keep it short. The bound is on what it found.
+    for line in said
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .take(4)
+    {
+        out.push_str(&format!("  {line}\n"));
     }
     out.push_str(&format!(
         "  `task edit {id} --body -` is how it gets rewritten."

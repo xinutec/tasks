@@ -86,6 +86,18 @@ fn one_finding_per_line_is_asked_for() {
 }
 
 #[test]
+fn blank_lines_are_not_findings() {
+    // Asked for one finding per line, the model put a blank line between each,
+    // and a bound counted in lines dropped half the answer.
+    let said = "first finding\n\nsecond finding\n\nthird finding\n\nfourth finding";
+    let advice = density::advice(said, 5).expect("something to say");
+    assert!(
+        advice.contains("fourth finding"),
+        "four findings, not four lines"
+    );
+}
+
+#[test]
 fn a_model_that_will_not_stop_talking_is_cut_off() {
     let said = (1..=9).map(|n| format!("line {n}\n")).collect::<String>();
     let advice = density::advice(&said, 982).expect("something to say");
