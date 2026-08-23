@@ -254,6 +254,7 @@ enum Command {
         clear: bool,
     },
     /// One task, with its prose and its history.
+    #[command(alias = "history")]
     Show {
         id: TaskRef,
         /// Print the body alone, with no header and no history — for diffing
@@ -295,7 +296,11 @@ enum Command {
     /// want everything to have a priority."
     #[command(group(clap::ArgGroup::new("rank").required(true).args(["priority", "unassessed"])))]
     Add {
-        subject: String,
+        /// Optional only so that leaving it out can be answered in a sentence:
+        /// two sessions passed the subject as `--subject` and were told
+        /// `unexpected argument`, which reads as a quoting mistake rather than
+        /// as the wrong shape. Absent here is refused below, never defaulted.
+        subject: Option<String>,
         /// The body. `-` reads stdin, which is how a session writes a long one
         /// without fighting shell quoting.
         #[arg(long)]
@@ -329,6 +334,25 @@ enum Command {
         /// The day it has to be done by: YYYY-MM-DD.
         #[arg(long)]
         due: Option<NaiveDate>,
+        /// A concept this tool does not have, kept only to say so.
+        ///
+        /// ⚠ **A task has had no repo since migration 0004** — the holder is the
+        /// whole of an assignment. Seven filings across the transcripts reached
+        /// for `--repo` or `--project` and got clap's `unexpected argument`,
+        /// which corrects nothing: the session leaves believing the field exists
+        /// and it typed it wrong. What a task touches belongs in the subject,
+        /// where every list shows it.
+        #[arg(long, hide = true)]
+        repo: Option<String>,
+        /// The same, and it is the spelling five of those seven used.
+        #[arg(long, hide = true)]
+        project: Option<String>,
+        /// Where the subject is NOT given: it is the first positional
+        /// argument. Two sessions passed it here and were told `unexpected
+        /// argument`, which reads as a quoting mistake rather than as the wrong
+        /// shape.
+        #[arg(long = "subject", hide = true)]
+        subject_flag: Option<String>,
         /// File it even though something open already says this.
         ///
         /// ⚠ **Both halves refuse, so this is the only way past either.** An
@@ -347,6 +371,11 @@ enum Command {
     /// Mark a task as being worked on.
     Start { id: TaskRef },
     /// Mark a task finished.
+    ///
+    /// `close` is the same command: 11 sessions typed it and got
+    /// `unrecognized subcommand`, which clap could not even suggest a neighbour
+    /// for (#958's measurement).
+    #[command(alias = "close")]
     Done {
         id: TaskRef,
         /// Where it goes instead. Finishing a task makes the finisher its
@@ -399,10 +428,15 @@ enum Command {
     /// office, and it costs every session's prompt rather than one.
     Move { id: TaskRef, to: To },
     /// Change a task's words.
-    #[command(long_about = edit_about())]
+    ///
+    /// `update` is the same command, on the evidence of #958: seven sessions
+    /// typed it, and two more reached for `rank` when they meant `--priority`.
+    #[command(long_about = edit_about(), aliases = ["update", "rank"])]
     Edit {
         id: TaskRef,
-        #[arg(long)]
+        /// `--title` is accepted for the same reason the aliases above are: it
+        /// is what a session reached for, and there is one subject either way.
+        #[arg(long, alias = "title")]
         subject: Option<String>,
         /// `-` reads stdin. REPLACES the whole body — `--prepend` is how to
         /// keep it.
@@ -1308,8 +1342,33 @@ async fn main() -> Result<()> {
             unassessed: _,
             blocked_on,
             due,
+            repo,
+            project,
+            subject_flag,
             no_duplicate_check,
         } => {
+            if repo.is_some() || project.is_some() {
+                bail!(
+                    "a task has no repo and no project — the field went in migration 0004, \
+                     and the holder is the whole of an assignment. What this touches goes in \
+                     the subject, where every list shows it: `task list` prints one line per \
+                     task and that line is all most sessions will read."
+                );
+            }
+            let subject = match (subject, subject_flag) {
+                (Some(subject), None) => subject,
+                (None, Some(said)) => bail!(
+                    "the subject is the first argument, not a flag: \
+                     `task add {said:?} --priority P2`. Nothing was filed."
+                ),
+                (Some(_), Some(_)) => bail!(
+                    "the subject was given twice, as the argument and as `--subject`. \
+                     Nothing was filed, because there is no way to tell which one you meant."
+                ),
+                (None, None) => {
+                    bail!("a filing needs a subject: `task add \"one line\" --priority P2`.")
+                }
+            };
             client.writing()?;
             // The list comes first, and two separate questions are asked of it:
             // whether something open carries this exact subject, and whether a

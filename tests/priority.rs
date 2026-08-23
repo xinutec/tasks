@@ -288,3 +288,28 @@ mod filing {
         assert!(new.assignee.is_none());
     }
 }
+
+/// What a session types when it means P3.
+///
+/// ⚠ **Five filings across the transcripts passed `--priority 3` and were
+/// refused** (#958). A bare digit has no other meaning at this flag, and the
+/// stored spelling stays `P3` — so accepting it costs nothing and saves a
+/// re-run. Anything that is not a level is still an error, which is the half
+/// that must not drift: a silent default here would file work at a rank nobody
+/// chose.
+#[test]
+fn a_bare_digit_is_the_level_a_session_meant() {
+    use std::str::FromStr;
+    for (typed, want) in [
+        ("3", Priority::P3),
+        ("P3", Priority::P3),
+        ("p3", Priority::P3),
+        ("0", Priority::P0),
+        ("4", Priority::P4),
+    ] {
+        assert_eq!(Priority::from_str(typed).expect(typed), want, "{typed}");
+    }
+    for nonsense in ["5", "P5", "high", "", "-1"] {
+        assert!(Priority::from_str(nonsense).is_err(), "{nonsense}");
+    }
+}

@@ -105,3 +105,52 @@ fn editing_states_the_standard_a_body_is_held_to() {
         "a standard that reads as a gate teaches sessions to work around it"
     );
 }
+
+/// The words sessions typed that the tool had no answer for.
+///
+/// ⚠ **Measured, not guessed** (#958, over every transcript): `close` 11 times,
+/// `update` 7, `note` 3, `rank` 2, `history` 1 — each answered `unrecognized
+/// subcommand` and, for `close` and `update`, without even clap's "a similar
+/// subcommand exists" line, because edit distance finds no neighbour. The cost
+/// was a re-run every time; the fix is that the tool answers to the word.
+#[test]
+fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
+    for (typed, real) in [
+        ("close", "Mark a task finished"),
+        ("update", "Change a task's words"),
+        ("rank", "Change a task's words"),
+        ("history", "One task, with its prose and its history"),
+    ] {
+        let text = help(&[typed, "--help"]);
+        assert!(
+            text.contains(real),
+            "`task {typed}` should be `{real}`, and said: {text}"
+        );
+    }
+}
+
+/// A flag naming a field this tool deleted has to say so.
+///
+/// ⚠ **`unexpected argument '--repo' found` reads as a typo**, and the session
+/// leaves believing the field exists. Seven filings reached for `--repo` or
+/// `--project` after migration 0004 removed the concept.
+#[test]
+fn a_field_that_was_removed_is_refused_by_name() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
+        .args(["add", "anything", "--priority", "P2", "--repo", "tumor"])
+        .output()
+        .expect("running the CLI");
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(said.contains("migration 0004"), "{said}");
+    assert!(!out.status.success());
+}
+
+#[test]
+fn the_subject_is_not_a_flag_and_the_refusal_says_where_it_goes() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
+        .args(["add", "--priority", "P2", "--subject", "a title"])
+        .output()
+        .expect("running the CLI");
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert!(said.contains("first argument"), "{said}");
+}

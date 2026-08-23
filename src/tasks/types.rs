@@ -369,11 +369,15 @@ impl FromStr for Priority {
         // Case-folded for the CLI's sake — `p0` is what a hand types — and the
         // stored spelling is the upper one, which is what the SQL sorts on.
         match s.to_ascii_uppercase().as_str() {
-            "P0" => Ok(Priority::P0),
-            "P1" => Ok(Priority::P1),
-            "P2" => Ok(Priority::P2),
-            "P3" => Ok(Priority::P3),
-            "P4" => Ok(Priority::P4),
+            // The bare digit is accepted for one reason: five filings across
+            // the transcripts typed `--priority 3` and were refused (#958).
+            // There is no other meaning `3` could carry here, and the stored
+            // spelling is still `P3`.
+            "P0" | "0" => Ok(Priority::P0),
+            "P1" | "1" => Ok(Priority::P1),
+            "P2" | "2" => Ok(Priority::P2),
+            "P3" | "3" => Ok(Priority::P3),
+            "P4" | "4" => Ok(Priority::P4),
             other => Err(format!("unknown priority {other:?} — P0 to P4")),
         }
     }
