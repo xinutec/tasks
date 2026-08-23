@@ -51,31 +51,44 @@ fn the_rubric_asks_for_density_and_never_for_fewer_words() {
 
 #[test]
 fn a_body_that_holds_together_costs_nothing_to_say_so() {
-    assert_eq!(density::advice("DENSE"), None);
-    assert_eq!(density::advice("  dense\n"), None);
+    assert_eq!(density::advice("DENSE", 982), None);
+    assert_eq!(density::advice("  dense\n", 982), None);
     // Said the useful part first and then explained itself anyway.
-    assert_eq!(density::advice("DENSE\nIt reads top down."), None);
+    assert_eq!(density::advice("DENSE\nIt reads top down.", 982), None);
 }
 
 #[test]
 fn an_answer_nobody_can_read_is_silence() {
-    assert_eq!(density::advice(""), None);
-    assert_eq!(density::advice("   \n  \n"), None);
+    assert_eq!(density::advice("", 982), None);
+    assert_eq!(density::advice("   \n  \n", 982), None);
 }
 
 #[test]
 fn what_is_wrong_is_printed_as_a_guess_with_a_way_out() {
     let said = "The conclusion is at 82% of the body.\nThe 08-12 table is marked stale above it.";
-    let advice = density::advice(said).expect("something to say");
+    let advice = density::advice(said, 982).expect("something to say");
     assert!(advice.contains("it is a guess"), "marked as inference");
     assert!(advice.contains("82%"), "what the model actually said");
-    assert!(advice.contains("--body -"), "the command that fixes it");
+    assert!(
+        advice.contains("task edit 982 --body -"),
+        "the command that fixes it, with the id already in it"
+    );
+}
+
+#[test]
+fn one_finding_per_line_is_asked_for() {
+    // ⚠ Asked only for "at most four lines" on 2026-08-23, the model answered
+    // with one line 600 characters wide carrying four correct findings. The
+    // bound was never on the output — it is on how the model chooses to break
+    // it up — so the shape has to be asked for rather than imposed: truncating
+    // mid-sentence cuts the specific half of a finding.
+    assert!(density::prompt(1, 4000, "body").contains("ONE FINDING PER LINE"));
 }
 
 #[test]
 fn a_model_that_will_not_stop_talking_is_cut_off() {
     let said = (1..=9).map(|n| format!("line {n}\n")).collect::<String>();
-    let advice = density::advice(&said).expect("something to say");
+    let advice = density::advice(&said, 982).expect("something to say");
     assert!(advice.contains("line 4"));
     // Four lines was the bound put to the model. A checker that answers a body
     // being too long with a page of its own has joined the problem.

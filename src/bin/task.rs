@@ -835,6 +835,17 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 /// filed.
 const PATIENCE: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// The same, for reading a body rather than a list of titles.
+///
+/// ⚠ **Longer, and NOT because a bigger body takes longer.** Two measurements,
+/// 2026-08-23: 54 seconds on a 3.8 kB body and 20 seconds on the 100 kB of
+/// #982. What varies is the one-shot session's own startup, not the reading, so
+/// the small-body case came within six seconds of [`PATIENCE`] and would have
+/// been abandoned by bad luck alone. The filing check cannot afford this, since
+/// it runs before the write and its timeout is latency a session pays to file;
+/// this one runs after, where the only thing waiting is a terminal.
+const READING: std::time::Duration = std::time::Duration::from_secs(150);
+
 /// Every open task, as the id and title a duplicate would be spotted by.
 ///
 /// ⚠ **Every open task, not this session's.** The duplicate that matters is the
@@ -871,7 +882,7 @@ async fn already_filed(corpus: &[(u64, String)], subject: &str) -> Result<Vec<du
     if corpus.is_empty() {
         return Ok(Vec::new());
     }
-    let said = ask(&duplicates::prompt(subject, corpus)).await?;
+    let said = ask(&duplicates::prompt(subject, corpus), PATIENCE).await?;
     Ok(duplicates::parse(&said, corpus))
 }
 
@@ -884,9 +895,9 @@ async fn already_filed(corpus: &[(u64, String)], subject: &str) -> Result<Vec<du
 /// is named here rather than left to the CLI, and the file goes the moment the
 /// answer is in hand — including on the failing paths, which leave exactly the
 /// same file as the working one.
-async fn ask(prompt: &str) -> Result<String> {
+async fn ask(prompt: &str, patience: std::time::Duration) -> Result<String> {
     let named = named();
-    let said = call(prompt, &named).await;
+    let said = call(prompt, &named, patience).await;
     discard(&named);
     said
 }
@@ -896,7 +907,7 @@ async fn ask(prompt: &str) -> Result<String> {
 /// ⚠ **On stdin, not in the argument list.** The prompt carries every open
 /// title — 13,720 bytes when this was written — and an argument that size is at
 /// the mercy of a shell's limits and of anything that logs a command line.
-async fn call(prompt: &str, named: &str) -> Result<String> {
+async fn call(prompt: &str, named: &str, patience: std::time::Duration) -> Result<String> {
     let mut child = tokio::process::Command::new("claude")
         .current_dir(std::env::temp_dir())
         .arg("-p")
@@ -917,9 +928,9 @@ async fn call(prompt: &str, named: &str) -> Result<String> {
     // Closed, because `-p` reads until end of file and would otherwise wait for
     // the rest of a prompt that has already been sent in full.
     drop(stdin);
-    let out = tokio::time::timeout(PATIENCE, child.wait_with_output())
+    let out = tokio::time::timeout(patience, child.wait_with_output())
         .await
-        .with_context(|| format!("no answer in {}s", PATIENCE.as_secs()))?
+        .with_context(|| format!("no answer in {}s", patience.as_secs()))?
         .context("waiting for claude")?;
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
@@ -1614,8 +1625,8 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
         return;
     };
     let asked = density::prompt(id.id(), accreted as usize, body);
-    if let Ok(said) = ask(&asked).await
-        && let Some(advice) = density::advice(&said)
+    if let Ok(said) = ask(&asked, READING).await
+        && let Some(advice) = density::advice(&said, id.id())
     {
         eprintln!("{advice}");
     }

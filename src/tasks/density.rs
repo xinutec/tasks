@@ -93,7 +93,8 @@ pub fn prompt(id: u64, accreted: usize, body: &str) -> String {
          the whole thing first.\n\n\
          Judge whether it still reads as one document, against this standard:\n\n\
          {RUBRIC}\n\n\
-         Answer in at most four lines, addressed to the session that holds it.\n\
+         Answer with ONE FINDING PER LINE and at most four lines, addressed to the session \
+         that holds it.\n\
          If it still holds together, answer with exactly: {FINE}\n\
          Otherwise say SPECIFICALLY what is wrong — where the conclusion sits, which section \
          is superseded by which, which paragraph carries no claim. Quote the headings you \
@@ -106,11 +107,18 @@ pub fn prompt(id: u64, accreted: usize, body: &str) -> String {
 
 /// What to print, if anything.
 ///
+/// ⚠ **The four-line bound is a bound on the model's manners, not on the
+/// output.** Asked for four lines on 2026-08-23 it returned one, 600 characters
+/// wide, containing four findings — correct ones, in a wall. `ONE FINDING PER
+/// LINE` in [`prompt`] is the fix, and it is worth knowing that it is a request
+/// rather than a limit: truncating mid-sentence would cut the specific half of a
+/// finding, which is the half worth having.
+///
 /// ⚠ **An unreadable answer is silence, not a warning.** This runs after a write
 /// that has already landed, so there is nothing for a failure to protect; a line
 /// that cannot say what is wrong with the body would be a session's attention
 /// spent on the checker rather than on the task.
-pub fn advice(said: &str) -> Option<String> {
+pub fn advice(said: &str, id: u64) -> Option<String> {
     let said = said.trim();
     if said.is_empty() || said.eq_ignore_ascii_case(FINE) {
         return None;
@@ -125,6 +133,8 @@ pub fn advice(said: &str) -> Option<String> {
     for line in said.lines().take(4) {
         out.push_str(&format!("  {}\n", line.trim()));
     }
-    out.push_str("  `task edit <id> --body -` is how it gets rewritten.");
+    out.push_str(&format!(
+        "  `task edit {id} --body -` is how it gets rewritten."
+    ));
     Some(out)
 }
