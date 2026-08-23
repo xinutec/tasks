@@ -355,6 +355,14 @@ prepends adding 791,400 characters against 183 rewrites removing 26,593, and
 #982 ran 42 consecutive growing edits to 100,382 characters without once being
 consolidated.
 
+**Both checks cap how long the model may deliberate** (`MAX_THINKING_TOKENS=1024`).
+Uncapped, one read of a 5 kB body took 220 seconds and 19,792 output tokens to
+reach two findings that the capped read reaches in 11 seconds; the live rows had
+a 79-second median and one abandoned run. Not zero, though — with thinking off,
+#982's 105 kB answered `DENSE`, meaning *this holds together*, in three of four
+runs at 2.3 seconds, which is a false all-clear on the task that most needs the
+read.
+
 **Both checks write down what they did** (`check_run`, `POST /api/checks`): kind,
 characters put to the model, elapsed, and outcome — `quiet`, `spoke`, `timeout`
 or `error`. Neither could be counted before: the filing check's only trace was a

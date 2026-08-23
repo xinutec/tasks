@@ -854,16 +854,37 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 /// so the next reading comes from a distribution.
 const PATIENCE: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// How much a check may deliberate before answering.
+///
+/// ⚠ **Unbounded, this dominated everything else.** Measured 2026-08-23 on
+/// #1084's 5 kB body: three runs of the identical prompt took 88, 114 and 220
+/// seconds, writing 7,307 to 19,792 output tokens to reach two findings. The
+/// same prompt at this bound takes 11 to 43. The live rows agree — 15 density
+/// reads in one hour at a 79-second median, one of them abandoned at the bound.
+///
+/// ⚠ **NOT zero, which is what the numbers first argued for.** With thinking
+/// off the 5 kB body was read correctly in 5 seconds three times out of three —
+/// and #982's 105 kB body answered `DENSE`, meaning *it holds together*, in
+/// THREE of four runs at 2.3 seconds each. A false all-clear on the one task
+/// that most needs the read, arriving too fast to doubt. At 1,024 the same body
+/// came back with specific findings twice, in 22 seconds both times.
+///
+/// The filing check gets the same bound on the same measurement: 9.1 seconds
+/// against 11.8–34.5 unbounded, with `NONE` and a correctly formatted match
+/// both still answered.
+const DELIBERATION: &str = "1024";
+
 /// The same, for reading a body rather than a list of titles.
 ///
-/// ⚠ **Longer, and NOT because a bigger body takes longer.** Two measurements,
-/// 2026-08-23: 54 seconds on a 3.8 kB body and 20 seconds on the 100 kB of
-/// #982. What varies is the one-shot session's own startup, not the reading, so
-/// the small-body case came within six seconds of [`PATIENCE`] and would have
-/// been abandoned by bad luck alone. The filing check cannot afford this, since
-/// it runs before the write and its timeout is latency a session pays to file;
-/// this one runs after, where the only thing waiting is a terminal.
-const READING: std::time::Duration = std::time::Duration::from_secs(150);
+/// ⚠ **Size is not what makes one slow.** #982's 105 kB body came back in 22
+/// seconds while #1076's 5.8 kB took 128 — the length of the deliberation is the
+/// variable, which is why [`DELIBERATION`] rather than this bound is what made
+/// these cheap. It was 150 while that was uncapped, and a run still reached it.
+///
+/// Wider than [`PATIENCE`] because this call runs AFTER the write, so what waits
+/// is a terminal rather than a filing. Not wider than 90, because a run that
+/// reaches this bound has produced nothing at all: every second of it is loss.
+const READING: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// Every open task, as the id and title a duplicate would be spotted by.
 ///
@@ -974,6 +995,8 @@ async fn call(prompt: &str, named: &str, patience: std::time::Duration) -> Resul
         .arg("-p")
         .args(["--session-id", named])
         .args(["--model", CHECKER])
+        // The one setting that decides what a check costs. See [`DELIBERATION`].
+        .env("MAX_THINKING_TOKENS", DELIBERATION)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

@@ -257,18 +257,17 @@ duplicate nobody can catch by hand, and it is paid by the override being cheap.
 so explicitly (`duplicate check did not run: …`) **and files the task anyway** —
 only a model that actually names something refuses, because a session that
 cannot write things down is worse than any duplicate. `--no-duplicate-check`
-skips the wait, which is worth doing when filing a batch: it costs 8–25 seconds
-a filing, and it now costs it *before* the task exists rather than after.
+skips the wait, which is worth doing when filing a batch: it costs about 9
+seconds a filing, and it costs it *before* the task exists rather than after.
 
-⚠ **That 8–25 was measured on 2026-08-14 and the spread is wider than it.**
-The same 16.1 kB prompt over 181 titles was answered in 11.8 seconds after 712
-output tokens and in 34.5 after 2,976 — both times `NONE`. What varies is how
-long the model deliberates, not the size of what it reads and not the 3.4–4.0
-seconds it takes to start; proving that nothing matches is the expensive case,
-and a real match costs a third of it. Five filings in the transcripts
-since 2026-08-14, out of 280, said `duplicate check did not run` on nothing but
-bad luck; the bound is 120 seconds now rather than 60, and only a call that
-would have died on the old one waits any longer.
+⚠ **What that wait is made of, measured 2026-08-23.** Not the reading: the same
+16.1 kB prompt over 181 titles was answered in 11.8 seconds after 712 output
+tokens and in 34.5 after 2,976, both times `NONE`. It is the length of the
+deliberation, which is now capped — `MAX_THINKING_TOKENS=1024` on both checks,
+after an uncapped body read took 220 seconds to reach two findings that the
+capped one reaches in 11. Proving that nothing matches is still the expensive
+case; a real match costs a third of it. The bound is 120 seconds rather than 60
+because five filings out of 280 since 2026-08-14 died on the old one.
 
 Both checks record what they did in `check_run` — kind, size, elapsed,
 outcome — so the next statement about either is a distribution rather than
