@@ -260,9 +260,11 @@ skips the wait, which is worth doing when filing a batch: it costs 8–25 second
 a filing, and it now costs it *before* the task exists rather than after.
 
 ⚠ **That 8–25 was measured on 2026-08-14 and the spread is wider than it.**
-Three calls on 2026-08-23 through the same one-shot mechanism took 20, 54 and 73
-seconds, and the 20 was the one reading a 100 kB body — so what varies is the
-session's own startup rather than the work. Five filings in the transcripts
+The same 16.1 kB prompt over 181 titles was answered in 11.8 seconds after 712
+output tokens and in 34.5 after 2,976 — both times `NONE`. What varies is how
+long the model deliberates, not the size of what it reads and not the 3.4–4.0
+seconds it takes to start; proving that nothing matches is the expensive case,
+and a real match costs a third of it. Five filings in the transcripts
 since 2026-08-14, out of 280, said `duplicate check did not run` on nothing but
 bad luck; the bound is 120 seconds now rather than 60, and only a call that
 would have died on the old one waits any longer.

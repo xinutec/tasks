@@ -838,11 +838,16 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 ///
 /// ⚠ **120 seconds, because 60 was inside the spread rather than outside it.**
 /// The first bound came from five replayed filings at 8–24 seconds against 134
-/// open tasks. On 2026-08-23 the same call took 54 and 73 seconds on a 3.8 kB
-/// body while #982's 100 kB came back in 20, and five filings in the transcripts
-/// since 2026-08-14 died on the bound — against 280 filed. What varies is the
-/// one-shot session's startup, not the reading, so a bound near the median
-/// abandons calls that would have answered. Only that tail pays the wider one.
+/// open tasks; five filings since 2026-08-14 died on it, against 280 filed.
+///
+/// ⚠ **What varies is how long the model deliberates, and it varies by 4×.**
+/// Measured 2026-08-23 through `claude -p --output-format json`: the SAME
+/// 16.1 kB prompt over 181 titles came back in 11.8 seconds after 712 output
+/// tokens and in 34.5 seconds after 2,976, both answering `NONE`. Starting the
+/// one-shot session is the stable part at 3.4–4.0 seconds. So the spread is not
+/// something a faster machine or a warm process shortens — it is the answer
+/// being written — and a bound near the median abandons calls that would have
+/// answered. Only that tail pays the wider one.
 ///
 /// Provisional, and it is the last number here that will be a guess:
 /// [`checks`](tasks::tasks::checks) now records the elapsed time of every call,
