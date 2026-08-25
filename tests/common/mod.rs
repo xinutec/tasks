@@ -56,6 +56,7 @@ pub(crate) async fn fresh_db() -> MySqlPool {
         // `tests/checks.rs` depend on file order.
         "DELETE FROM check_run",
         "DELETE FROM command_run",
+        "DELETE FROM reported",
         "DELETE FROM task_revision",
         "DELETE FROM task_events",
         // Hangs off BOTH of the two below it, which is why it is above both.

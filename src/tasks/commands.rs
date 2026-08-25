@@ -224,3 +224,63 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
     out.sort_by(|a, b| b.runs.cmp(&a.runs).then_with(|| a.verb.cmp(&b.verb)));
     out
 }
+
+/// How long a caller waits before another is handed the reporting job.
+///
+/// ⚠ **This is the PUSH window, and it is not what fleetwatch grades.** The
+/// staleness bands come from the `interval_s` the report declares — see
+/// [`REPORTING_INTERVAL_S`] — and the two answer different questions: this is
+/// how often a fresh point lands on the chart, that is how long silence is
+/// tolerated before it is called a fault. Confusing them is how `claude-disk`
+/// spent weeks declaring six hours while running every ten minutes, and a dead
+/// collector had six hours of silence before anything said so.
+const REPORT_EVERY: chrono::TimeDelta = chrono::TimeDelta::hours(1);
+
+/// The cadence the report declares to fleetwatch, in seconds.
+///
+/// ⚠ **Worked back from fleetwatch's own bands, not chosen.** It grades a report
+/// `Fresh` within 1.5× this, `Overdue` to 3×, and `Silent` — rendered as a
+/// FAILURE — beyond. Pippijn's requirement on 2026-08-25 was that five days of
+/// nothing is a problem and anything short of that is not, so 3× must land on
+/// five days: 40 hours. That puts a normal quiet night and weekend inside
+/// `Fresh` (2.5 days), the gap between at a warning, and the failure exactly
+/// where he put it.
+///
+/// ⚠ **Silence here means NOBODY USED THE TRACKER, which is not the same as the
+/// tracker being broken**, and with no prober the two cannot be told apart. That
+/// is the accepted cost of measuring real use instead of polling: the number
+/// above is what makes the conflation tolerable, by only firing when the silence
+/// is long enough to be worth a look either way.
+pub const REPORTING_INTERVAL_S: u64 = 144_000;
+
+/// Whether this caller is the one to carry the timings out, claiming the job if
+/// so.
+///
+/// ⚠ **A conditional UPDATE, and the condition is the whole point.** Two
+/// sessions asking in the same second both read the same old stamp; only one
+/// can match it in the `WHERE`, so only one gets `true`. Doing this as a read
+/// followed by a write would hand the job to both.
+pub async fn due_to_report(pool: &MySqlPool) -> Result<bool> {
+    let claimed = sqlx::query(
+        "UPDATE reported SET claimed_at = NOW() \
+         WHERE what = 'timings' AND claimed_at < NOW() - INTERVAL ? SECOND",
+    )
+    .bind(REPORT_EVERY.num_seconds())
+    .execute(pool)
+    .await
+    .context("claiming the reporting job")?
+    .rows_affected();
+    if claimed > 0 {
+        return Ok(true);
+    }
+    // The first ever call: no row to update. `INSERT IGNORE` so two callers
+    // racing to create it do not both win — the loser's insert is a no-op and
+    // it correctly reports that it has nothing to do.
+    let created =
+        sqlx::query("INSERT IGNORE INTO reported (what, claimed_at) VALUES ('timings', NOW())")
+            .execute(pool)
+            .await
+            .context("opening the reporting claim")?
+            .rows_affected();
+    Ok(created > 0)
+}

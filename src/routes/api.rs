@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::access::{Access, SeenAs, Viewer};
@@ -423,7 +423,7 @@ pub async fn command_ran(
     Access(viewer): Access,
     State(app): State<AppState>,
     Wire(run): Wire<commands::Run>,
-) -> Result<axum::http::StatusCode, AppError> {
+) -> Result<Json<Carry>, AppError> {
     let Viewer::Session(session) = &viewer else {
         return Err(AppError::BadRequest(
             "a command belongs to the conversation that ran it, and this request is a person's."
@@ -431,7 +431,47 @@ pub async fn command_ran(
         ));
     };
     commands::record(&app.db, session, &run).await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    // ⚠ **The answer to a write, not a second request.** The caller is already
+    // here and the service already knows both things it needs — whether anybody
+    // has reported lately, and what the numbers are. Making it ask separately
+    // would put two more round trips on a path whose whole discipline is
+    // costing the command nothing.
+    let due = commands::due_to_report(&app.db).await.unwrap_or(false);
+    if !due {
+        return Ok(Json(Carry { report: None }));
+    }
+    let window = commands::recent(&app.db, 1).await.unwrap_or_default();
+    let checks = checks::recent(&app.db, 1).await.unwrap_or_default();
+    Ok(Json(Carry {
+        report: Some(Report {
+            interval_s: commands::REPORTING_INTERVAL_S,
+            commands: commands::tally(&window),
+            checks: checks::tally(&checks),
+        }),
+    }))
+}
+
+/// What a caller is handed back after recording a command.
+///
+/// ⚠ **`report` is absent almost every time, and that is the shape.** One
+/// caller an hour is told to carry the numbers out; every other command gets an
+/// empty object and does nothing. An arm that always carried the tally would put
+/// a day of rows on the wire for every `task list` anybody runs.
+#[derive(Serialize)]
+pub struct Carry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    report: Option<Report>,
+}
+
+/// The numbers to carry, and the cadence to declare with them.
+#[derive(Serialize)]
+pub struct Report {
+    /// Passed through rather than decided by the caller: how long silence is
+    /// tolerated is a property of the measurement, not of whichever session
+    /// happened to run a command at the right moment.
+    interval_s: u64,
+    commands: Vec<commands::Tally>,
+    checks: Vec<checks::Tally>,
 }
 
 /// What the CLI has been doing, newest first.

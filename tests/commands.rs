@@ -92,3 +92,24 @@ fn a_command_that_only_ever_failed_is_still_reported() {
         }]
     );
 }
+
+/// ⚠ **Five days is the requirement, and the constant is worked back from
+/// fleetwatch's bands rather than picked.** It grades a report `Fresh` within
+/// 1.5× the declared interval, `Overdue` to 3×, and `Silent` — rendered as a
+/// FAILURE — beyond. Pippijn, 2026-08-25: five days of nothing is a problem,
+/// anything short of it is not. So 3× must land exactly on five days, and a
+/// normal quiet weekend must stay inside `Fresh`.
+#[test]
+fn the_declared_interval_puts_the_failure_at_five_days() {
+    use tasks::tasks::commands::REPORTING_INTERVAL_S;
+    let day = 86_400;
+    assert_eq!(
+        REPORTING_INTERVAL_S * 3,
+        5 * day,
+        "silence becomes a failure at five days, not sooner"
+    );
+    assert!(
+        REPORTING_INTERVAL_S * 3 / 2 >= 2 * day,
+        "a quiet weekend must not even warn"
+    );
+}
