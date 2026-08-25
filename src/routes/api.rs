@@ -282,6 +282,26 @@ pub async fn create(
     Wire(new): Wire<NewTask>,
 ) -> Result<Json<Task>, AppError> {
     let actor = viewer.actor();
+    // ⚠ **Before the write and before `touch`.** A filing that skipped the check
+    // without having been refused is not filed at all, so nothing about it may
+    // land first — and a session must not be marked alive by a request that is
+    // about to be turned away.
+    //
+    // Measured over every transcript: 63 of 644 filings passed the flag on the
+    // way in and only 16 followed a refusal. For the other 47 the check never
+    // ran, so the trade this whole module rests on never happened.
+    if !new.checked {
+        let Viewer::Session(id) = &viewer else {
+            return Err(AppError::BadRequest(
+                "only a conversation can skip the duplicate check, and this request is a \
+                 person's."
+                    .into(),
+            ));
+        };
+        if !checks::refused_recently(&app.db, id, &new.subject).await? {
+            return Err(AppError::BadRequest(checks::unlicensed()));
+        }
+    }
     if let Viewer::Session(id) = &viewer {
         sessions::touch(&app.db, id, called.as_deref()).await?;
     }

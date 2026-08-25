@@ -1,0 +1,38 @@
+-- Which subject a filing check refused, so an override can be tied to it.
+--
+-- `--no-duplicate-check` is documented as the escape from a false positive: the
+-- caller is still holding the body it just tried to file, so overruling costs
+-- one re-run. Measured over every transcript (#958), that is not how it is used:
+-- **63 of 644 filings passed the flag on the way IN, and only 16 of those came
+-- after a refusal.** 47 sessions skipped the check having never been told
+-- anything. For those, the trade the module is built on — a refusal costs one
+-- re-run, a duplicate costs somebody's attention twice — never happens at all.
+--
+-- Pippijn, 2026-08-25: *"We need to make it impossible to call with
+-- --no-duplicate-check the first time. Otherwise it becomes a habit."*
+--
+-- So the service needs to answer one question at filing time: **has this session
+-- been refused THIS subject?** That needs the refusal to name what it refused.
+--
+-- ⚠ **A hash, never the subject.** `check_run` measures the tool. Putting titles
+-- in it would make it a second copy of the task list with its own drift, and it
+-- would then need the same care about what a body may carry. A hash answers the
+-- one question asked of it and nothing else — it cannot be read, listed, or
+-- accidentally reported.
+--
+-- ⚠ **Nullable, and most rows will never have it.** Only a filing check that
+-- REFUSED carries one. A density read has no subject, and a filing check that
+-- passed has nothing to license.
+-- One statement, with the index declared inside it rather than as a standalone
+-- `CREATE INDEX`, which is what every other migration here does.
+--
+-- ⚠ **Written in the belief that it fixed a gate failure. It did not.** The
+-- failure was a stale TypeScript mirror, reported on stdout, while
+-- `dev-lint-sqlx: unparseable DDL disables absence checks` sat on stderr — a
+-- pre-existing warning about two OLD `DROP INDEX` migrations, present in green
+-- runs too. Diagnosing from the tail of a log read the wrong stream. The form
+-- below is still the right one to copy, for consistency and because dev-lint
+-- genuinely cannot parse every DDL shape; it just was not the bug.
+ALTER TABLE check_run
+    ADD COLUMN subject_key CHAR(64) NULL,
+    ADD INDEX idx_check_run_refusal (session, subject_key, ran_at);

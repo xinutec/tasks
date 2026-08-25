@@ -1110,6 +1110,10 @@ async fn already_filed(
         Ok(words) => duplicates::parse(words, &known),
         Err(_) => Vec::new(),
     };
+    // ⚠ **Only when it actually named something.** The key is what licenses a
+    // later `--no-duplicate-check` for this subject, so recording it on a check
+    // that passed would hand out a licence nobody was refused.
+    let refused = (!found.is_empty()).then(|| checks::subject_key(subject));
     recorded(
         client,
         checks::Run {
@@ -1119,6 +1123,7 @@ async fn already_filed(
             accreted: None,
             elapsed_ms,
             outcome: checks::outcome(&said, !found.is_empty()),
+            subject_key: refused,
         },
     )
     .await;
@@ -1901,7 +1906,15 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 }
                 return Ok(());
             }
-            let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
+            let mut payload = json!({
+                "subject": subject,
+                "body": raw.as_deref().map(body).transpose()?.unwrap_or_default(),
+                // ⚠ **Said plainly, not inferred from the flag's absence.** The
+                // service refuses a filing that skipped the check without having
+                // been refused, and it must be able to tell "skipped" from "an
+                // older client that never mentioned it".
+                "checked": !no_duplicate_check,
+            });
             // Always present, and null when unassessed: the service refuses a
             // filing that never mentions it, so there is no "leave it out" arm
             // here to fall down. clap's group guarantees exactly one of the two
@@ -2396,6 +2409,8 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
             accreted: Some(accreted.min(u64::from(u32::MAX)) as u32),
             elapsed_ms,
             outcome: checks::outcome(&said, advice.is_some()),
+            // A density read has no subject to license anything with.
+            subject_key: None,
         },
     )
     .await;

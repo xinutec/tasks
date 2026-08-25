@@ -253,6 +253,8 @@ async fn a_task(pool: &sqlx::MySqlPool, subject: &str) -> u64 {
         pool,
         NewTask {
             subject: subject.into(),
+            // The check ran: these file through the service the way a session does.
+            checked: true,
             body: String::new(),
             priority: Ranking::At(Priority::P2),
             due: None,

@@ -61,6 +61,7 @@ async fn a_filing_check_is_recorded_before_there_is_a_task_to_name() {
             accreted: None,
             elapsed_ms: 24_000,
             outcome: Outcome::Quiet,
+            subject_key: None,
         },
     )
     .await
@@ -93,6 +94,7 @@ async fn a_density_run_keeps_what_crossed_the_sampler() {
             accreted: Some(3_412),
             elapsed_ms: 20_500,
             outcome: Outcome::Spoke,
+            subject_key: None,
         },
     )
     .await
@@ -183,6 +185,7 @@ async fn what_is_read_back_is_the_window_asked_for() {
                 accreted: None,
                 elapsed_ms: 1_000,
                 outcome: Outcome::Quiet,
+                subject_key: None,
             },
         )
         .await
@@ -317,4 +320,98 @@ async fn a_browser_has_no_check_to_report() {
         .await
         .expect("the router answered");
     assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+}
+
+/// ⚠ **`--no-duplicate-check` may only overrule a refusal you have already
+/// seen.** Measured over every transcript: 63 of 644 filings passed the flag on
+/// the way IN and only 16 followed a refusal, so for 47 sessions the check never
+/// ran and the trade the module rests on never happened.
+#[tokio::test]
+async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
+    let pool = common::fresh_db().await;
+    let subject = "Compact MEMORY.md by merging files";
+
+    assert!(
+        !checks::refused_recently(&pool, "s-1", subject)
+            .await
+            .expect("asking"),
+        "nothing has refused this session anything"
+    );
+
+    checks::record(
+        &pool,
+        "s-1",
+        &Run {
+            kind: Kind::Filing,
+            task_id: None,
+            input_chars: 16_000,
+            accreted: None,
+            elapsed_ms: 9_500,
+            outcome: Outcome::Spoke,
+            subject_key: Some(checks::subject_key(subject)),
+        },
+    )
+    .await
+    .expect("recording the refusal");
+
+    assert!(
+        checks::refused_recently(&pool, "s-1", subject)
+            .await
+            .expect("asking"),
+        "the session that was refused may now overrule it"
+    );
+    assert!(
+        !checks::refused_recently(&pool, "s-2", subject)
+            .await
+            .expect("asking"),
+        "a refusal licenses the session that received it and no other"
+    );
+    assert!(
+        !checks::refused_recently(&pool, "s-1", "something else entirely")
+            .await
+            .expect("asking"),
+        "a refusal licenses the subject it refused and no other"
+    );
+}
+
+/// ⚠ **A check that PASSED licenses nothing**, or every quiet filing would hand
+/// out permission to skip the next one — which is the habit, with extra steps.
+#[tokio::test]
+async fn a_check_that_said_nothing_licenses_nothing() {
+    let pool = common::fresh_db().await;
+    let subject = "a subject nothing matched";
+    checks::record(
+        &pool,
+        "s-quiet",
+        &Run {
+            kind: Kind::Filing,
+            task_id: None,
+            input_chars: 16_000,
+            accreted: None,
+            elapsed_ms: 7_100,
+            outcome: Outcome::Quiet,
+            subject_key: None,
+        },
+    )
+    .await
+    .expect("recording a quiet check");
+    assert!(
+        !checks::refused_recently(&pool, "s-quiet", subject)
+            .await
+            .expect("asking")
+    );
+}
+
+/// The re-run is the SAME command, so it must not fail on capitalisation or a
+/// stray space — the same rule `same_subject` follows.
+#[test]
+fn the_licence_ignores_what_a_retype_varies() {
+    assert_eq!(
+        checks::subject_key("  MEMORY.md Is Too Big  "),
+        checks::subject_key("memory.md is too big")
+    );
+    assert_ne!(
+        checks::subject_key("MEMORY.md is too big"),
+        checks::subject_key("MEMORY.md is too big now")
+    );
 }

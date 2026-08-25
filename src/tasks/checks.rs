@@ -91,6 +91,28 @@ pub struct Run {
     pub accreted: Option<u32>,
     pub elapsed_ms: u32,
     pub outcome: Outcome,
+    /// What was refused, hashed — see [`subject_key`].
+    ///
+    /// ⚠ **Only a filing check that REFUSED sets this**, and it is what licenses
+    /// a later `--no-duplicate-check` for the same subject. A density read has
+    /// no subject and a check that passed has nothing to license.
+    #[serde(default)]
+    pub subject_key: Option<String>,
+}
+
+/// The key a refusal is remembered by.
+///
+/// ⚠ **Case and surrounding space are ignored, exactly as [`same_subject`]
+/// ignores them**, or the override would refuse to honour a re-run that differs
+/// from the refused filing only in whitespace — which is the same command typed
+/// again, and the whole point.
+///
+/// [`same_subject`]: crate::tasks::duplicates::same_subject
+pub fn subject_key(subject: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(subject.trim().to_lowercase().as_bytes());
+    hex::encode(hash.finalize())
 }
 
 impl RequiredKeys for Run {
@@ -112,8 +134,8 @@ impl RequiredKeys for Run {
 pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     sqlx::query(
         "INSERT INTO check_run \
-         (ran_at, kind, session, task_id, input_chars, accreted, elapsed_ms, outcome) \
-         VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?)",
+         (ran_at, kind, session, task_id, input_chars, accreted, elapsed_ms, outcome, subject_key) \
+         VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(run.kind.as_str())
     .bind(session)
@@ -122,6 +144,7 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     .bind(run.accreted)
     .bind(run.elapsed_ms)
     .bind(run.outcome.as_str())
+    .bind(run.subject_key.as_deref())
     .execute(pool)
     .await
     .context("recording what a check did")?;
@@ -290,4 +313,53 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
             })
         })
         .collect()
+}
+
+/// How long a refusal licenses an override for.
+///
+/// ⚠ **Long enough to re-run, short enough not to become the habit.** The
+/// intended sequence is: the filing is refused, the caller reads it, and re-runs
+/// the same command with `--no-duplicate-check` — seconds, sometimes a minute if
+/// they open the task it named first. Half an hour is generous for that and far
+/// too short to let a session collect a licence in the morning and skip checks
+/// all afternoon.
+const LICENCE: i64 = 1800;
+
+/// Whether this session has been refused this exact subject, recently.
+///
+/// ⚠ **This is what makes `--no-duplicate-check` cost a re-run.** Measured over
+/// every transcript, 63 of 644 filings passed that flag on the way in and only
+/// 16 followed a refusal — so for 47 sessions the check never ran at all, and
+/// the trade the whole module rests on never happened. The flag stays, because
+/// roughly one refusal in six is wrong and removing the escape would turn every
+/// false positive into a lost body; it just cannot be used FIRST any more.
+///
+/// Keyed on the subject, not merely the session: one refusal licenses re-filing
+/// the thing that was refused, and nothing else.
+pub async fn refused_recently(pool: &MySqlPool, session: &str, subject: &str) -> Result<bool> {
+    let key = subject_key(subject);
+    let found: Option<(i64,)> = sqlx::query_as(
+        "SELECT 1 FROM check_run \
+         WHERE session = ? AND subject_key = ? AND outcome = 'spoke' AND kind = 'filing' \
+           AND ran_at > NOW() - INTERVAL ? SECOND LIMIT 1",
+    )
+    .bind(session)
+    .bind(&key)
+    .bind(LICENCE)
+    .fetch_optional(pool)
+    .await
+    .context("looking for a refusal that would licence this filing")?;
+    Ok(found.is_some())
+}
+
+/// What a filing is told when it skipped the check without having been refused.
+///
+/// ⚠ **It must not read as a bug.** The caller passed a documented flag and got
+/// a refusal from the service, which is confusing unless the message says
+/// plainly what to do — and what to do is the easy thing: drop the flag.
+pub fn unlicensed() -> String {
+    "--no-duplicate-check is for overruling a refusal you have already seen, and nothing \
+     has refused this one. Re-run without it. If the check then names something that is \
+     genuinely different work, re-run the same command WITH the flag and it will file."
+        .to_string()
 }

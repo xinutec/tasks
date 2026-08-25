@@ -145,6 +145,8 @@ async fn seed(pool: &MySqlPool) {
             pool,
             NewTask {
                 subject: subject.into(),
+                // The check ran: these file through the service the way a session does.
+                checked: true,
                 body: String::new(),
                 priority: Ranking::Unassessed,
                 due: None,

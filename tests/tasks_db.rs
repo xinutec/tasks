@@ -32,6 +32,8 @@ fn to_session(id: &str) -> Assignee {
 fn filed(subject: &str) -> NewTask {
     NewTask {
         subject: subject.into(),
+        // The check ran: these file through the service the way a session does.
+        checked: true,
         body: String::new(),
         priority: Ranking::Unassessed,
         due: None,
@@ -305,6 +307,8 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
         &pool,
         NewTask {
             subject: "Has prose".into(),
+            // The check ran: these file through the service the way a session does.
+            checked: true,
             body: "# Why\n\nA paragraph of reasoning.".into(),
             priority: Ranking::Unassessed,
             due: None,
@@ -343,6 +347,8 @@ async fn a_session_rename_moves_no_task() {
         &pool,
         NewTask {
             subject: "Assigned to a session that will be renamed".into(),
+            // The check ran: these file through the service the way a session does.
+            checked: true,
             body: String::new(),
             priority: Ranking::Unassessed,
             due: None,
@@ -398,6 +404,8 @@ async fn a_session_row_carries_how_much_it_is_holding() {
             &pool,
             NewTask {
                 subject: format!("Task {n}"),
+                // The check ran: these file through the service the way a session does.
+                checked: true,
                 body: String::new(),
                 priority: Ranking::Unassessed,
                 due: None,
@@ -413,6 +421,8 @@ async fn a_session_row_carries_how_much_it_is_holding() {
         &pool,
         NewTask {
             subject: "Already done".into(),
+            // The check ran: these file through the service the way a session does.
+            checked: true,
             body: String::new(),
             priority: Ranking::Unassessed,
             due: None,

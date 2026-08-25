@@ -41,6 +41,8 @@ async fn file(pool: &sqlx::MySqlPool, who: &Actor) -> u64 {
         pool,
         NewTask {
             subject: "a task two conversations both touch".into(),
+            // The check ran: these file through the service the way a session does.
+            checked: true,
             body: "as first written".into(),
             priority: Ranking::At(Priority::P2),
             due: None,

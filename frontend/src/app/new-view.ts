@@ -107,6 +107,9 @@ export class NewView {
         // the service now, and that is the point: it cannot be skipped.
         priority,
         assignee: this.assignee(),
+        // The UI has no way to skip the duplicate check, so this is always
+        // true — and it says so rather than relying on the service's default.
+        checked: true,
       })
       .subscribe({
         next: (task) => {

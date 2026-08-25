@@ -227,6 +227,17 @@ export interface NewTask {
   subject: string;
   body: string;
   /**
+   * Whether the filer let the duplicate check run.
+   *
+   * ⚠ **Required here, and said rather than left out.** The service refuses a
+   * filing that says `false` unless that session has just been refused this
+   * exact subject — `--no-duplicate-check` may overrule a refusal, never
+   * pre-empt one. Rust defaults an absent key to `true` so that an older client
+   * is not silently exempted, but this side has no reason to lean on that: the
+   * web UI cannot skip the check, so it says `true` and means it.
+   */
+  checked: boolean;
+  /**
    * ⚠ **Required, and the only field here that is** — note there is no `?`.
    * Every other key means *leave it alone* when absent; this one has no such
    * reading, and the service refuses a filing that never mentions it.

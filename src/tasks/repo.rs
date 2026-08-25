@@ -447,11 +447,26 @@ async fn last_written(
 /// dev-lint's wire-mirror check compares `frontend/src/app/models.ts` against.
 /// Without them the check reads "always present" from a type nothing ever
 /// serialises, and asks the client to send a key whose absence is the meaning.
+/// Absent `checked` means the check ran — see [`NewTask::checked`].
+fn yes() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct NewTask {
     pub subject: String,
     #[serde(default)]
     pub body: String,
+    /// Whether the filer let the duplicate check run.
+    ///
+    /// ⚠ **Absent means "it ran", so an old client is not silently exempted.**
+    /// This is the field the service uses to refuse a pre-emptive
+    /// `--no-duplicate-check`; if a missing key meant "skipped", every caller
+    /// that has not been rebuilt would be waved through, and if it meant
+    /// "unknown" the rule would have a hole shaped exactly like the habit it
+    /// exists to stop. `false` has to be SAID.
+    #[serde(default = "yes")]
+    pub checked: bool,
     /// How urgent — and **the one field a filer may not leave out**.
     ///
     /// ⚠ **No `serde(default)`, and no `skip_serializing_if`, deliberately.**
