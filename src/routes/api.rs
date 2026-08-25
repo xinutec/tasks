@@ -14,6 +14,7 @@ use crate::error::AppError;
 use crate::sessions;
 use crate::state::AppState;
 use crate::tasks::checks;
+use crate::tasks::commands;
 use crate::tasks::focus;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Revision, Task, TaskDetail, Updated};
@@ -411,4 +412,37 @@ pub async fn checks_ran(
     Query(window): Query<ChecksQuery>,
 ) -> Result<Json<Vec<checks::Ran>>, AppError> {
     Ok(Json(checks::recent(&app.db, window.days).await?))
+}
+
+/// Record one command the CLI ran.
+///
+/// ⚠ **A session's, like a check's.** The holder of a command is the
+/// conversation that typed it, and a person browsing the web UI is not running
+/// the CLI — so there is no arm here for a cookie.
+pub async fn command_ran(
+    Access(viewer): Access,
+    State(app): State<AppState>,
+    Wire(run): Wire<commands::Run>,
+) -> Result<axum::http::StatusCode, AppError> {
+    let Viewer::Session(session) = &viewer else {
+        return Err(AppError::BadRequest(
+            "a command belongs to the conversation that ran it, and this request is a person's."
+                .into(),
+        ));
+    };
+    commands::record(&app.db, session, &run).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// What the CLI has been doing, newest first.
+///
+/// Rows rather than a summary, for the reason `checks_ran` gives: the caller
+/// decides what question to ask of them, and a tally computed here would be the
+/// only shape anybody could get.
+pub async fn commands_ran(
+    Access(_viewer): Access,
+    State(app): State<AppState>,
+    Query(window): Query<ChecksQuery>,
+) -> Result<Json<Vec<commands::Ran>>, AppError> {
+    Ok(Json(commands::recent(&app.db, window.days).await?))
 }

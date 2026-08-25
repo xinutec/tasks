@@ -47,6 +47,7 @@ use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
 use tasks::tasks::checks;
+use tasks::tasks::commands;
 use tasks::tasks::density;
 use tasks::tasks::duplicates;
 use tasks::tasks::holder::{self, Holder};
@@ -523,6 +524,18 @@ enum Command {
         #[arg(long, default_value_t = 7)]
         days: u32,
     },
+    /// How long the commands themselves have been taking, from real use.
+    ///
+    /// ⚠ **Every row here is a command somebody actually ran.** Nothing polls
+    /// and nothing is sampled on a timer: the first version of this measurement
+    /// was a 15-minute launchd probe timing `task list --all`, which is a
+    /// command no session runs, from a process with no session and a cold cache.
+    /// What a session waits for is only visible from what sessions do.
+    Timings {
+        /// How far back to look.
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+    },
 }
 
 /// The shared secret, from the environment or the file the Mac keeps it in.
@@ -588,6 +601,11 @@ fn called_now(session: &str) -> Option<String> {
     tasks::agent_name::from_projects(&projects, session)
 }
 
+/// ⚠ `Clone` so `main` can hold one to report the timing with after handing the
+/// command its own. Every field is cheap to clone — `reqwest::Client` is an
+/// `Arc` internally and shares its connection pool, so the report reuses the
+/// connection the command already opened.
+#[derive(Clone)]
 struct Client {
     http: reqwest::Client,
     base: String,
@@ -1280,8 +1298,72 @@ fn emit(json: bool, value: &Value, human: impl FnOnce()) {
     }
 }
 
+impl Command {
+    /// The name this command is recorded and grouped under.
+    ///
+    /// ⚠ **Exhaustive on purpose — no `_ =>` arm.** `verb` is the trend key in
+    /// `command_run`, so a subcommand that fell through to a catch-all would
+    /// record as something else and quietly merge two commands' histories.
+    /// Adding a subcommand without naming it here is a compile error, which is
+    /// the only reliable way a table stays level with a CLI that keeps growing.
+    fn verb(&self) -> &'static str {
+        match self {
+            Command::List { .. } => "list",
+            Command::Focus { .. } => "focus",
+            Command::Show { .. } => "show",
+            Command::Undo { .. } => "undo",
+            Command::Add { .. } => "add",
+            Command::Start { .. } => "start",
+            Command::Done { .. } => "done",
+            Command::Drop { .. } => "drop",
+            Command::Reopen { .. } => "reopen",
+            Command::Move { .. } => "move",
+            Command::Edit { .. } => "edit",
+            Command::Digest => "digest",
+            Command::Sessions { .. } => "sessions",
+            Command::Rename { .. } => "rename",
+            Command::Checks { .. } => "checks",
+            Command::Timings { .. } => "timings",
+        }
+    }
+}
+
+/// Report what a command did, and never let reporting it cost anything.
+///
+/// ⚠ **After the work and after the printing.** This runs once the answer is
+/// already on the caller's terminal, so the round trip it makes is not in what
+/// anybody waits for — and it is silent on every failure, for the same reason
+/// the checks are: a session that cannot reach the service has a worse problem
+/// than a missing row.
+///
+/// ⚠ **`timings` and `checks` are not recorded.** Reading the measurements is
+/// not use of the tool, and a readout that writes a row every time somebody
+/// looks would show a command whose whole population is people looking at it.
+async fn clocked(client: &Client, verb: &'static str, started: std::time::Instant, ok: bool) {
+    if matches!(verb, "timings" | "checks") {
+        return;
+    }
+    let run = commands::Run {
+        verb: verb.to_string(),
+        elapsed_ms: started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32,
+        outcome: if ok {
+            commands::Ended::Ok
+        } else {
+            commands::Ended::Error
+        },
+    };
+    let req = client
+        .request(reqwest::Method::POST, "/api/commands")
+        .json(&run);
+    let _ = client.send(req).await;
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // ⚠ First statement in the process, deliberately: what a session waits for
+    // includes argument parsing and building the client, and a clock started
+    // after those reports a command faster than anybody has ever run it.
+    let started = std::time::Instant::now();
     let cli = Cli::parse();
     let session = cli.session.clone().or_else(session_id);
     let client = Client {
@@ -1290,6 +1372,7 @@ async fn main() -> Result<()> {
             .context("building the http client")?,
         base: cli
             .url
+            .clone()
             .or_else(|| std::env::var("TASKS_URL").ok())
             .unwrap_or_else(|| DEFAULT_URL.to_string())
             .trim_end_matches('/')
@@ -1300,6 +1383,15 @@ async fn main() -> Result<()> {
     };
     client.identified()?;
 
+    let verb = cli.command.verb();
+    let done = run(cli, &client).await;
+    clocked(&client, verb, started, done.is_ok()).await;
+    done
+}
+
+/// Everything the CLI does, so that `main` can time all of it.
+async fn run(cli: Cli, client: &Client) -> Result<()> {
+    let client = client.clone();
     match cli.command {
         Command::List {
             all,
@@ -1722,6 +1814,24 @@ async fn main() -> Result<()> {
             eprintln!("\n({bytes} bytes)");
         }
 
+        Command::Timings { days } => {
+            let req = client
+                .request(reqwest::Method::GET, "/api/commands")
+                .query(&[("days", days)]);
+            let rows = client.send(req).await?.unwrap_or(json!([]));
+            let runs: Vec<commands::Ran> =
+                serde_json::from_value(rows.clone()).context("reading what the commands did")?;
+            emit(cli.json, &rows, || {
+                if runs.is_empty() {
+                    println!("nothing recorded in the last {days} days");
+                    return;
+                }
+                for line in commands::tally(&runs) {
+                    println!("{}", timed_line(&line));
+                }
+            });
+        }
+
         Command::Checks { days } => {
             let req = client
                 .request(reqwest::Method::GET, "/api/checks")
@@ -1982,6 +2092,27 @@ fn tallied(line: &checks::Tally) -> String {
         "{kind:8} {:3} runs · {} · {} median, {} p90, {} worst",
         line.runs,
         outcomes.join(", "),
+        spell(line.median_ms),
+        spell(line.p90_ms),
+        spell(line.worst_ms),
+    )
+}
+
+/// One command's line.
+///
+/// ⚠ **The run count comes first because it is the weight.** A command run four
+/// times with a bad worst case matters less than `list` being 200 ms slower, and
+/// a line that leads with latency invites reading them the other way round.
+fn timed_line(line: &commands::Tally) -> String {
+    let failed = if line.failed > 0 {
+        format!(", {} failed", line.failed)
+    } else {
+        String::new()
+    };
+    format!(
+        "{:10} {:4} runs{failed} · {} median, {} p90, {} worst",
+        line.verb,
+        line.runs,
         spell(line.median_ms),
         spell(line.p90_ms),
         spell(line.worst_ms),
