@@ -341,6 +341,29 @@ worse than any duplicate. That distinction is the whole of the design; it was
 advisory until 2026-08-14, and `src/tasks/duplicates.rs` carries both the
 measurement that argued for advisory and the one that overruled it.
 
+**It reads the closed tasks too, and those ADVISE rather than refuse.** The 995
+finished and abandoned tasks ride in the cached half of the call, so a filing
+that repeats work already done is told so and lands anyway:
+
+```text
+this may already exist, closed — a model's reading of the titles. It was filed anyway:
+  #689  k8s Dhall model generation and apply convergence check already completed — already done
+`task show <id>` to read one. If it is the same work, `task reopen <id>` and close the one just filed rather than carrying two.
+(read against 984 closed tasks; 11 skipped as having no body)
+```
+
+⚠ **`dropped` does not refuse either, and the obvious rule saying it should was
+written and then refuted.** `task drop` records a status and no reason, so a
+dropped task does not mean anybody decided against anything — #863 is dropped,
+carries a full plan and states no reason, and a model asked about it reported a
+decision the row never makes. Both statuses point at the task instead.
+
+⚠ **A closed row with no body is not read at all.** More than half the dropped
+pile is this tool's own probes, two of which are the paraphrase fixtures for
+this very check. The filter is what the row *says*, never how fast it closed:
+#863 was dropped 58 seconds after filing and is the most valuable row in the
+corpus. What it skips is counted and printed.
+
 **A body that has grown without being rewritten is read back to you.** Once one
 has gained 3,000 characters since the last edit that made it smaller, `task edit`
 puts it to the same local Haiku against the three rules `task edit --help`

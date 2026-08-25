@@ -14,7 +14,8 @@
 //! pins that whatever comes back is read correctly.
 
 use tasks::tasks::duplicates::{
-    Match, candidates, collision, parse, prompt, refusal, same_subject,
+    Match, Settled, advice, candidates, collision, parse, prompt, refusal, same_subject,
+    settled_block, split, worth_reading,
 };
 
 /// An id that is deliberately NOT in [`corpus`], so a test can assert that a
@@ -147,7 +148,7 @@ fn the_prompt_carries_the_filing_and_the_list() {
         (255, "the cron has simply never run".to_string()),
         (726, "geb holds the backups".to_string()),
     ];
-    let text = prompt("a new thing entirely", &corpus);
+    let text = prompt("a new thing entirely", &corpus, false);
     assert!(
         text.contains("a new thing entirely"),
         "the subject asked about"
@@ -168,7 +169,7 @@ fn the_prompt_says_what_is_not_a_duplicate() {
     // negative half, an all-pairs sweep returned nine groups of which one was
     // real — same-area, same-repo and same-technology are what a model reaches
     // for when nobody tells it not to.
-    let text = prompt("anything", &[(1, "something".to_string())]);
+    let text = prompt("anything", &[(1, "something".to_string())], false);
     assert!(text.contains("NOT the same problem"));
     assert!(text.contains("NOT duplicates"));
 }
@@ -283,4 +284,188 @@ fn a_filing_that_waits_for_nothing_sees_the_whole_list() {
 fn an_identical_subject_is_still_a_collision_with_what_it_waits_for() {
     let corpus = vec![(42, "Fix the parser".to_string())];
     assert_eq!(same_subject("Fix the parser", &corpus), Some(42));
+}
+
+/// A closed task's remedy is not the same sentence as an open one's.
+///
+/// ⚠ **`reopen` is the whole point.** A session told only that #863 resembles
+/// its filing will file anyway; told that the move is `task reopen 863`, it has
+/// somewhere to go. This is the line that turns a match into an action.
+#[test]
+fn a_closed_match_names_reopen_and_says_the_task_still_landed() {
+    let text = advice(
+        &[(
+            Match {
+                id: 863,
+                why: "both compact MEMORY.md by merging files".into(),
+            },
+            Settled {
+                id: 863,
+                subject: "MEMORY.md is 21.7KB".into(),
+                dropped: true,
+            },
+        )],
+        961,
+        34,
+    );
+    assert!(text.contains("#863"), "{text}");
+    assert!(text.contains("task reopen"), "{text}");
+    assert!(
+        text.contains("filed"),
+        "the caller must know the task landed: {text}"
+    );
+    assert!(
+        text.contains("961") && text.contains("34"),
+        "the corpus it read: {text}"
+    );
+}
+
+/// ⚠ **A dropped task is not reported as a decision.** `task drop` records a
+/// status and no reason, so "dropped" alone does not mean anybody decided
+/// anything: #863 is dropped, carries a full merge plan, and states no reason.
+/// A model asked about it reported that it "concluded the work wasn't
+/// justified", which the row does not say — so this line must point at the task
+/// rather than assert what its status means.
+#[test]
+fn a_dropped_match_sends_the_reader_to_the_task_not_to_its_status() {
+    let dropped = advice(
+        &[(
+            Match {
+                id: 863,
+                why: "same work".into(),
+            },
+            Settled {
+                id: 863,
+                subject: "x".into(),
+                dropped: true,
+            },
+        )],
+        10,
+        0,
+    );
+    assert!(dropped.contains("reason is in the task"), "{dropped}");
+    let done = advice(
+        &[(
+            Match {
+                id: 689,
+                why: "same work".into(),
+            },
+            Settled {
+                id: 689,
+                subject: "y".into(),
+                dropped: false,
+            },
+        )],
+        10,
+        0,
+    );
+    assert!(done.contains("already done"), "{done}");
+    assert!(!done.contains("reason is in the task"), "{done}");
+}
+
+/// ⚠ **A filing with no body was never a description of work.** #865 and #866
+/// — "MEMORY.md is over its read limit…", filed 16 seconds apart with empty
+/// bodies — are this check's own paraphrase fixtures, and shown the corpus
+/// unfiltered a real MEMORY.md filing would be advised against them.
+#[test]
+fn a_closed_row_with_no_body_is_not_read() {
+    assert!(!worth_reading(false));
+    assert!(worth_reading(true));
+}
+
+/// ⚠ **Closing quickly is NOT the signal, and it was nearly the rule.** #863
+/// was dropped 58 seconds after filing and is the most valuable row in the
+/// closed corpus. Nothing here may reject a row for how fast it closed — the
+/// filter takes only whether it says anything.
+#[test]
+fn the_filter_cannot_see_how_fast_a_task_closed() {
+    // The signature is the guard: there is no time to pass in, so no future
+    // edit can quietly start rejecting on one.
+    assert!(
+        worth_reading(true),
+        "a row with a body is read whenever it closed"
+    );
+}
+
+/// An id off the closed list is a closed match, and an id off the open list is
+/// an open one — the two arms do different things, so the split is load-bearing.
+#[test]
+fn matches_are_split_by_which_list_they_came_off() {
+    let settled = vec![
+        Settled {
+            id: 863,
+            subject: "MEMORY.md".into(),
+            dropped: true,
+        },
+        Settled {
+            id: 689,
+            subject: "k8s Dhall".into(),
+            dropped: false,
+        },
+    ];
+    let found = vec![
+        Match {
+            id: 255,
+            why: "an open one".into(),
+        },
+        Match {
+            id: 863,
+            why: "a dropped one".into(),
+        },
+    ];
+    let (open, over) = split(&found, &settled);
+    assert_eq!(
+        open,
+        vec![Match {
+            id: 255,
+            why: "an open one".into()
+        }]
+    );
+    assert_eq!(over.len(), 1);
+    assert_eq!(over[0].1.id, 863);
+    assert!(over[0].1.dropped);
+}
+
+/// ⚠ **Nothing that varies per filing may reach this string.** It is put where
+/// a cached prefix goes, and a cache block ends where the varying text begins:
+/// measured 2026-08-25, the same 995 titles below the subject wrote 32,833
+/// tokens and read back zero, every call.
+#[test]
+fn the_cached_block_carries_the_closed_list_and_no_subject() {
+    let settled = vec![
+        Settled {
+            id: 863,
+            subject: "MEMORY.md is 21.7KB".into(),
+            dropped: true,
+        },
+        Settled {
+            id: 689,
+            subject: "k8s Dhall model".into(),
+            dropped: false,
+        },
+    ];
+    let text = settled_block(&settled);
+    assert!(
+        text.contains("863 | dropped | MEMORY.md is 21.7KB"),
+        "{text}"
+    );
+    assert!(text.contains("689 | done | k8s Dhall model"), "{text}");
+    // Twice: once as the thing that must not be here, once as the reason.
+    assert!(
+        !text.contains("about to be filed:"),
+        "no subject in the cached half"
+    );
+    let same = settled_block(&settled);
+    assert_eq!(
+        text, same,
+        "the same corpus must produce the same bytes, or it never caches"
+    );
+}
+
+/// The prompt says the closed list exists only when one was actually sent.
+#[test]
+fn the_question_mentions_closed_tasks_only_when_there_are_some() {
+    let corpus = [(1, "something".to_string())];
+    assert!(prompt("anything", &corpus, true).contains("CLOSED"));
+    assert!(!prompt("anything", &corpus, false).contains("CLOSED"));
 }

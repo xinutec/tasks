@@ -949,6 +949,52 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
         .collect())
 }
 
+/// Every closed task worth reading, as the block that gets cached.
+///
+/// ⚠ **Failure here must not cost the filing.** This is the half that was added
+/// last and is the half a session can most afford to lose: an unreachable or
+/// slow closed corpus means the check falls back to what it did before, which
+/// was the whole product for two weeks. So the error is swallowed and the list
+/// comes back empty rather than propagating.
+///
+/// ⚠ **Filtered on the way out, and the count is reported.** More than half the
+/// dropped rows are this tool's own probes; see [`duplicates::worth_reading`].
+/// Whatever is dropped here is said out loud by the caller, because a corpus
+/// that silently shrinks reads as covering more than it does.
+async fn settled_now(client: &Client) -> (Vec<duplicates::Settled>, usize) {
+    let Ok(query) = list_query(true, false, false, true, None) else {
+        return (Vec::new(), 0);
+    };
+    let req = client
+        .request(reqwest::Method::GET, "/api/tasks")
+        .query(&query);
+    let Ok(Some(all)) = client.send(req).await else {
+        return (Vec::new(), 0);
+    };
+    let rows = all.as_array().map(Vec::as_slice).unwrap_or_default();
+    let mut kept = Vec::new();
+    let mut skipped = 0usize;
+    for task in rows {
+        let status = task["status"].as_str().unwrap_or("");
+        if !matches!(status, "done" | "dropped") {
+            continue;
+        }
+        let (Some(id), Some(subject)) = (task["id"].as_u64(), task["subject"].as_str()) else {
+            continue;
+        };
+        if !duplicates::worth_reading(task["detailed"].as_bool().unwrap_or(false)) {
+            skipped += 1;
+            continue;
+        }
+        kept.push(duplicates::Settled {
+            id,
+            subject: subject.to_string(),
+            dropped: status == "dropped",
+        });
+    }
+    (kept, skipped)
+}
+
 /// Whether anything open already says what is about to be filed.
 ///
 /// `corpus` is read before the filing and so cannot contain it, which is what
@@ -956,16 +1002,29 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
 async fn already_filed(
     client: &Client,
     corpus: &[(u64, String)],
+    settled: &[duplicates::Settled],
     subject: &str,
 ) -> Result<Vec<duplicates::Match>> {
-    if corpus.is_empty() {
+    if corpus.is_empty() && settled.is_empty() {
         return Ok(Vec::new());
     }
-    let asked = duplicates::prompt(subject, corpus);
+    let asked = duplicates::prompt(subject, corpus, !settled.is_empty());
+    // The closed list is deliberately NOT counted here: `input_chars` is what
+    // this filing put in front of the model, and the cached prefix is the same
+    // bytes for every filing. Adding it would make every row in `check_run`
+    // jump by 25k on the day this shipped and look like a regression.
     let input_chars = asked.chars().count().min(u32::MAX as usize) as u32;
-    let (said, elapsed_ms) = ask(&asked, PATIENCE).await;
+    let prefix = (!settled.is_empty()).then(|| duplicates::settled_block(settled));
+    let (said, elapsed_ms) = ask_with(&asked, prefix.as_deref(), PATIENCE).await;
+    // Against both lists: an id off either one is a real task, and `split` is
+    // what decides which of the two things this filing is told.
+    let known: Vec<(u64, String)> = corpus
+        .iter()
+        .cloned()
+        .chain(settled.iter().map(|t| (t.id, t.subject.clone())))
+        .collect();
     let found = match &said {
-        Ok(words) => duplicates::parse(words, corpus),
+        Ok(words) => duplicates::parse(words, &known),
         Err(_) => Vec::new(),
     };
     recorded(
@@ -1009,13 +1068,39 @@ async fn recorded(client: &Client, run: checks::Run) {
 /// answer is in hand — including on the failing paths, which leave exactly the
 /// same file as the working one.
 async fn ask(prompt: &str, patience: std::time::Duration) -> (Result<String>, u32) {
+    ask_with(prompt, None, patience).await
+}
+
+/// The same call, with a block of instructions in front of the question.
+///
+/// ⚠ **`prefix` is where a cached prefix goes, and it must not vary per call.**
+/// See [`duplicates::settled_block`] for the measurement: the same bytes below
+/// the question are rewritten every time and read back never, because the
+/// question invalidates the block it sits in.
+///
+/// ⚠ **On a file, not in the argument list**, for the reason [`call`] already
+/// gives about the prompt — this block is 87 kB of closed titles, and while
+/// `ARG_MAX` is a megabyte here, an argument that size is at the mercy of
+/// anything that logs a command line. The file goes with the transcript.
+async fn ask_with(
+    prompt: &str,
+    prefix: Option<&str>,
+    patience: std::time::Duration,
+) -> (Result<String>, u32) {
     let named = named();
+    let carried = prefix.and_then(|text| {
+        let path = std::env::temp_dir().join(format!("task-settled-{named}.txt"));
+        std::fs::write(&path, text).ok().map(|()| path)
+    });
     let started = std::time::Instant::now();
-    let said = call(prompt, &named, patience).await;
+    let said = call(prompt, &named, carried.as_deref(), patience).await;
     // Before `discard`, which is a file removal on the same path and no part of
     // what was being measured.
     let took = started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
     discard(&named);
+    if let Some(path) = carried {
+        let _ = std::fs::remove_file(path);
+    }
     (said, took)
 }
 
@@ -1024,12 +1109,22 @@ async fn ask(prompt: &str, patience: std::time::Duration) -> (Result<String>, u3
 /// ⚠ **On stdin, not in the argument list.** The prompt carries every open
 /// title — 13,720 bytes when this was written — and an argument that size is at
 /// the mercy of a shell's limits and of anything that logs a command line.
-async fn call(prompt: &str, named: &str, patience: std::time::Duration) -> Result<String> {
-    let mut child = tokio::process::Command::new("claude")
+async fn call(
+    prompt: &str,
+    named: &str,
+    prefix: Option<&std::path::Path>,
+    patience: std::time::Duration,
+) -> Result<String> {
+    let mut command = tokio::process::Command::new("claude");
+    command
         .current_dir(std::env::temp_dir())
         .arg("-p")
         .args(["--session-id", named])
-        .args(["--model", CHECKER])
+        .args(["--model", CHECKER]);
+    if let Some(path) = prefix {
+        command.arg("--append-system-prompt-file").arg(path);
+    }
+    let mut child = command
         // The one setting that decides what a check costs. See [`DELIBERATION`].
         .env("MAX_THINKING_TOKENS", DELIBERATION)
         .stdin(std::process::Stdio::piped())
@@ -1402,9 +1497,28 @@ async fn main() -> Result<()> {
             // string equality over every open title and must stay that way;
             // this narrows only what the model is asked to judge.
             let candidates = duplicates::candidates(&corpus, &blocked_on);
+            // ⚠ **The closed list is read for its own sake and never narrowed by
+            // `--blocked-on`.** That exemption exists because a filing may
+            // declare it waits for an OPEN task; nothing can wait for a task
+            // that is over, so there is no edge here to honour.
+            let (settled, unread) = match no_duplicate_check {
+                true => (Vec::new(), 0),
+                false => settled_now(&client).await,
+            };
+            // Carried past the POST: a closed match does not refuse, so it has
+            // nothing to say until the task it is about actually exists.
+            let mut closed_match = None;
             if !no_duplicate_check {
-                match already_filed(&client, &candidates, &subject).await {
-                    Ok(found) if !found.is_empty() => bail!("{}", duplicates::refusal(&found)),
+                match already_filed(&client, &candidates, &settled, &subject).await {
+                    Ok(found) if !found.is_empty() => {
+                        let (open, over) = duplicates::split(&found, &settled);
+                        // Open first, and it wins outright: it is the arm that
+                        // refuses, so an answer naming both must not file.
+                        if !open.is_empty() {
+                            bail!("{}", duplicates::refusal(&open));
+                        }
+                        closed_match = Some(duplicates::advice(&over, settled.len(), unread));
+                    }
                     Ok(_) => {}
                     Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
                 }
@@ -1433,6 +1547,11 @@ async fn main() -> Result<()> {
                 .json(&payload);
             let task = client.send(req).await?.context("no task came back")?;
             emit(cli.json, &task, || println!("{}", line(&task)));
+            // After the filing and on stderr: the task landed, and this is a
+            // note about it rather than a failure of it.
+            if let Some(note) = closed_match {
+                eprintln!("{note}");
+            }
             // After the filing and never before it. The task is on the list by
             // the time a model is asked anything, so a check that hangs, fails
             // or is not installed costs a note and never a filing.

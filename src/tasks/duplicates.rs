@@ -151,15 +151,25 @@ pub fn candidates(corpus: &[(u64, String)], waiting_on: &[u64]) -> Vec<(u64, Str
         .collect()
 }
 
-pub fn prompt(subject: &str, corpus: &[(u64, String)]) -> String {
+pub fn prompt(subject: &str, corpus: &[(u64, String)], settled: bool) -> String {
     let lines: String = corpus
         .iter()
         .map(|(id, subject)| format!("{id} | {subject}\n"))
         .collect();
+    // Named here rather than inlined so the open list and the closed one are
+    // plainly two different blocks: this one varies every filing, and the one
+    // it points at does not, which is the whole reason they are separated.
+    let also = if settled {
+        "Your instructions also carry every CLOSED task — finished or abandoned. \
+         Those count: a task already done should be reopened, not filed again.\n\n"
+    } else {
+        ""
+    };
     format!(
         "A session is about to file this task into a shared tracker:\n\n  {subject}\n\n\
          Below is every task already open, one per line, as `id | title`.\n\n\
          {lines}\n\
+         {also}\
          Does the new task describe the SAME underlying problem as one already there?\n\
          Same repo, same area, or same technology is NOT the same problem. Two different \
          bugs in one file are NOT duplicates. A task that would be closed as \"already \
@@ -280,5 +290,129 @@ pub fn refusal(found: &[Match]) -> String {
         "`task show <id>` to check one. If this really is different work, re-run the same \
          command with --no-duplicate-check.",
     );
+    out
+}
+
+/// A task that is over, as the check sees it.
+///
+/// ⚠ **`dropped` and `done` are kept apart because their remedies differ**, not
+/// because one is worse. A finished task whose bug came back is a legitimate new
+/// filing; an abandoned one being filed again means a decision is being made
+/// twice. Collapsing them into "closed" would lose the only thing the reader can
+/// act on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Settled {
+    pub id: u64,
+    pub subject: String,
+    /// Closed WITHOUT being done: overtaken, obsolete, or decided against.
+    pub dropped: bool,
+}
+
+/// Whether a closed row is a description of work at all.
+///
+/// ⚠ **More than half the dropped pile is this tool testing itself.** On
+/// 2026-08-25 the 66 dropped rows held 34 probes and scratch filings, and two of
+/// them — #865 and #866, "MEMORY.md is over its read limit…" filed 16 seconds
+/// apart with empty bodies — are the paraphrase pair used to verify this very
+/// check. Shown the corpus unfiltered, a session filing real work about
+/// MEMORY.md would be advised against a fixture.
+///
+/// ⚠ **The rule is a property of the row, never a list of ids.** A hard-coded
+/// list rots at the next probe, and a corpus nobody can see goes stale in
+/// silence — which is the defect this whole path exists to close.
+///
+/// ⚠ **Closing quickly is NOT the signal, and that was nearly the rule.** #863
+/// was dropped 58 seconds after it was filed and is the single most valuable row
+/// in the closed corpus: two independent sweeps of all 995 picked it out, and it
+/// carries a complete merge plan. A time-since-filing filter would have thrown
+/// away the one case that justifies reading closed tasks at all. What separates
+/// the fixtures from it is that they say nothing: a filing with no body was
+/// never a description of work.
+pub fn worth_reading(detailed: bool) -> bool {
+    detailed
+}
+
+/// The closed corpus, as the block that goes in front of the question.
+///
+/// ⚠ **This is the half that must not move.** It is put where a cached prefix
+/// goes — the system prompt — because a cache block ends where the varying text
+/// begins. Measured 2026-08-25 on 995 closed titles: with this list above the
+/// subject in the same message, a filing wrote 32,833 tokens and read back
+/// ZERO, every call, because the subject at the bottom invalidates the block it
+/// sits in. Moved here, a second filing with a different subject read 46,919 and
+/// wrote 7,959.
+///
+/// So nothing that varies per filing may be appended to this string. The open
+/// list and the subject belong in [`prompt`], and the separation is the
+/// difference between one second and five.
+pub fn settled_block(corpus: &[Settled]) -> String {
+    let lines: String = corpus
+        .iter()
+        .map(|task| {
+            let status = if task.dropped { "dropped" } else { "done" };
+            format!("{} | {status} | {}\n", task.id, task.subject)
+        })
+        .collect();
+    format!(
+        "You judge whether a task about to be filed already exists in a shared tracker.\n\n\
+         Below is every CLOSED task, one per line, as `id | status | title`. `done` means \
+         the work was finished; `dropped` means it was abandoned, overtaken, or decided \
+         against.\n\n\
+         {lines}\n\
+         A new filing that describes work already on this list is not new work. Name it by \
+         its id, exactly as you would name an open one."
+    )
+}
+
+/// The matches, split by where each one was found.
+///
+/// Ids the model returned that belong to neither list are already gone by the
+/// time this runs — [`parse`] drops them — so an id here is real, and the only
+/// question left is which list it came off.
+pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, Settled)>) {
+    let mut open = Vec::new();
+    let mut over = Vec::new();
+    for one in found {
+        match settled.iter().find(|task| task.id == one.id) {
+            Some(task) => over.push((one.clone(), task.clone())),
+            None => open.push(one.clone()),
+        }
+    }
+    (open, over)
+}
+
+/// What a filing is told when it resembles something already closed.
+///
+/// ⚠ **It advises and never refuses, and `dropped` does not change that.** The
+/// obvious rule — a dropped task was decided against, so refuse — was written
+/// and then refuted by the corpus it would run on: `task drop` records a status
+/// and no reason, so `dropped` alone does not mean anybody decided anything.
+/// #863 is dropped, carries a full plan, and states no reason at all; asked
+/// about it, a model reported that it "concluded the work wasn't justified",
+/// which the row does not say. A refusal built on that signal refuses real work
+/// while citing a decision nobody made.
+///
+/// ⚠ **The remedy is the point, not the match.** A session that learns its
+/// filing already exists as #863 still has to be told that the move is
+/// `task reopen`, because the alternative it will otherwise reach for is filing
+/// anyway.
+pub fn advice(found: &[(Match, Settled)], read: usize, unread: usize) -> String {
+    let mut out = String::from(
+        "this may already exist, closed — a model's reading of the titles. It was filed \
+         anyway:\n",
+    );
+    for (one, task) in found {
+        let status = if task.dropped {
+            "dropped, and the reason is in the task rather than in its status"
+        } else {
+            "already done"
+        };
+        out.push_str(&format!("  #{:<4} {} — {status}\n", one.id, one.why));
+    }
+    out.push_str(&format!(
+        "`task show <id>` to read one. If it is the same work, `task reopen <id>` and close \
+         the one just filed rather than carrying two.\n\
+         (read against {read} closed tasks; {unread} skipped as having no body)"
+    ));
     out
 }

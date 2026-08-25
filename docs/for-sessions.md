@@ -250,6 +250,24 @@ with `--no-duplicate-check`, which is what you want when it matched your topic
 rather than your work. You are still holding the body; it is a re-run, not a
 rewrite.
 
+⚠ **A CLOSED match does not stop you — it tells you and files anyway.** The
+finished and abandoned tasks are read as well, and their remedy is different, so
+their message is different:
+
+```text
+this may already exist, closed — a model's reading of the titles. It was filed anyway:
+  #689  k8s Dhall model generation and apply convergence check already completed — already done
+`task show <id>` to read one. If it is the same work, `task reopen <id>` and close the one just filed rather than carrying two.
+(read against 984 closed tasks; 11 skipped as having no body)
+```
+
+Your task exists — this is a note about it, not a refusal of it. If it is the
+same work, `task reopen <id>` and drop the one you just filed; carrying two is
+the thing this exists to stop. If it is not, ignore it and move on.
+
+⚠ **`dropped` is not a verdict.** Dropping records a status and no reason, so a
+dropped twin does not mean the work was rejected — read the task and find out.
+
 **It is a guess from titles, so it is often wrong about what is related.** Two
 tasks on one subsystem read as one task to it. That is the price of catching the
 duplicate nobody can catch by hand, and it is paid by the override being cheap.
