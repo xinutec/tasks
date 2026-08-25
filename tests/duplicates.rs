@@ -14,7 +14,7 @@
 //! pins that whatever comes back is read correctly.
 
 use tasks::tasks::duplicates::{
-    Match, Settled, advice, candidates, collision, parse, prompt, refusal, same_subject,
+    Match, Settled, advice, candidates, collision, edged, parse, prompt, refusal, same_subject,
     settled_block, split, worth_reading,
 };
 
@@ -468,4 +468,43 @@ fn the_question_mentions_closed_tasks_only_when_there_are_some() {
     let corpus = [(1, "something".to_string())];
     assert!(prompt("anything", &corpus, true).contains("CLOSED"));
     assert!(!prompt("anything", &corpus, false).contains("CLOSED"));
+}
+
+/// The mirror of [`what_a_filing_waits_for_is_not_shown_to_the_reader`].
+///
+/// ⚠ **Measured 2026-08-25: #1164 was refused against #986, the task it exists
+/// to unblock.** The model's reading was correct — both are about verifying the
+/// serial-console method before buying the phones — and the answer was wrong,
+/// because a blocker is not a copy. `--blocked-on` already exempted one
+/// direction; the filer could declare this edge and the tool could not hear it.
+#[test]
+fn what_a_filing_unblocks_is_not_shown_to_the_reader_either() {
+    let corpus = vec![
+        (986, "Buy two SDM845 phones for phonos".to_string()),
+        (985, "Something else entirely".to_string()),
+    ];
+    let shown = edged(&corpus, &[], &[986]);
+    assert_eq!(shown, vec![(985, "Something else entirely".to_string())]);
+}
+
+/// Both edges at once, and neither end is shown.
+#[test]
+fn a_filing_may_declare_an_edge_in_each_direction() {
+    let corpus = vec![
+        (1, "waits for this".to_string()),
+        (2, "unblocked by this filing".to_string()),
+        (3, "unrelated".to_string()),
+    ];
+    assert_eq!(
+        edged(&corpus, &[1], &[2]),
+        vec![(3, "unrelated".to_string())]
+    );
+}
+
+/// ⚠ **The exact-subject guard is NOT narrowed by either edge.** An identical
+/// title is one task however it was ordered, and that half has no error rate.
+#[test]
+fn an_identical_subject_still_collides_with_what_a_filing_unblocks() {
+    let corpus = vec![(42, "Fix the parser".to_string())];
+    assert_eq!(same_subject("Fix the parser", &corpus), Some(42));
 }

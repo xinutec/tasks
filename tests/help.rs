@@ -154,3 +154,41 @@ fn the_subject_is_not_a_flag_and_the_refusal_says_where_it_goes() {
     let said = String::from_utf8_lossy(&out.stderr);
     assert!(said.contains("first argument"), "{said}");
 }
+
+/// ⚠ **Five closes in the transcripts passed a note to `done` and were
+/// refused** — `--reason` twice, `--message`, `--note`, `--body`. Three of those
+/// four spellings are now accepted; the fourth is `--body`, which is deliberately
+/// NOT an alias because it means "replace everything" everywhere else in this CLI
+/// and would delete the very history the note is being written above.
+#[test]
+fn closing_a_task_takes_its_outcome_in_the_same_command() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
+        .args(["done", "--help"])
+        .output()
+        .expect("task done --help");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("--note"), "{text}");
+    // ⚠ Matched as an OPTION LINE, not as a substring: the flag's own help
+    // explains why `--body` is not an alias, so the word appears in the prose
+    // and a `contains` check cannot tell the two apart. This assertion failed
+    // for exactly that reason when it was first written.
+    assert!(
+        !text
+            .lines()
+            .any(|line| line.trim_start().starts_with("--body")),
+        "--body must not be an option on done: {text}"
+    );
+}
+
+/// A drop that records no reason is what makes a dropped task unreadable later:
+/// #863 was dropped 58 seconds after filing with a complete plan in it and says
+/// nowhere that anybody rejected it.
+#[test]
+fn dropping_a_task_takes_its_reason_in_the_same_command() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
+        .args(["drop", "--help"])
+        .output()
+        .expect("task drop --help");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("--reason"), "{text}");
+}

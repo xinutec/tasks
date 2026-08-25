@@ -43,12 +43,27 @@ use anyhow::{Context, Result};
 /// session. In practice this is not reachable through the token path, which
 /// refuses to run at all without an id; it is the honest answer rather than a
 /// live case.
+/// Whose list is being asked for, once a name has been resolved.
+///
+/// ⚠ **A person and a session are different columns**, which is why this is not
+/// a string: `person=hardware` would silently match nothing, because `hardware`
+/// is a session and Pippijn is the only person. Three attempts in the
+/// transcripts got that wrong from the outside — `--to pippijn`,
+/// `--assignee hardware`, `--pippijn` — and the tool answered none of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Holder<'a> {
+    Person(&'a str),
+    Session(&'a str),
+    Nobody,
+}
+
 pub fn list_query(
     all: bool,
     mine: bool,
     pile: bool,
     done: bool,
     session: Option<&str>,
+    to: Option<Holder<'_>>,
 ) -> Result<Vec<(String, String)>> {
     let mut query: Vec<(String, String)> = Vec::new();
     if done {
@@ -69,6 +84,19 @@ pub fn list_query(
         let session =
             session.context("--mine needs a session id (--session, or $TASKS_SESSION)")?;
         query.push(("session".into(), session.into()));
+        return Ok(query);
+    }
+    // ⚠ **Strictly that holder, with no pile.** `--to` answers "what is X
+    // carrying", and folding the unheld tasks in would answer a different
+    // question — the pile is nobody's, so it belongs to no holder's plate.
+    if let Some(holder) = to {
+        match holder {
+            Holder::Person(name) => query.push(("person".into(), name.into())),
+            Holder::Session(id) => query.push(("session".into(), id.into())),
+            // The pile IS a holder in the vocabulary, so `--to nobody` is a
+            // legitimate question and already has an answer.
+            Holder::Nobody => query.push(("unheld".into(), "true".into())),
+        }
         return Ok(query);
     }
     if let Some(session) = session {

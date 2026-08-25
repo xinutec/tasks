@@ -176,9 +176,28 @@ const MOST: usize = 3;
 /// this.** Two byte-identical subjects are one task however they are ordered,
 /// and that guard has no error rate to protect.
 pub fn candidates(corpus: &[(u64, String)], waiting_on: &[u64]) -> Vec<(u64, String)> {
+    edged(corpus, waiting_on, &[])
+}
+
+/// The list a model is shown, without either end of an edge the filing declares.
+///
+/// ⚠ **`--blocked-on` exempted one direction and the other was the expensive
+/// one.** 2026-08-25: filing #1164 — verify the serial-console mod for the exact
+/// SDM845 model — was refused against #986, *buy two SDM845 phones*, on the
+/// reading "both require verifying the serial-console method before purchasing".
+/// That reading is correct and the answer is wrong: **#1164 is #986's blocker**,
+/// filed precisely so #986 could stop being a question and become a decision.
+///
+/// A filing may declare either edge, and both say the same thing — these are two
+/// pieces of work and one comes first. Only one of them could be heard.
+///
+/// ⚠ **[`same_subject`] still runs against the WHOLE list.** An identical title
+/// is one task whatever edge was declared, and that guard has no error rate to
+/// protect.
+pub fn edged(corpus: &[(u64, String)], waiting_on: &[u64], unblocks: &[u64]) -> Vec<(u64, String)> {
     corpus
         .iter()
-        .filter(|(id, _)| !waiting_on.contains(id))
+        .filter(|(id, _)| !waiting_on.contains(id) && !unblocks.contains(id))
         .cloned()
         .collect()
 }

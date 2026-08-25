@@ -14,11 +14,11 @@ use tasks::tasks::selection::list_query;
 /// `--pile` is not a parameter here: it is a fourth question rather than a
 /// modifier of these three, and its tests spell it out with [`pile_query`].
 fn query(all: bool, mine: bool, done: bool, session: Option<&str>) -> String {
-    joined(list_query(all, mine, false, done, session).expect("a query"))
+    joined(list_query(all, mine, false, done, session, None).expect("a query"))
 }
 
 fn pile_query(done: bool, session: Option<&str>) -> String {
-    joined(list_query(false, false, true, done, session).expect("a query"))
+    joined(list_query(false, false, true, done, session, None).expect("a query"))
 }
 
 fn joined(query: Vec<(String, String)>) -> String {
@@ -75,7 +75,7 @@ fn without_an_id_there_is_no_own_to_narrow_to() {
     // rather than an answer about them.
     assert_eq!(query(false, false, false, None), "");
     // `--mine`, though, was asked a question that needs one.
-    assert!(list_query(false, true, false, false, None).is_err());
+    assert!(list_query(false, true, false, false, None, None).is_err());
 }
 
 /// The fourth question, which had no name until 2026-08-10.
@@ -125,4 +125,66 @@ fn the_pile_is_not_the_widening_that_comes_with_a_bare_list() {
         pile.contains("unheld=true") && !pile.contains("pile=true"),
         "{pile}"
     );
+}
+
+/// ⚠ **A person and a session are different COLUMNS**, and getting that wrong
+/// answers with silence rather than an error: `person=hardware` matches nothing
+/// because `hardware` is a session. Three attempts in the transcripts —
+/// `--to pippijn`, `--assignee hardware`, `--pippijn` — and the tool answered
+/// none of them.
+#[test]
+fn asking_for_one_holder_asks_the_right_column() {
+    use tasks::tasks::selection::Holder;
+    let person = list_query(
+        false,
+        false,
+        false,
+        false,
+        None,
+        Some(Holder::Person("pippijn")),
+    )
+    .expect("a query");
+    assert_eq!(joined(person), "person=pippijn");
+    let session = list_query(
+        false,
+        false,
+        false,
+        false,
+        None,
+        Some(Holder::Session("abc-123")),
+    )
+    .expect("a query");
+    assert_eq!(joined(session), "session=abc-123");
+}
+
+/// ⚠ **No pile.** `--to` answers what one holder is CARRYING, and the unheld
+/// tasks belong to nobody — folding them in would answer a different question.
+/// The bare `task list` deliberately does fold them in, which is why this is a
+/// separate flag rather than a filter on that.
+#[test]
+fn one_holders_list_does_not_carry_the_pile() {
+    use tasks::tasks::selection::Holder;
+    let q = joined(
+        list_query(
+            false,
+            false,
+            false,
+            false,
+            Some("mine"),
+            Some(Holder::Session("abc-123")),
+        )
+        .expect("a query"),
+    );
+    assert!(q.contains("session=abc-123"), "{q}");
+    assert!(!q.contains("pile"), "{q}");
+}
+
+/// The pile IS a holder in this vocabulary, so asking for it by name works.
+#[test]
+fn nobody_is_a_holder_you_can_ask_about() {
+    use tasks::tasks::selection::Holder;
+    let q = joined(
+        list_query(false, false, false, false, None, Some(Holder::Nobody)).expect("a query"),
+    );
+    assert_eq!(q, "unheld=true");
 }

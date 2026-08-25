@@ -52,7 +52,7 @@ use tasks::tasks::density;
 use tasks::tasks::duplicates;
 use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
-use tasks::tasks::selection::list_query;
+use tasks::tasks::selection::{self, list_query};
 use tasks::tasks::types::Priority;
 
 /// Where the service lives. The VPN name, because that is the only place it is.
@@ -217,6 +217,18 @@ enum Command {
         /// Include finished tasks.
         #[arg(long)]
         done: bool,
+        /// What ONE other holder is carrying: a session by name or id,
+        /// `pippijn`, or `nobody` for the pile.
+        ///
+        /// ⚠ **Three attempts in the transcripts and the tool answered none of
+        /// them** — `--to pippijn`, `--assignee hardware`, `--pippijn`. The list
+        /// had `--mine`, `--pile` and `--all` and nothing between them, so the
+        /// answer was `task list --all | grep "(name)"`.
+        ///
+        /// Strictly that holder, with no pile folded in: the unheld tasks are
+        /// nobody's, so they are on no holder's plate.
+        #[arg(long, conflicts_with_all = ["all", "mine", "pile"], aliases = ["assignee", "holder"])]
+        to: Option<To>,
     },
     /// Work on a few things and let the rest go quiet for a while.
     ///
@@ -332,6 +344,19 @@ enum Command {
         /// Task ids this one waits for. Repeat for several.
         #[arg(long = "blocked-on")]
         blocked_on: Vec<u64>,
+
+        /// Task ids this one UNBLOCKS — the mirror of `--blocked-on`.
+        ///
+        /// ⚠ **Filed because the check refused a filing for resembling the task
+        /// it exists to unblock.** #1164 against #986, 2026-08-25. `--blocked-on`
+        /// already exempts what a filing waits FOR; there was no way to say what
+        /// waits ON it, so the one edge that proves two tasks are different and
+        /// ordered was invisible in exactly that direction.
+        ///
+        /// Recorded on the other task after this one is filed, so the edge
+        /// survives the command rather than living only in the filer's head.
+        #[arg(long = "blocks")]
+        blocks: Vec<u64>,
         /// The day it has to be done by: YYYY-MM-DD.
         #[arg(long)]
         due: Option<NaiveDate>,
@@ -399,6 +424,18 @@ enum Command {
         /// close one and hand it on in the same breath.
         #[arg(long)]
         to: Option<To>,
+        /// What came of it, written above the body before it closes.
+        ///
+        /// ⚠ **The moment this removes is the one where a task closes and
+        /// nobody writes why.** Five closes in the transcripts passed a note to
+        /// `done` and were refused — `--reason` twice, `--message`, `--note`,
+        /// `--body` — and the tool's answer was two commands. Sessions kept
+        /// reaching for one, which is the tool being wrong about its own shape
+        /// rather than sessions being careless.
+        ///
+        /// `-` reads stdin, like every other prose argument here.
+        #[arg(long, aliases = ["reason", "message"])]
+        note: Option<String>,
     },
     /// Close a task WITHOUT doing it: overtaken, obsolete, decided against.
     ///
@@ -406,7 +443,20 @@ enum Command {
     /// gone out of date has to be able to leave the list without anybody being
     /// credited with having done it. If why it went matters, write it — `task
     /// edit <id> --body -` — because that is prose and there is no field for it.
-    Drop { id: TaskRef },
+    Drop {
+        id: TaskRef,
+        /// Why it is being dropped, written above the body before it closes.
+        ///
+        /// ⚠ **A dropped task with no reason cannot be told from a decision.**
+        /// `drop` records a status and nothing else, so #863 — dropped 58
+        /// seconds after filing, carrying a complete plan — says nowhere that
+        /// anybody rejected it. Asked about that row, a model reported it had
+        /// "concluded the work wasn't justified", which it never says. That is
+        /// why a closed match only ever advises: the status alone means nothing
+        /// without this.
+        #[arg(long, aliases = ["note", "message"])]
+        reason: Option<String>,
+    },
     /// Put a closed or started task back to open.
     ///
     /// The fourth status had three verbs. `done` and `drop` close a task and
@@ -968,7 +1018,7 @@ const READING: std::time::Duration = std::time::Duration::from_secs(90);
 /// to undo; the slow half is unaffected, because it runs against this same list
 /// once the filing has landed.
 async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
-    let query = list_query(true, false, false, false, None)?;
+    let query = list_query(true, false, false, false, None, None)?;
     let req = client
         .request(reqwest::Method::GET, "/api/tasks")
         .query(&query);
@@ -995,7 +1045,7 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
 /// Whatever is dropped here is said out loud by the caller, because a corpus
 /// that silently shrinks reads as covering more than it does.
 async fn settled_now(client: &Client) -> (Vec<duplicates::Settled>, usize) {
-    let Ok(query) = list_query(true, false, false, true, None) else {
+    let Ok(query) = list_query(true, false, false, true, None, None) else {
         return (Vec::new(), 0);
     };
     let req = client
@@ -1598,8 +1648,30 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             mine,
             pile,
             done,
+            to,
         } => {
-            let query = list_query(all, mine, pile, done, client.session.as_deref())?;
+            // Resolved before the query is built: `--to` takes the name a person
+            // types, and only the service knows whether that name is a person, a
+            // session or the pile.
+            // ⚠ Resolved through the SAME path `move` uses, so `--to hardware`
+            // and `move <id> hardware` cannot disagree about who that is. Only
+            // the service can tell a session name from a session id.
+            let holder = match to {
+                Some(to) => Some(client.resolve(to).await?),
+                None => None,
+            };
+            let me = client.me().ok();
+            let asked = holder.as_ref().map(|to| match to {
+                To::Nobody => selection::Holder::Nobody,
+                To::Person => selection::Holder::Person("pippijn"),
+                To::Me | To::Session(_) => match to {
+                    To::Session(id) => selection::Holder::Session(id),
+                    // `--to me` is `--mine` said another way, and a session that
+                    // cannot name itself has already failed `identified`.
+                    _ => selection::Holder::Session(me.unwrap_or_default()),
+                },
+            });
+            let query = list_query(all, mine, pile, done, client.session.as_deref(), asked)?;
             let req = client
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
@@ -1729,6 +1801,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             // `--priority` once one of the two is known to have been given.
             unassessed: _,
             blocked_on,
+            blocks,
             due,
             repo,
             project,
@@ -1792,7 +1865,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             // ⚠ **After the collision check, never before it.** That one is
             // string equality over every open title and must stay that way;
             // this narrows only what the model is asked to judge.
-            let candidates = duplicates::candidates(&corpus, &blocked_on);
+            let candidates = duplicates::edged(&corpus, &blocked_on, &blocks);
             // ⚠ **The closed list is read for its own sake and never narrowed by
             // `--blocked-on`.** That exemption exists because a filing may
             // declare it waits for an OPEN task; nothing can wait for a task
@@ -1857,6 +1930,19 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             if let Some(note) = closed_match {
                 eprintln!("{note}");
             }
+            // ⚠ **After the POST, because the edge needs this task's id**, which
+            // does not exist until the service answers. Recorded on the OTHER
+            // task — `blocked_on` belongs to the thing that waits — so the two
+            // ends agree without this filing having to carry a field for it.
+            if let Some(filed) = task["id"].as_u64() {
+                for blocked in &blocks {
+                    if let Err(why) = unblocking(&client, *blocked, filed).await {
+                        eprintln!(
+                            "(filed, but #{blocked} was not marked as waiting for it: {why:#})"
+                        );
+                    }
+                }
+            }
             // After the filing and never before it. The task is on the list by
             // the time a model is asked anything, so a check that hangs, fails
             // or is not installed costs a note and never a filing.
@@ -1865,7 +1951,13 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
         Command::Start { id } => {
             patch(&client, cli.json, id, json!({ "status": "doing" })).await?;
         }
-        Command::Done { id, to } => {
+        Command::Done { id, to, note } => {
+            // ⚠ **The note lands BEFORE the close, and that order is the point.**
+            // Closing first would leave a window where the task is finished and
+            // says nothing about why — which is the state this flag exists to
+            // stop, and exactly what two separate commands produce when the
+            // second is forgotten.
+            written(&client, &id, note.as_deref()).await?;
             let mut change = json!({ "status": "done" });
             if let Some(to) = to {
                 let to = client.resolve(to).await?;
@@ -1873,7 +1965,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             }
             patch(&client, cli.json, id, change).await?;
         }
-        Command::Drop { id } => {
+        Command::Drop { id, reason } => {
+            written(&client, &id, reason.as_deref()).await?;
             patch(&client, cli.json, id, json!({ "status": "dropped" })).await?;
         }
         Command::Reopen { id } => {
@@ -2185,6 +2278,62 @@ fn describe(focus: &tasks::tasks::focus::Focus) -> String {
         focus.until.format("%H:%M"),
         tasks::tasks::focus::spell(focus.until - chrono::Utc::now()),
     )
+}
+
+/// Record that `blocked` is waiting for `filed`.
+///
+/// ⚠ **Read, extend, write — never replace.** `blocked_on` is the whole set on
+/// the wire, so sending one id would silently drop every other edge that task
+/// already declared.
+///
+/// ⚠ **A failure here does not fail the filing.** The task exists by now; a
+/// missing edge is a note on stderr, not a lost body.
+async fn unblocking(client: &Client, blocked: u64, filed: u64) -> Result<()> {
+    let req = client.request(reqwest::Method::GET, &format!("/api/tasks/{blocked}"));
+    let task = client.send(req).await?.context("no such task")?;
+    let mut edges: Vec<u64> = task["blocked_on"]
+        .as_array()
+        .map(|on| on.iter().filter_map(Value::as_u64).collect())
+        .unwrap_or_default();
+    if edges.contains(&filed) {
+        return Ok(());
+    }
+    edges.push(filed);
+    let req = client
+        .request(reqwest::Method::PATCH, &format!("/api/tasks/{blocked}"))
+        .json(&json!({ "blocked_on": edges }));
+    client.send(req).await?;
+    Ok(())
+}
+
+/// Put the outcome above the body, before the task closes.
+///
+/// ⚠ **`--prepend`, never `--body`.** The note is the conclusion and the body is
+/// the history that earned it; replacing one with the other is how #900 lost
+/// 3,109 characters on 2026-08-15. This is the same write `task edit --prepend`
+/// makes, taken in the same call as the close so the two cannot come apart.
+///
+/// ⚠ **The density read does not run on this path, and that is correct rather
+/// than an oversight.** It lives in the `Edit` arm and is invoked there; this
+/// writes through the same endpoint without going near it. Which is what should
+/// happen: it advises on a body that has grown without being consolidated, and
+/// a task being closed is not one anybody is about to rewrite — measured, an
+/// edit that trips it costs 27s at p90 against 0.2s for one that does not, so
+/// paying that here would make `--note` slower than the two commands it
+/// replaces, which is the whole reason it exists.
+async fn written(client: &Client, id: &TaskRef, note: Option<&str>) -> Result<()> {
+    let Some(note) = note else {
+        return Ok(());
+    };
+    let note = body(note)?;
+    if note.trim().is_empty() {
+        bail!("--note was empty: say what came of it, or leave the flag off");
+    }
+    let req = client
+        .request(reqwest::Method::PATCH, &format!("/api/tasks/{}", id.id()))
+        .json(&json!({ "prepend": note }));
+    client.send(req).await?;
+    Ok(())
 }
 
 async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<Value> {
