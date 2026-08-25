@@ -48,16 +48,48 @@
 //! never reaches a model. [`prompt`] asks the model the harder question. Both
 //! now run before the filing; the override passes both.
 //!
-//! ## Open tasks only
+//! ## Closed tasks are read too, and they ADVISE
 //!
-//! ⚠ **Closed tasks were tried and cost accuracy.** Re-running those same five
-//! with the 662 done and 24 dropped rows included dropped it to 3/5 — #812
-//! gained two false matches and #807 one — and took the slowest call from 17 to
-//! 56 seconds. The argument for including them is real (re-filing something
-//! *decided against* is the expensive mistake) and it lost to the measurement;
-//! none of the five was a duplicate of a closed task, so what is measured here
-//! is the cost of the 686 extra rows rather than the benefit. Worth revisiting
-//! with a case that has one.
+//! ⚠ **This section said "open tasks only" until 2026-08-25 and that is no
+//! longer true.** Both halves of the old argument were revisited and both fell:
+//!
+//! * **The latency half was stale.** Including the closed rows was measured at
+//!   17 → 56 seconds, *before* `MAX_THINKING_TOKENS` was capped. Re-measured at
+//!   the cap with 995 closed titles: 1–5 seconds, because the corpus rides in
+//!   `--append-system-prompt-file` where it lands in the cached prefix. Below
+//!   the question it is rewritten every call — 32,833 tokens written, zero read.
+//! * **The case it was waiting for turned up.** "Worth revisiting with a case
+//!   that has one," it said. MEMORY.md compaction was filed three times by three
+//!   sessions that could not see each other's closed rows: #27 (dropped), #863
+//!   (dropped 58 seconds after filing), #1064 (open).
+//!
+//! ⚠ **A closed match never refuses, and `dropped` does not change that.** The
+//! obvious rule — dropped means decided against, so refuse — was written and
+//! then refuted by the corpus it would run on. `task drop` records a status and
+//! no reason: #863 is dropped, carries a complete plan, and states no reason at
+//! all, and a model asked about it reported that it "concluded the work wasn't
+//! justified", which the row does not say. Measured, the closed half is also the
+//! weaker reader — 63% against the open half's 83% — and every one of its errors
+//! was same-pattern-different-system. Had it refused, all three would have
+//! blocked correct filings.
+//!
+//! ## What the two halves actually score
+//!
+//! Measured 2026-08-25, both arms adjudicated by hand ([`crate::tasks::commands`]
+//! has the sibling story for the CLI's own timings):
+//!
+//! * **Precision** — 49 real commit subjects replayed with `--check-only`:
+//!   29 clean, 12 refused, 8 advised. Of the 20 matches, 15 right. Refusals
+//!   10 right / 1 partial / 1 wrong.
+//! * **Recall** — 30 open tasks reworded by a separate model told not to reuse
+//!   their distinctive nouns: 28 named their own task. The one genuine miss was
+//!   #1175, found from domain language in the precision run and lost when every
+//!   noun became a generic synonym — which is exactly the failure this module
+//!   claims to defend against, and it is real but rare.
+//!
+//! ⚠ **Neither number is the field rate.** Both samples are drawn from work that
+//! already has a task. A genuinely new filing that merely RESEMBLES something is
+//! still unmeasured, and that is where #1127's 16-overrides-of-23 came from.
 //!
 //! ## Marked as inference, and cheap to dismiss
 //!

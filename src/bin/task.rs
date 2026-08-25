@@ -368,6 +368,21 @@ enum Command {
         /// cannot run files the task and says so.
         #[arg(long)]
         no_duplicate_check: bool,
+
+        /// Ask the check what it would say, and file NOTHING.
+        ///
+        /// ⚠ **This exists so the gate can be measured against its own live
+        /// behaviour.** The check refuses real filings, and until this flag the
+        /// only way to find out what it does was to file something — which
+        /// meant a precision measurement could not be taken without putting
+        /// dozens of rows into a shared tracker, and those rows would then be
+        /// matched against everybody else's real work. Replaying a subject and
+        /// reading the answer is now free.
+        ///
+        /// It runs BOTH halves, exactly as a filing does: the string-equality
+        /// collision and the model's reading, against open and closed alike.
+        #[arg(long, conflicts_with = "no_duplicate_check")]
+        check_only: bool,
     },
     /// Mark a task as being worked on.
     Start { id: TaskRef },
@@ -1719,6 +1734,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             project,
             subject_flag,
             no_duplicate_check,
+            check_only,
         } => {
             if repo.is_some() || project.is_some() {
                 bail!(
@@ -1751,6 +1767,9 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             // ⚠ **A list that could not be read costs a note, never a filing.**
             // Moving this ahead of the POST would otherwise have turned every
             // transport failure into a refused filing.
+            // ⚠ Before anything is built or sent. `--check-only` must reach the
+            // same two checks a filing does and then stop, so it cannot be a
+            // branch further down where half the filing has already happened.
             let corpus = match no_duplicate_check {
                 true => Vec::new(),
                 false => open_now(&client).await.unwrap_or_else(|why| {
@@ -1799,6 +1818,15 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     Ok(_) => {}
                     Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
                 }
+            }
+            // ⚠ **After both checks and before the POST**, which is the only
+            // place this can be and still describe what a filing would meet.
+            if check_only {
+                match &closed_match {
+                    Some(note) => println!("{note}"),
+                    None => println!("NONE — nothing open or closed was named"),
+                }
+                return Ok(());
             }
             let mut payload = json!({ "subject": subject, "body": raw.as_deref().map(body).transpose()?.unwrap_or_default() });
             // Always present, and null when unassessed: the service refuses a

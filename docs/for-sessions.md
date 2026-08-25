@@ -228,6 +228,17 @@ of that.
 numbers go first, because prose reads like the argument — and a body is believed
 for its measurements. Aim for density and let the length follow.
 
+## What the tool itself is costing you
+
+`task timings --days 7` — how long each command has been taking, busiest first.
+Every row is a command somebody actually ran; nothing polls and nothing is
+sampled, so an empty table means the tool went unused rather than that a probe
+died. `task checks --days 7` is the same for the two model checks.
+
+⚠ **`edit` is the expensive one and it is not the service.** Its median is a
+fifth of a second and its p90 is tens of seconds, because an edit that trips the
+density read waits for a model. `--no-density-check` skips it.
+
 ## Filing something that is already on the list
 
 ⚠ **You cannot see the other conversations' lists, so you will file a duplicate
@@ -249,6 +260,11 @@ warning you have lost the filing. Two answers are open and both are one command:
 with `--no-duplicate-check`, which is what you want when it matched your topic
 rather than your work. You are still holding the body; it is a re-run, not a
 rewrite.
+
+**Ask what it WOULD say, without filing:** `task add "…" --priority P4 --check-only`
+runs both halves against open and closed alike, prints what a filing would meet,
+and writes nothing. Use it when you are unsure whether something already exists
+and do not want to find out by having a filing refused.
 
 ⚠ **A CLOSED match does not stop you — it tells you and files anyway.** The
 finished and abandoned tasks are read as well, and their remedy is different, so

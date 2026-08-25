@@ -352,6 +352,10 @@ this may already exist, closed — a model's reading of the titles. It was filed
 (read against 984 closed tasks; 11 skipped as having no body)
 ```
 
+**`--check-only` asks what the check would say and files nothing**, which is how
+the gate is measured against its own behaviour rather than by filing probe rows
+into a shared tracker.
+
 ⚠ **`dropped` does not refuse either, and the obvious rule saying it should was
 written and then refuted.** `task drop` records a status and no reason, so a
 dropped task does not mean anybody decided against anything — #863 is dropped,
@@ -363,6 +367,13 @@ pile is this tool's own probes, two of which are the paraphrase fixtures for
 this very check. The filter is what the row *says*, never how fast it closed:
 #863 was dropped 58 seconds after filing and is the most valuable row in the
 corpus. What it skips is counted and printed.
+
+**The tool records what it costs you, from real use.** Every invocation writes
+its own wall clock to `command_run`; `task timings` reads it back. Nothing polls
+— an earlier version of this was a 15-minute launchd probe timing `task list
+--all`, a command no session runs, from a process with no session id and a cold
+cache. One real command an hour carries the numbers to fleetwatch, chosen by a
+conditional UPDATE so concurrent sessions cannot all send at once.
 
 **A body that has grown without being rewritten is read back to you.** Once one
 has gained 3,000 characters since the last edit that made it smaller, `task edit`
