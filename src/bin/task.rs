@@ -1478,12 +1478,26 @@ mod fleetwatch {
             "interval_s": report["interval_s"],
             "checks": checks,
         });
-        http.post(URL)
+        let answer = http
+            .post(URL)
             .bearer_auth(token)
             .json(&body)
             .send()
             .await
             .context("sending the timings to fleetwatch")?;
+        // ⚠ **Silent on success, LOUD on failure, and the asymmetry is the
+        // point.** This started out silent both ways, which is the failure this
+        // whole path exists to end: a push nobody can see failing looks exactly
+        // like a quiet day, and the numbers would stop arriving with nothing
+        // anywhere saying so. It still cannot fail the command — the work is
+        // done and printed by now — so the note goes to stderr and the caller
+        // carries on.
+        if !answer.status().is_success() {
+            eprintln!(
+                "(the timings did not reach fleetwatch: HTTP {})",
+                answer.status()
+            );
+        }
         Ok(())
     }
 }
@@ -1520,8 +1534,12 @@ async fn clocked(client: &Client, verb: &'static str, started: std::time::Instan
     let Ok(Some(answer)) = client.send(req).await else {
         return;
     };
-    if let Some(report) = answer.get("report") {
-        let _ = fleetwatch::send(&client.http, report).await;
+    if let Some(report) = answer.get("report")
+        && let Err(why) = fleetwatch::send(&client.http, report).await
+    {
+        // Same rule as the status line above: it may not cost the command, and
+        // it may not disappear.
+        eprintln!("(the timings did not reach fleetwatch: {why:#})");
     }
 }
 
