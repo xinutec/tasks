@@ -4,9 +4,11 @@
 //! story.** `fleetwatch::minted` returned 32 hex characters and its own comment
 //! called the result "ULID-shaped". A ULID is 26 characters of Crockford
 //! base32, and `ingest` parses the id before storing anything, answering 422 on
-//! failure — so the task-timings series was empty from the day it shipped while
-//! every test in this repo stayed green. None of them could see this module: it
-//! was private, inside `src/bin/task.rs`, where `tests/` cannot reach.
+//! failure. The series holds exactly ONE report — 2026-08-25T18:00:55Z, from a
+//! development build whose id happened to be 26 characters — and nothing after
+//! it, because `minted()` was widened to 32 before the commit. Every test in
+//! this repo stayed green throughout. None of them could see this module: it was
+//! private, inside `src/bin/task.rs`, where `tests/` cannot reach.
 //!
 //! So each test here asserts one rule the RECEIVER enforces, not one this crate
 //! happens to implement.

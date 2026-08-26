@@ -2,9 +2,17 @@
 //!
 //! **In the library rather than the binary so it can be tested against.** It
 //! lived inside `src/bin/task.rs` until 2026-08-26, where nothing in `tests/`
-//! could reach it — and the id it minted was never a valid ULID, so every push
-//! this module ever made was refused with a 422 while every green test in the
-//! repo stayed green. A private module in a binary is a module with no seam.
+//! could reach it — and the id it minted was not a valid ULID, so its pushes
+//! were refused with a 422 while every green test in the repo stayed green. A
+//! private module in a binary is a module with no seam.
+//!
+//! ⚠ **It WORKED before it shipped, which is the part worth remembering.** One
+//! report is stored in fleetwatch — 2026-08-25T18:00:55Z, five checks, all
+//! passing — pushed by a development build whose id happened to be 26
+//! characters. `minted()` was widened to `{:016X}{:016X}` (32) before the
+//! commit, and every push after that was refused. The evidence of success was a
+//! row in somebody else's database that nobody re-read, so the last edit before
+//! shipping went unchecked.
 //!
 //! ⚠ **No timer, and no prober.** Every number here came from a command
 //! somebody actually ran. The service hands exactly one caller an hour the job
