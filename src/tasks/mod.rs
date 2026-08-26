@@ -4,6 +4,7 @@ pub mod checks;
 pub mod commands;
 pub mod density;
 pub mod duplicates;
+pub mod fleetwatch;
 pub mod focus;
 pub mod holder;
 pub mod reference;
