@@ -15,6 +15,7 @@
 //! | `--mine` | what am I holding | my own, strictly |
 //! | `--pile` | what is going spare | the unheld, strictly |
 //! | `--all` | what is going on | every holder |
+//! | `--handed-out` | what did I hand out | filed by me, held by anyone else |
 //!
 //! ⚠ **`--pile` is here because its absence was answered by guesswork.** It was
 //! the one question with no name, so a session hand-filtered `--all --json`,
@@ -22,6 +23,15 @@
 //! the pile when there were **5** — a number that reached Pippijn before anybody
 //! caught it. A missing view is not neutral: it is answered anyway, by whoever
 //! needs it, without the tests this file has.
+//!
+//! ⚠ **`--handed-out` is the fifth, and the only one not about the holder.** A
+//! session that routes work rather than doing it could ask what each holder
+//! carries, one at a time, and could ask for its own plate — but "what did I
+//! hand out, and is any of it still open" had no name, and the tasks it asks
+//! about are by construction the ones a routing session never sees again: the
+//! digest shows a session its own work and the pile, never another
+//! conversation's. So the one view that session most needs was the one the
+//! prompt is designed not to give it.
 //!
 //! The bare form deliberately matches [`Filter::digest_for`](super::repo::Filter)
 //! rather than `--mine`: the pile is the handover channel, and a session that
@@ -61,6 +71,7 @@ pub fn list_query(
     all: bool,
     mine: bool,
     pile: bool,
+    handed_out: bool,
     done: bool,
     session: Option<&str>,
     to: Option<Holder<'_>>,
@@ -78,6 +89,14 @@ pub fn list_query(
     // list a person can ask for the same way a session does.
     if pile {
         query.push(("unheld".into(), "true".into()));
+        return Ok(query);
+    }
+    // Before `--mine` and needing the same id, because it asks about the same
+    // session from the other side: what it wrote rather than what it holds.
+    if handed_out {
+        let session =
+            session.context("--handed-out needs a session id (--session, or $TASKS_SESSION)")?;
+        query.push(("handed_out".into(), session.into()));
         return Ok(query);
     }
     if mine {

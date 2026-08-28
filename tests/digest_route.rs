@@ -301,6 +301,155 @@ async fn all_is_still_reachable() {
     assert_eq!(everything.len(), 4, "{everything:?}");
 }
 
+/// What one session FILED and another is carrying.
+///
+/// ⚠ **The half `tests/selection.rs` cannot reach.** Those pin that the CLI
+/// sends `handed_out=<id>`; a route that accepted the parameter and dropped it
+/// would keep every one of them green and answer this question with the
+/// caller's own plate — which is the ONE answer that looks most like a correct
+/// one, because a router's own list and the list it handed out are both short
+/// and both plausible.
+mod handed_out {
+    use super::*;
+
+    /// Four tasks, filed by two different sessions, held four different ways.
+    ///
+    /// `seed` above cannot serve this: it files everything as Pippijn, and
+    /// `filed_by` is only recorded for a SESSION actor — so every row there has
+    /// no filer at all and this filter would correctly match none of them.
+    async fn seed_filings(pool: &MySqlPool) {
+        for (id, name) in [("sess-1", "tasks"), ("sess-2", "memview")] {
+            sessions::touch(pool, id, Some(name))
+                .await
+                .expect("recording a session");
+        }
+        for (subject, filer, holder) in [
+            (
+                "I FILED this and memview holds it",
+                Actor::Session("sess-1".into()),
+                Assignee {
+                    kind: AssigneeKind::Session,
+                    id: Some("sess-2".into()),
+                    name: None,
+                },
+            ),
+            (
+                "I FILED this and left it in the pile",
+                Actor::Session("sess-1".into()),
+                Assignee::nobody(),
+            ),
+            (
+                "I FILED this and kept it",
+                Actor::Session("sess-1".into()),
+                Assignee {
+                    kind: AssigneeKind::Session,
+                    id: Some("sess-1".into()),
+                    name: None,
+                },
+            ),
+            (
+                "MEMVIEW filed this and memview holds it",
+                Actor::Session("sess-2".into()),
+                Assignee {
+                    kind: AssigneeKind::Session,
+                    id: Some("sess-2".into()),
+                    name: None,
+                },
+            ),
+        ] {
+            repo::create(
+                pool,
+                NewTask {
+                    subject: subject.into(),
+                    checked: true,
+                    body: String::new(),
+                    priority: Ranking::Unassessed,
+                    due: None,
+                    blocked_on: Vec::new(),
+                    assignee: Some(holder),
+                },
+                &filer,
+            )
+            .await
+            .expect("filing");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_route_answers_with_what_this_session_filed_and_does_not_hold() {
+        let pool = common::fresh_db().await;
+        seed_filings(&pool).await;
+        let app = app(pool);
+
+        let handed = list_as_session(&app, "sess-1", "handed_out=sess-1").await;
+        assert!(
+            handed
+                .iter()
+                .any(|s| s.contains("memview holds it") && s.starts_with("I FILED")),
+            "the task it routed away is the whole point: {handed:?}"
+        );
+        assert!(
+            !handed.iter().any(|s| s == "I FILED this and kept it"),
+            "its own plate is not something it handed out: {handed:?}"
+        );
+        assert!(
+            !handed.iter().any(|s| s.starts_with("MEMVIEW filed")),
+            "filed elsewhere — this selects on the FILER: {handed:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_task_left_in_the_pile_was_handed_out_too() {
+        // Out of this session's hands is the property, not "assigned to a
+        // named holder": a task left for whoever picks it up is exactly as
+        // invisible to its filer afterwards, and exactly as likely to rot.
+        let pool = common::fresh_db().await;
+        seed_filings(&pool).await;
+        let app = app(pool);
+
+        let handed = list_as_session(&app, "sess-1", "handed_out=sess-1").await;
+        assert!(
+            handed
+                .iter()
+                .any(|s| s == "I FILED this and left it in the pile"),
+            "{handed:?}"
+        );
+        assert_eq!(handed.len(), 2, "{handed:?}");
+    }
+
+    #[tokio::test]
+    async fn it_is_not_the_callers_own_plate() {
+        // The failure mode worth a test of its own: a route that ignored the
+        // parameter would fall through to `session=`, and a router asking what
+        // it handed out would be shown what it is holding. Both lists are
+        // short and plausible, so nothing about the output would say so.
+        let pool = common::fresh_db().await;
+        seed_filings(&pool).await;
+        let app = app(pool);
+
+        let handed = list_as_session(&app, "sess-1", "handed_out=sess-1").await;
+        let mine = list_as_session(&app, "sess-1", "session=sess-1").await;
+        assert_eq!(mine, vec!["I FILED this and kept it".to_string()]);
+        assert!(
+            handed.iter().all(|s| !mine.contains(s)),
+            "handed out {handed:?} overlaps the plate {mine:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn asking_about_another_session_asks_about_that_session() {
+        // The parameter carries the subject rather than being a flag on the
+        // caller, so Pippijn can ask what any session has handed out. Sent by
+        // `sess-1`, about `sess-2`.
+        let pool = common::fresh_db().await;
+        seed_filings(&pool).await;
+        let app = app(pool);
+
+        let theirs = list_as_session(&app, "sess-1", "handed_out=sess-2").await;
+        assert!(theirs.is_empty(), "memview kept what it filed: {theirs:?}");
+    }
+}
+
 /// A request names the session that sent it, without anybody typing it.
 ///
 /// ⚠ **The header is the whole feature, and one line in each handler is what

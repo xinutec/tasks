@@ -26,6 +26,7 @@
 //!
 //! ```text
 //! task list [--all|--mine|--pile] [--done] yours and the pile; wider; narrower; spare
+//! task list --handed-out          what you filed and somebody else is holding
 //! task show <id> [--previous]               one task, its prose and its history
 //! task undo <id>                            put back what the last edit replaced
 //! task add <subject> [--body -] [--to me|pippijn|<session>|nobody] [--priority P3]
@@ -215,6 +216,17 @@ enum Command {
         /// are. Needs no session id — the pile belongs to no conversation.
         #[arg(long, conflicts_with_all = ["all", "mine"])]
         pile: bool,
+        /// What you FILED and somebody else is holding — what you handed out.
+        ///
+        /// The one list that is not about a holder. Your prompt shows your own
+        /// work and the pile and deliberately never another conversation's, so
+        /// a task you route away is one you stop seeing — this is how to ask
+        /// whether any of it is still open.
+        ///
+        /// Held by anyone but you, the pile included: a task you left for
+        /// whoever picks it up is out of your hands too.
+        #[arg(long, alias = "handed", conflicts_with_all = ["all", "mine", "pile", "to"])]
+        handed_out: bool,
         /// Include finished tasks.
         #[arg(long)]
         done: bool,
@@ -1019,7 +1031,7 @@ const READING: std::time::Duration = std::time::Duration::from_secs(90);
 /// to undo; the slow half is unaffected, because it runs against this same list
 /// once the filing has landed.
 async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
-    let query = list_query(true, false, false, false, None, None)?;
+    let query = list_query(true, false, false, false, false, None, None)?;
     let req = client
         .request(reqwest::Method::GET, "/api/tasks")
         .query(&query);
@@ -1046,7 +1058,7 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
 /// Whatever is dropped here is said out loud by the caller, because a corpus
 /// that silently shrinks reads as covering more than it does.
 async fn settled_now(client: &Client) -> (Vec<duplicates::Settled>, usize) {
-    let Ok(query) = list_query(true, false, false, true, None, None) else {
+    let Ok(query) = list_query(true, false, false, false, true, None, None) else {
         return (Vec::new(), 0);
     };
     let req = client
@@ -1479,6 +1491,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             all,
             mine,
             pile,
+            handed_out,
             done,
             to,
         } => {
@@ -1503,7 +1516,15 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     _ => selection::Holder::Session(me.unwrap_or_default()),
                 },
             });
-            let query = list_query(all, mine, pile, done, client.session.as_deref(), asked)?;
+            let query = list_query(
+                all,
+                mine,
+                pile,
+                handed_out,
+                done,
+                client.session.as_deref(),
+                asked,
+            )?;
             let req = client
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
@@ -1518,6 +1539,10 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                         "{}",
                         if pile {
                             "the pile is empty"
+                        } else if handed_out {
+                            // Good news rather than an empty plate: everything
+                            // this session routed away has been closed.
+                            "nothing you handed out is still open"
                         } else {
                             "nothing open"
                         }

@@ -47,6 +47,7 @@ task list --pile          # strictly what NOBODY holds — what is going spare
 task list --mine --done   # YOUR list — every task you hold, finished or not
 task show <id>            # one task: its prose, and its history
 task list --all           # every open task, whoever holds it
+task list --handed-out    # what YOU filed and somebody else is holding
 ```
 
 ⚠ **Your prompt shows at most five of the pile.** Past that it says how many
@@ -62,9 +63,18 @@ cost the digest exists to refuse, reached through the one command you run when
 you want to know what to do next. It now asks the same question the digest does:
 your own, and the pile.
 
-Which leaves four questions with four names. `task list` is *what could I pick
+Which leaves five questions with five names. `task list` is *what could I pick
 up*; `--mine` is *what am I holding*; `--pile` is *what is going spare*; `--all`
 is *what is going on*, and it is the expensive one on purpose.
+
+⚠ **`--handed-out` is the fifth, and the only one that is not about who is
+holding a task.** It asks *what did I file that somebody else now has* — and it
+exists because those are precisely the tasks you stop being able to see. Your
+prompt shows your own work and the pile and deliberately never another
+conversation's, so the moment you route something to `memview` it leaves your
+sight. `--to memview` is not the same question: that is everything memview
+carries, from every filer. This is yours, wherever it went — the pile included,
+since a task you left for whoever picks it up is out of your hands too.
 
 ⚠ **`--pile` is the one to reach for when your prompt says "N more in the
 pile".** That notice is all the digest will ever say about them — five lines is

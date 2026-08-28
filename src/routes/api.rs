@@ -214,6 +214,13 @@ pub struct ListQuery {
     /// what the CLI's `--pile` spends its own flag on.
     #[serde(default)]
     unheld: bool,
+    /// Tasks this session filed and does not hold — what it handed out.
+    ///
+    /// A session id rather than a flag, because the caller naming it is not
+    /// necessarily its subject: Pippijn can ask what any session has handed out
+    /// from a shell that holds no session at all. Wins over `session`, `person`
+    /// and `unheld`, exactly as [`Filter::handed_out_by`] does.
+    handed_out: Option<String>,
 }
 
 /// Tasks matching a filter.
@@ -228,6 +235,7 @@ pub async fn list(
         person: q.person,
         or_unheld: q.pile,
         unheld: q.unheld,
+        handed_out_by: q.handed_out,
     };
     Ok(Json(repo::list(&app.db, &filter).await?))
 }

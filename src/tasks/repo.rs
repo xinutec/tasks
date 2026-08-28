@@ -55,6 +55,25 @@ pub struct Filter {
     /// asking about a holder, so a session id alongside it is ignored rather
     /// than intersected — an intersection would always be empty.
     pub unheld: bool,
+    /// Tasks this session FILED and does not hold — what it handed out.
+    ///
+    /// ⚠ **The one question here that is not about the holder.** Every other
+    /// field narrows by who is carrying a task; this one narrows by who *wrote*
+    /// it and then subtracts that writer's own plate. A session that routes work
+    /// to others could see what each of them carries, one holder at a time, and
+    /// could see its own list — but nothing answered "what did I hand out, and
+    /// is any of it still open", which is the whole of a routing session's job.
+    ///
+    /// Held by *anybody else* rather than by a named holder, the pile included:
+    /// a task filed here and left for whoever picks it up is out of this
+    /// session's hands exactly as one assigned to `memview` is. The digest does
+    /// not and must not use this — a prompt showing what another conversation
+    /// holds is the cost `digest.rs` exists to refuse.
+    ///
+    /// Wins over the three above, for the reason [`unheld`](Self::unheld) does:
+    /// it already says what the holder must NOT be, so a holder clause alongside
+    /// would narrow a question that has answered that half itself.
+    pub handed_out_by: Option<String>,
 }
 
 impl Filter {
@@ -236,7 +255,21 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     // Before the holder clauses, and exclusive of them: "what is going spare"
     // has no holder to narrow by, and intersecting the two would always answer
     // nothing at all.
-    if filter.unheld {
+    if let Some(filer) = &filter.handed_out_by {
+        // The same correlated subquery the `filed_by` projection uses, compared
+        // on the actor id rather than the joined name: a session can be renamed
+        // and the id it filed under does not change.
+        query.push(concat!(
+            " AND (SELECT c.actor_id FROM task_events c ",
+            "WHERE c.task_id = t.id AND c.kind = 'created' AND c.actor_kind = 'session' ",
+            "ORDER BY c.id LIMIT 1) = "
+        ));
+        query.push_bind(filer);
+        // Handed OUT: still on the filer's own plate is not handed anywhere.
+        query.push(" AND NOT (t.assignee_kind = 'session' AND t.assignee_session = ");
+        query.push_bind(filer);
+        query.push(")");
+    } else if filter.unheld {
         query.push(" AND t.assignee_kind = 'nobody'");
     } else if let Some(session) = &filter.session {
         query.push(" AND ((t.assignee_kind = 'session' AND t.assignee_session = ");
@@ -248,6 +281,7 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         query.push(")");
     }
     if !filter.unheld
+        && filter.handed_out_by.is_none()
         && let Some(person) = &filter.person
     {
         query.push(" AND t.assignee_kind = 'person' AND t.assignee_person = ");

@@ -82,6 +82,13 @@ behind the one command a session runs to decide what to do next — 135 lines an
 digest's question: your own, and the pile. `--mine` drops the pile, `--all` is
 the old behaviour, and both are named because all three are real questions.
 
+⚠ **`--handed-out` is the one selection that is not about the holder**, and it
+follows from the rule above rather than sitting beside it. Narrowing every list
+to the caller is what makes a routing session blind to its own output: the tasks
+it files for others are, by construction, the ones it never sees again. So the
+filer is the fifth question — what did I hand out, and is any of it still open —
+answered by the `created` event's actor rather than by `assignee`.
+
 ⚠ **`P4` is counted in the digest and never listed.** The rank means *kept as a
 record rather than a plan; it may never happen*, so reciting it on every turn
 contradicts what filing it said: it is the one level whose filer has stated it is
@@ -308,6 +315,7 @@ and which of them a session gets wrong.
 
 ```sh
 task list [--all|--mine|--pile] [--done]  # yours and the pile; wider; narrower; spare
+task list --handed-out                    # what you filed and another holder has
 task show <id> [--body]                   # one task, its prose and its history
 task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim

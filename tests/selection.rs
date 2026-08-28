@@ -14,11 +14,11 @@ use tasks::tasks::selection::list_query;
 /// `--pile` is not a parameter here: it is a fourth question rather than a
 /// modifier of these three, and its tests spell it out with [`pile_query`].
 fn query(all: bool, mine: bool, done: bool, session: Option<&str>) -> String {
-    joined(list_query(all, mine, false, done, session, None).expect("a query"))
+    joined(list_query(all, mine, false, false, done, session, None).expect("a query"))
 }
 
 fn pile_query(done: bool, session: Option<&str>) -> String {
-    joined(list_query(false, false, true, done, session, None).expect("a query"))
+    joined(list_query(false, false, true, false, done, session, None).expect("a query"))
 }
 
 fn joined(query: Vec<(String, String)>) -> String {
@@ -75,7 +75,7 @@ fn without_an_id_there_is_no_own_to_narrow_to() {
     // rather than an answer about them.
     assert_eq!(query(false, false, false, None), "");
     // `--mine`, though, was asked a question that needs one.
-    assert!(list_query(false, true, false, false, None, None).is_err());
+    assert!(list_query(false, true, false, false, false, None, None).is_err());
 }
 
 /// The fourth question, which had no name until 2026-08-10.
@@ -140,12 +140,14 @@ fn asking_for_one_holder_asks_the_right_column() {
         false,
         false,
         false,
+        false,
         None,
         Some(Holder::Person("pippijn")),
     )
     .expect("a query");
     assert_eq!(joined(person), "person=pippijn");
     let session = list_query(
+        false,
         false,
         false,
         false,
@@ -170,6 +172,7 @@ fn one_holders_list_does_not_carry_the_pile() {
             false,
             false,
             false,
+            false,
             Some("mine"),
             Some(Holder::Session("abc-123")),
         )
@@ -184,7 +187,59 @@ fn one_holders_list_does_not_carry_the_pile() {
 fn nobody_is_a_holder_you_can_ask_about() {
     use tasks::tasks::selection::Holder;
     let q = joined(
-        list_query(false, false, false, false, None, Some(Holder::Nobody)).expect("a query"),
+        list_query(
+            false,
+            false,
+            false,
+            false,
+            false,
+            None,
+            Some(Holder::Nobody),
+        )
+        .expect("a query"),
     );
     assert_eq!(q, "unheld=true");
+}
+
+fn handed_out_query(done: bool, session: Option<&str>) -> String {
+    joined(list_query(false, false, false, true, done, session, None).expect("a query"))
+}
+
+/// The fifth question, and the only one that is not about the holder.
+///
+/// ⚠ **A routing session cannot see the work it routes.** The digest shows a
+/// session its own tasks and the pile and never another conversation's — which
+/// is right, and means every task handed to `memview` leaves the router's sight
+/// the moment it is assigned. `--to memview` answers what memview carries from
+/// ALL filers; nothing answered what this session put there.
+#[test]
+fn what_i_handed_out_is_asked_for_by_filer_not_by_holder() {
+    assert_eq!(handed_out_query(false, Some("sess-1")), "handed_out=sess-1");
+}
+
+#[test]
+fn handing_out_is_not_the_same_question_as_holding() {
+    // `session=` is "what is on my plate" and `handed_out=` is its complement:
+    // sending the first for this would answer with exactly the tasks it exists
+    // to exclude.
+    let handed = handed_out_query(false, Some("sess-1"));
+    assert!(!handed.contains("session=sess-1"), "{handed}");
+    assert!(!handed.contains("pile"), "{handed}");
+    assert!(!handed.contains("unheld"), "{handed}");
+}
+
+#[test]
+fn what_i_handed_out_needs_to_know_who_i_am() {
+    // Unlike `--pile`, this has no answer without an identity: there is no
+    // "out" without a "from". An empty list would read as "nothing outstanding".
+    assert!(list_query(false, false, false, true, false, None, None).is_err());
+}
+
+#[test]
+fn handed_out_carries_done_like_every_other_selection() {
+    // Which is the useful one for a router: what it handed out and got back.
+    assert_eq!(
+        handed_out_query(true, Some("sess-1")),
+        "done=true&handed_out=sess-1"
+    );
 }
