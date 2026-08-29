@@ -1187,11 +1187,22 @@ async fn ask(prompt: &str, patience: std::time::Duration) -> (Result<String>, u3
 /// gives about the prompt — this block is 87 kB of closed titles, and while
 /// `ARG_MAX` is a megabyte here, an argument that size is at the mercy of
 /// anything that logs a command line. The file goes with the transcript.
+/// Whether this process ever waited for a model.
+///
+/// ⚠ **The one variable that explains the `edit` distribution.** Set here rather
+/// than at either check's call site because this is the function that WAITS —
+/// both checks funnel through it, and a timeout counts: a run that waited 90
+/// seconds and got nothing belongs in the slow population, not the fast one.
+/// A process runs one command, so a flag is the whole of the state needed.
+static WAITED_FOR_A_MODEL: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 async fn ask_with(
     prompt: &str,
     prefix: Option<&str>,
     patience: std::time::Duration,
 ) -> (Result<String>, u32) {
+    WAITED_FOR_A_MODEL.store(true, std::sync::atomic::Ordering::Relaxed);
     let named = named();
     let carried = prefix.and_then(|text| {
         let path = std::env::temp_dir().join(format!("task-settled-{named}.txt"));
@@ -1447,6 +1458,12 @@ async fn clocked(client: &Client, verb: &'static str, started: std::time::Instan
         } else {
             commands::Ended::Error
         },
+        // ⚠ **Always `Some`, never left absent.** This client knows the answer
+        // for every command it runs; `None` on the wire means an OLDER client
+        // that could not say, and the tally counts those apart rather than
+        // guessing. Sending nothing here would make this build indistinguishable
+        // from that one.
+        waited_for_a_model: Some(WAITED_FOR_A_MODEL.load(std::sync::atomic::Ordering::Relaxed)),
     };
     let req = client
         .request(reqwest::Method::POST, "/api/commands")

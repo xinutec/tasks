@@ -1,0 +1,28 @@
+-- Whether this command waited for a model, so its latency can be read.
+--
+-- ⚠ **`edit p90` was reporting the CHECK RATE, not a latency.** Aligned to a
+-- common window, slow edits and density reads are 1:1 — 161 and 161, nothing
+-- unexplained — and the two populations are 100x apart:
+--
+--     edit, unchecked   n=367   p50    235 ms   p90    376 ms
+--     edit, checked     n=161   p50 39,351 ms   p90 90,345 ms
+--     the model alone   n=161   p50 39,014 ms   p90 90,002 ms
+--
+-- The service's own share of a checked edit is ~337 ms p50, the same flat cost
+-- as an unchecked one. So the single reported figure of 58,415 ms describes
+-- NEITHER population: it is the 30/70 mix, and it moves when the check rate
+-- moves — shorter bodies, a retuned sampler — with nothing about performance
+-- having changed. It moves the same way if the model genuinely slows down. One
+-- number, two causes, no way to tell them apart.
+--
+-- ⚠ **A boolean, not the check's milliseconds.** The duration is already in
+-- `check_run`, and a second copy is a second thing to keep true. The only thing
+-- a command row cannot otherwise answer is *did this one wait for a model*.
+--
+-- ⚠ **NULL on every row written before this, and that is not the same as
+-- false.** Nothing knew the answer then, and defaulting them to `0` would
+-- silently file two days of checked edits into the fast population — inventing
+-- the very number this column exists to measure. The tally counts NULL as
+-- unknown and reports it apart.
+ALTER TABLE command_run
+    ADD COLUMN waited_for_a_model BOOLEAN NULL;

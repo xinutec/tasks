@@ -72,6 +72,19 @@ pub struct Run {
     pub verb: String,
     pub elapsed_ms: u32,
     pub outcome: Ended,
+    /// Whether this invocation waited for a model check.
+    ///
+    /// ⚠ **The variable that explains the whole `edit` distribution.** A checked
+    /// edit runs 39s at the median and an unchecked one 235 ms; the service's
+    /// own share is ~337 ms either way. Without this the reported p90 is the
+    /// MIX, which moves when the check rate moves and when the model slows down,
+    /// and cannot say which happened.
+    ///
+    /// Absent from an older client, and stored as NULL rather than `false`: not
+    /// knowing is a third answer, and folding it into the fast population would
+    /// invent the number this exists to measure.
+    #[serde(default)]
+    pub waited_for_a_model: Option<bool>,
 }
 
 impl RequiredKeys for Run {
@@ -105,13 +118,14 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
         )));
     }
     sqlx::query(
-        "INSERT INTO command_run (ran_at, verb, session, elapsed_ms, outcome) \
-         VALUES (NOW(), ?, ?, ?, ?)",
+        "INSERT INTO command_run (ran_at, verb, session, elapsed_ms, outcome, \
+         waited_for_a_model) VALUES (NOW(), ?, ?, ?, ?, ?)",
     )
     .bind(&run.verb)
     .bind(session)
     .bind(run.elapsed_ms)
     .bind(run.outcome.as_str())
+    .bind(run.waited_for_a_model)
     .execute(pool)
     .await
     .context("recording what a command did")?;
@@ -125,6 +139,8 @@ pub struct Ran {
     pub verb: String,
     pub elapsed_ms: u32,
     pub outcome: Ended,
+    /// Whether it waited for a model — `None` on rows written before `0015`.
+    pub waited_for_a_model: Option<bool>,
 }
 
 /// Every command in the last `days`, newest first.
@@ -139,10 +155,11 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
         verb: String,
         elapsed_ms: u32,
         outcome: String,
+        waited_for_a_model: Option<bool>,
     }
 
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT ran_at, verb, elapsed_ms, outcome FROM command_run \
+        "SELECT ran_at, verb, elapsed_ms, outcome, waited_for_a_model FROM command_run \
          WHERE ran_at > NOW() - INTERVAL ? DAY ORDER BY ran_at DESC",
     )
     .bind(days)
@@ -158,6 +175,7 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
                 outcome: Ended::read(&row.outcome).with_context(|| {
                     format!("`{}` is not an outcome this version knows", row.outcome)
                 })?,
+                waited_for_a_model: row.waited_for_a_model,
             })
         })
         .collect()
@@ -178,6 +196,29 @@ pub struct Tally {
     pub median_ms: u32,
     pub p90_ms: u32,
     pub worst_ms: u32,
+    /// The same percentiles over only the runs that did NOT wait for a model.
+    ///
+    /// ⚠ **This is the service's latency; the fields above are the mix.**
+    /// Measured over the 4 days to 2026-08-29, an unchecked edit ran 235 ms at
+    /// the median and a checked one 39,351 ms — and the service's share of the
+    /// checked one was ~337 ms, the same flat cost. So `p90_ms` on `edit` was
+    /// reporting what fraction of edits crossed the sampler, expressed in
+    /// milliseconds, and a genuine 3x service regression would have been
+    /// invisible underneath a term a hundred times larger.
+    ///
+    /// `None` when no run in the window said either way — every row written
+    /// before `0015`. Absent rather than equal to the mix, because a figure that
+    /// silently falls back to the number it is meant to correct is worse than no
+    /// figure: it looks like the fix working.
+    pub unchecked_p90_ms: Option<u32>,
+    /// How many runs waited for a model, and how many said nothing.
+    ///
+    /// ⚠ **`unknown` is carried rather than folded into either side.** Rows from
+    /// before `0015` know nothing, and counting them as unchecked would file two
+    /// days of 39-second edits into the fast population — inventing exactly the
+    /// number this exists to measure.
+    pub waited: usize,
+    pub unknown: usize,
 }
 
 /// Nearest rank, on a slice that is already sorted.
@@ -209,6 +250,15 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
                 .map(|r| r.elapsed_ms)
                 .collect();
             spent.sort_unstable();
+            // The same population, minus the runs that waited for a model. A run
+            // that said nothing is excluded from BOTH sides rather than assumed
+            // fast — see `unknown`.
+            let mut alone: Vec<u32> = mine
+                .iter()
+                .filter(|r| r.outcome == Ended::Ok && r.waited_for_a_model == Some(false))
+                .map(|r| r.elapsed_ms)
+                .collect();
+            alone.sort_unstable();
             Tally {
                 verb: verb.to_string(),
                 runs: mine.len(),
@@ -216,6 +266,15 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
                 median_ms: rank(&spent, 0.5),
                 p90_ms: rank(&spent, 0.9),
                 worst_ms: *spent.last().unwrap_or(&0),
+                unchecked_p90_ms: (!alone.is_empty()).then(|| rank(&alone, 0.9)),
+                waited: mine
+                    .iter()
+                    .filter(|r| r.waited_for_a_model == Some(true))
+                    .count(),
+                unknown: mine
+                    .iter()
+                    .filter(|r| r.waited_for_a_model.is_none())
+                    .count(),
             }
         })
         .collect();

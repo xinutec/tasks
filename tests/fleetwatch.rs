@@ -189,6 +189,9 @@ fn the_keys_are_the_ones_the_service_actually_sends() {
             median_ms: 900,
             p90_ms: 27_000,
             worst_ms: 31_000,
+            unchecked_p90_ms: Some(376),
+            waited: 4,
+            unknown: 0,
         })
         .expect("a command tally serialises")],
         "checks": [serde_json::to_value(CheckTally {

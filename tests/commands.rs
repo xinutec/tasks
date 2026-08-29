@@ -14,6 +14,17 @@ fn ran(verb: &str, ms: u32, outcome: Ended) -> Ran {
         verb: verb.to_string(),
         elapsed_ms: ms,
         outcome,
+        // The fixtures below are about the verb split; `waited` has its own
+        // module at the foot of this file, which builds rows that say.
+        waited_for_a_model: None,
+    }
+}
+
+/// The same row, saying whether it waited for a model.
+fn ran_waiting(verb: &str, ms: u32, waited: bool) -> Ran {
+    Ran {
+        waited_for_a_model: Some(waited),
+        ..ran(verb, ms, Ended::Ok)
     }
 }
 
@@ -89,6 +100,9 @@ fn a_command_that_only_ever_failed_is_still_reported() {
             median_ms: 0,
             p90_ms: 0,
             worst_ms: 0,
+            unchecked_p90_ms: None,
+            waited: 0,
+            unknown: 2,
         }]
     );
 }
@@ -112,4 +126,90 @@ fn the_declared_interval_puts_the_failure_at_five_days() {
         REPORTING_INTERVAL_S * 3 / 2 >= 2 * day,
         "a quiet weekend must not even warn"
     );
+}
+
+/// Splitting the latency by the variable that actually explains it.
+///
+/// ⚠ **`edit p90` was reporting the CHECK RATE.** Measured over the four days to
+/// 2026-08-29, aligned so the two tables cover the same window, slow edits and
+/// density reads are 1:1 — 161 and 161. An unchecked edit ran 235 ms at the
+/// median, a checked one 39,351 ms, and the service's own share of the checked
+/// one was ~337 ms: the same flat cost. So the one reported figure of 58,415 ms
+/// described neither population. It moves when the check rate moves and when the
+/// model slows down, and cannot say which happened.
+mod waited {
+    use super::*;
+
+    #[test]
+    fn the_service_is_reported_apart_from_the_model_it_waited_for() {
+        // The real shape, in miniature: a fast majority and a slow checked tail.
+        let mut runs: Vec<Ran> = (0..7).map(|_| ran_waiting("edit", 240, false)).collect();
+        runs.push(ran_waiting("edit", 39_000, true));
+        runs.push(ran_waiting("edit", 90_000, true));
+        let out = tally(&runs);
+        let edit = &out[0];
+
+        assert_eq!(edit.runs, 9);
+        assert_eq!(edit.waited, 2);
+        assert!(
+            edit.p90_ms > 30_000,
+            "the mix still carries the model: {}",
+            edit.p90_ms
+        );
+        assert_eq!(
+            edit.unchecked_p90_ms,
+            Some(240),
+            "the service's own latency is what a regression would show in"
+        );
+    }
+
+    #[test]
+    fn a_run_that_never_said_is_counted_as_unknown_and_not_as_fast() {
+        // ⚠ Rows written before `0015` know nothing. Folding them into the
+        // unchecked population would file 39-second edits as 235 ms ones —
+        // inventing the very number the split exists to measure.
+        let runs = vec![
+            ran("edit", 39_000, Ended::Ok),
+            ran("edit", 90_000, Ended::Ok),
+            ran_waiting("edit", 240, false),
+        ];
+        let edit = &tally(&runs)[0];
+        assert_eq!(edit.unknown, 2);
+        assert_eq!(edit.waited, 0);
+        assert_eq!(
+            edit.unchecked_p90_ms,
+            Some(240),
+            "an unknown row was counted as unchecked"
+        );
+    }
+
+    #[test]
+    fn a_verb_nobody_said_anything_about_reports_no_split() {
+        // Absent, not equal to the mix. A figure that quietly falls back to the
+        // number it corrects looks exactly like the correction working.
+        let runs = vec![
+            ran("edit", 39_000, Ended::Ok),
+            ran("edit", 90_000, Ended::Ok),
+        ];
+        assert_eq!(tally(&runs)[0].unchecked_p90_ms, None);
+    }
+
+    #[test]
+    fn a_failed_run_stays_out_of_both_timings() {
+        // The existing rule: a refusal returns without a round trip, so folding
+        // the error path in makes the tool look fastest when it refuses most.
+        let runs = vec![
+            ran_waiting("add", 12_000, true),
+            Ran {
+                waited_for_a_model: Some(false),
+                ..ran("add", 30, Ended::Error)
+            },
+        ];
+        let add = &tally(&runs)[0];
+        assert_eq!(add.failed, 1);
+        assert_eq!(
+            add.unchecked_p90_ms, None,
+            "a failed run became the service's latency"
+        );
+    }
 }

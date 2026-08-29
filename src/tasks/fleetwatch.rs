@@ -120,6 +120,28 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
+        // ⚠ **The line above is the MIX; this one is the service.** Measured
+        // over the 4 days to 2026-08-29, `edit` ran 235 ms at the median
+        // unchecked and 39,351 ms checked, while the service's share of the
+        // checked run was ~337 ms either way. So `{verb} latency` on a verb that
+        // can trip a check reports what fraction crossed the sampler, in
+        // milliseconds — it moves when the check rate moves and when the model
+        // slows, and cannot say which. This one moves only for the service.
+        //
+        // ⚠ **Emitted only where the client said**, so an older CLI's rows do
+        // not quietly become a second copy of the number above. A figure that
+        // falls back to the value it is meant to correct looks like the fix
+        // working, which is worse than no figure.
+        if let Some(alone) = line["unchecked_p90_ms"].as_u64() {
+            let waited = line["waited"].as_u64().unwrap_or(0);
+            out.push(check(
+                &format!("{verb} latency, no model"),
+                format!("{alone} ms p90; {waited} of {runs} waited for one"),
+                alone as f64,
+                "ms",
+                "pass",
+            ));
+        }
         failed_total += failed;
         run_total += runs;
         if failed > 0 && worst.as_ref().is_none_or(|(_, most)| failed > *most) {
