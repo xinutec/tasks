@@ -101,6 +101,9 @@ fn check(label: &str, observed: String, value: f64, unit: &str, verdict: &str) -
 /// number fleetwatch can chart until there is a week to derive a bound from.
 pub fn checks(report: &Value) -> Vec<Value> {
     let mut out = Vec::new();
+    let mut failed_total = 0u64;
+    let mut run_total = 0u64;
+    let mut worst: Option<(String, u64)> = None;
     for line in report["commands"].as_array().unwrap_or(&Vec::new()) {
         let (Some(verb), Some(runs), Some(p90)) = (
             line["verb"].as_str(),
@@ -117,12 +120,48 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
+        failed_total += failed;
+        run_total += runs;
+        if failed > 0 && worst.as_ref().is_none_or(|(_, most)| failed > *most) {
+            worst = Some((verb.to_string(), failed));
+        }
+    }
+    // ⚠ **`failed` was already in the sentence above and in no VALUE**, so a
+    // verb that started failing could only be read by hovering a latency line —
+    // charts and staleness bands are built from values, and prose is neither.
+    // One aggregate rather than a line per verb: eight more series to say a
+    // number that is almost always zero would crowd out the ones that move.
+    //
+    // ⚠ **No verdict, deliberately.** A refusal is a failure here — the
+    // duplicate check declining a filing returns an error — so a non-zero count
+    // is the tool working, and warning on it would train everyone to ignore the
+    // one line that is supposed to mean something.
+    if !report["commands"]
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .is_empty()
+    {
+        let observed = match &worst {
+            Some((verb, most)) => {
+                format!("{failed_total} of {run_total} runs; most in `{verb}` ({most})")
+            }
+            None => format!("0 of {run_total} runs"),
+        };
+        out.push(check(
+            "commands that failed",
+            observed,
+            failed_total as f64,
+            "",
+            "pass",
+        ));
     }
     for line in report["checks"].as_array().unwrap_or(&Vec::new()) {
         let (Some(kind), Some(runs)) = (line["kind"].as_str(), line["runs"].as_u64()) else {
             continue;
         };
         let timeout = line["timeout"].as_u64().unwrap_or(0);
+        let errored = line["error"].as_u64().unwrap_or(0);
+        let spoke = line["spoke"].as_u64().unwrap_or(0);
         let p90 = line["p90_ms"].as_u64().unwrap_or(0);
         out.push(check(
             &format!("{kind} check latency"),
@@ -131,15 +170,52 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
-        if kind == "filing" {
-            out.push(check(
-                "filings that went unchecked",
-                format!("{timeout} of {runs}"),
-                timeout as f64,
-                "",
-                if timeout > 0 { "warn" } else { "pass" },
-            ));
-        }
+        // ⚠ **A COUNT, with its denominator in the sentence — not a rate.** A
+        // speak rate that improves says nothing about which half moved: fewer
+        // checks speaking and fewer checks running look identical in a
+        // percentage and mean opposite things. The counts compose — spoke,
+        // quiet, timeout and error sum to `runs` — so the series can be read
+        // against each other.
+        //
+        // This is the number that decided #1251: 229 of 268 density reads spoke
+        // over the 5.6 days to 2026-08-29, which is what refuted turning the
+        // advice into a refusal. It was measured by hand out of `check_run`,
+        // because nothing charted it.
+        out.push(check(
+            &format!("{kind} checks that spoke"),
+            format!("{spoke} of {runs}"),
+            spoke as f64,
+            "",
+            "pass",
+        ));
+        // ⚠ **Every kind, and it used to be `filing` alone.** 37 of those same
+        // 268 density reads never answered — 14% — and appeared on no line at
+        // all, so the one number saying how often this check simply does not
+        // happen was invisible for the kind that runs most.
+        //
+        // ⚠ **A timeout and an error are summed HERE and nowhere else.** They
+        // have different causes and the tally keeps them apart, but both mean
+        // the same thing to a reader of this line: the input was never judged.
+        // `Quiet` is the one that must never join them — a check that ran and
+        // had nothing to say is the opposite finding, and is its own line above.
+        //
+        // ⚠ **Only `filing` gets a verdict, and the asymmetry is deliberate.**
+        // Zero is defensible there: an unchecked filing is how a duplicate gets
+        // in. A density read is advisory, its measured baseline is 14%, and no
+        // bound has been derived — so warning on it would publish a guess as a
+        // finding, which is the mistake this module's header warns about.
+        let unanswered = timeout + errored;
+        out.push(check(
+            &format!("{kind} checks that never answered"),
+            format!("{timeout} timed out, {errored} errored, of {runs}"),
+            unanswered as f64,
+            "",
+            if kind == "filing" && unanswered > 0 {
+                "warn"
+            } else {
+                "pass"
+            },
+        ));
     }
     out
 }

@@ -60,3 +60,162 @@ fn every_check_carries_an_addressable_identity() {
         assert!(section.len() <= 255, "section over 255 bytes: {section:?}");
     }
 }
+
+/// What the tally already knew and the push threw away.
+///
+/// ⚠ **Three numbers reached the service and stopped there.** `checks::Tally`
+/// has carried `spoke`, `quiet`, `timeout` and `error` per kind since 0010, and
+/// `commands::Tally` has carried `failed` per verb — and `checks()` turned
+/// exactly one of them into a line, for one kind. Measured by hand on
+/// 2026-08-29: 229 of 268 density reads spoke and 37 never answered, both
+/// invisible on every chart. The gap was not in the instrument; it was in the
+/// last ten lines before the wire.
+mod what_reaches_the_wire {
+    use super::*;
+
+    fn built() -> Vec<serde_json::Value> {
+        fleetwatch::checks(&serde_json::json!({
+            "interval_s": 3600,
+            "commands": [
+                {"verb": "add", "runs": 10, "p90_ms": 21000, "failed": 3},
+                {"verb": "list", "runs": 40, "p90_ms": 200, "failed": 0},
+            ],
+            "checks": [
+                {"kind": "filing", "runs": 208, "quiet": 109, "spoke": 97,
+                 "timeout": 0, "error": 2, "p90_ms": 18000},
+                {"kind": "density", "runs": 268, "quiet": 2, "spoke": 229,
+                 "timeout": 37, "error": 0, "p90_ms": 90000},
+            ],
+        }))
+    }
+
+    fn value_of(label: &str) -> f64 {
+        built()
+            .into_iter()
+            .find(|c| c["label"] == label)
+            .unwrap_or_else(|| panic!("no line labelled {label:?}"))["value"]
+            .as_f64()
+            .expect("a numeric value")
+    }
+
+    #[test]
+    fn a_density_read_that_never_answered_is_on_a_line_of_its_own() {
+        // The 14% that was charted nowhere. `filing` had this line and
+        // `density` — the kind that runs most — did not.
+        assert_eq!(value_of("density checks that never answered"), 37.0);
+    }
+
+    #[test]
+    fn how_often_a_check_spoke_is_a_value_and_not_a_sentence() {
+        assert_eq!(value_of("density checks that spoke"), 229.0);
+        assert_eq!(value_of("filing checks that spoke"), 97.0);
+    }
+
+    #[test]
+    fn a_failing_command_is_countable() {
+        // It was inside the observed text of a LATENCY line, where nothing can
+        // chart it or band it. Aggregated, because a series per verb to carry a
+        // number that is nearly always zero crowds out the ones that move.
+        assert_eq!(value_of("commands that failed"), 3.0);
+        let observed = built()
+            .into_iter()
+            .find(|c| c["label"] == "commands that failed")
+            .expect("the line")["observed"]
+            .as_str()
+            .expect("a sentence")
+            .to_string();
+        assert!(
+            observed.contains("`add`"),
+            "which verb is the finding: {observed}"
+        );
+    }
+
+    #[test]
+    fn an_error_joins_a_timeout_and_quiet_never_does() {
+        // Both mean the input was never judged. `quiet` is the opposite finding
+        // — it ran and had nothing to say — and summing it in would report a
+        // well-behaved tool exactly when the tool had stopped running.
+        assert_eq!(
+            value_of("filing checks that never answered"),
+            2.0,
+            "0 timeouts and 2 errors is 2 unanswered"
+        );
+        assert_eq!(value_of("filing checks that spoke"), 97.0);
+        assert_ne!(
+            value_of("density checks that never answered"),
+            39.0,
+            "the 2 quiet reads were counted as failures to answer"
+        );
+    }
+
+    #[test]
+    fn only_the_filing_line_claims_a_bound() {
+        // Zero unchecked filings is defensible: that is how a duplicate gets in.
+        // A density read is advisory with a measured 14% baseline and no derived
+        // bound, so a verdict there would publish a guess as a finding.
+        let verdict = |label: &str| {
+            built()
+                .into_iter()
+                .find(|c| c["label"] == label)
+                .expect("the line")["verdict"]
+                .as_str()
+                .expect("a verdict")
+                .to_string()
+        };
+        assert_eq!(verdict("density checks that never answered"), "pass");
+        assert_eq!(verdict("filing checks that never answered"), "warn");
+    }
+}
+
+/// The fixtures above are hand-written JSON, and that is a gap of its own.
+///
+/// ⚠ **A field renamed on `Tally` would zero every line here and fail nothing.**
+/// `checks()` reads `line["spoke"]` out of a `Value` and falls back to 0, so the
+/// only thing tying its keys to the service's wire format is that somebody typed
+/// them the same way twice. This drives the REAL structs through `serde` and
+/// asserts the numbers survive — the same shape as the ULID bug this file opens
+/// with: the local side was self-consistent and disagreed with the other end.
+#[test]
+fn the_keys_are_the_ones_the_service_actually_sends() {
+    use tasks::tasks::checks::{Kind, Tally as CheckTally};
+    use tasks::tasks::commands::Tally as CommandTally;
+
+    let report = serde_json::json!({
+        "interval_s": 3600,
+        "commands": [serde_json::to_value(CommandTally {
+            verb: "edit".into(),
+            runs: 12,
+            failed: 4,
+            median_ms: 900,
+            p90_ms: 27_000,
+            worst_ms: 31_000,
+        })
+        .expect("a command tally serialises")],
+        "checks": [serde_json::to_value(CheckTally {
+            kind: Kind::Density,
+            runs: 268,
+            quiet: 2,
+            spoke: 229,
+            timeout: 37,
+            error: 0,
+            median_ms: 36_000,
+            p90_ms: 90_000,
+            worst_ms: 150_000,
+        })
+        .expect("a check tally serialises")],
+    });
+
+    let built = fleetwatch::checks(&report);
+    let value = |label: &str| {
+        built
+            .iter()
+            .find(|c| c["label"] == label)
+            .unwrap_or_else(|| panic!("no line labelled {label:?}"))["value"]
+            .as_f64()
+            .expect("a numeric value")
+    };
+    assert_eq!(value("density checks that spoke"), 229.0);
+    assert_eq!(value("density checks that never answered"), 37.0);
+    assert_eq!(value("commands that failed"), 4.0);
+    assert_eq!(value("edit latency"), 27_000.0);
+}
