@@ -102,6 +102,9 @@ export const TASKS = [
     priority: 'P3',
     blocked_on: [80, 92],
     blocked: true,
+    // Flagged too, so this row carries a rank, a block icon AND the sprawl mark
+    // — the widest this meta row gets is what the harness is here to measure.
+    sprawl_chars: 18162,
     // No name: drawn as the raw uuid, which is wider than the phone.
     assignee: { kind: 'session', id: SESSIONS[1].id },
     detailed: false,
@@ -188,6 +191,12 @@ export const DETAIL = {
   // spells the ids out.
   blocked_on: [80, 106],
   blocked: true,
+  // So the task screen draws the critique card under the body, which is a
+  // different piece of markup from the list's icon and the only place the words
+  // are ever shown.
+  sprawl_chars: 18162,
+  sprawl_said:
+    "Move 'Method note' bullets to a single checklist AFTER 'What to do next', not scattered through dated entries.\n'Still unmapped' is loose inventory not tied to the three actionable items; delete unless it earns its place.",
   // Raised by its deadline, so the task screen draws BOTH the level it sorts
   // as and the one somebody set — the pair only this screen shows.
   escalated_to: 'P0',

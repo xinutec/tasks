@@ -93,6 +93,15 @@ export interface Task {
    * which is why it is drawn only where there is no holder.
    */
   filed_by?: string | null;
+  /**
+   * How long this body was when a model last read it and had something to say.
+   * Absent when nothing is outstanding, which is nearly every task.
+   *
+   * ⚠ **The number, not the words.** The critique is on the detail
+   * (`sprawl_said`) because a list must not carry prose — the same trade
+   * `detailed` makes. Draw it as a mark, not as text.
+   */
+  sprawl_chars?: number | null;
   created_at: string;
   updated_at: string;
   closed_at?: string | null;
@@ -164,6 +173,16 @@ export interface TaskDetail extends Task {
    *  Answered by the server so the page need not fetch a whole previous body to
    *  decide whether to offer the button. */
   restorable: boolean;
+  /**
+   * What a model last said about this body, verbatim, when it had something to
+   * say. Absent when nothing is outstanding.
+   *
+   * ⚠ **Kept because it used to evaporate.** It was printed once, as the tail
+   * of a successful edit, to whoever happened to be making that edit — and then
+   * it was gone. Here it is read by whoever opens the task, which is who it was
+   * always addressed to.
+   */
+  sprawl_said?: string | null;
 }
 
 /** A task as it stood before its most recent edit — `GET /api/tasks/{id}/previous`. */

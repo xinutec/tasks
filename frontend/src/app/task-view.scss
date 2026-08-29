@@ -191,6 +191,29 @@
 // writes. A stored body runs to thousands of characters, so it scrolls inside
 // its own box rather than pushing the two buttons off the end of a phone
 // screen: a confirmation you have to scroll past is one nobody reads.
+// The same card as `.previous` below: both are things the server is telling the
+// reader ABOUT this task rather than parts of it, and drawing them alike is what
+// says so without a word.
+.sprawl {
+  margin-top: 1.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+
+  h2 {
+    margin: 0 0 0.25rem;
+    font: var(--mat-sys-title-small);
+  }
+
+  .said {
+    margin: 0;
+    // The model answers one finding per line and they are read as a list, so
+    // the newlines it sent are kept rather than collapsed into a paragraph.
+    white-space: pre-wrap;
+  }
+}
+
 .previous {
   margin-top: 1.5rem;
   padding: 0.75rem;

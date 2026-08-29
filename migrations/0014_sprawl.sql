@@ -1,0 +1,31 @@
+-- What a density read said, kept on the task instead of on one screen.
+--
+-- ⚠ **The critique existed in exactly one tool result and evaporated with it.**
+-- `check_run` (0010) records that a read SPOKE and what it cost, but never what
+-- it said — so a finding a model spent half a minute producing survived only as
+-- long as the transcript of whichever session happened to run that edit, and was
+-- addressed to a session that was in the middle of doing something else.
+--
+-- Measured over the 5.6 days to 2026-08-29: **229 of 268 reads spoke**, and of
+-- the 43 tasks read more than once, **28 only ever grew**. #1162 was read 24
+-- times and went 7,684 → 18,162 characters. Advice that cannot outlive one tool
+-- result is advice nobody is holding.
+--
+-- ⚠ **A flag, deliberately, and not a refusal.** Refusing was asked for (#1251)
+-- and the same telemetry answers it: a check that speaks on 85% of what it reads
+-- is not a gate, it is a wall with a mandatory override in front of it, and it
+-- would be retried rather than obeyed — 36s median, 90s p90, with 37 of 268
+-- timing out and no honest answer for what a timeout should mean. See
+-- `density.rs`, which refused this shape before there were numbers for it.
+--
+-- **Two columns rather than a table: this is the LAST thing said about this
+-- body, not a history of opinions.** A later read replaces it and a
+-- body-shrinking edit clears it. The history is `check_run`, which measures the
+-- tool and deliberately carries no foreign key to here.
+--
+-- ⚠ **`sprawl_chars` is what the list carries, and `sprawl_said` is not.** A
+-- digest line needs a number to be worth reading; carrying TEXT on every row of
+-- every list is the exact cost `detailed` exists as a boolean to avoid.
+ALTER TABLE tasks
+    ADD COLUMN sprawl_said  TEXT         NULL,
+    ADD COLUMN sprawl_chars INT UNSIGNED NULL;

@@ -133,6 +133,16 @@
       <p class="empty">No notes. The subject is the whole of it.</p>
     }
 
+    <!-- ⚠ **Under the body, because it is about the body.** Shown on every open
+         until an edit makes the body smaller — the shape this replaced said it
+         once, to whoever ran an unrelated edit, and then lost it. -->
+    @if (t.sprawl_said) {
+      <section class="sprawl">
+        <h2>A model read this body, and it is a guess</h2>
+        <p class="said">{{ t.sprawl_said }}</p>
+      </section>
+    }
+
     <!-- Offered only where there is something to put back, and never as one
          tap: the first shows what would come back, the second does it. -->
     @if (t.restorable) {

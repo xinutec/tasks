@@ -31,6 +31,7 @@ fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
         blocked: false,
         assignee,
         detailed: false,
+        sprawl_chars: None,
         filed_by: None,
         created_at: at,
         updated_at: at,
@@ -532,4 +533,58 @@ fn a_session_that_has_already_focused_is_not_told_to() {
         1,
         "the hint doubled up on the focus notice:\n{out}"
     );
+}
+
+/// The marker that makes a critique unignorable, in the one channel that repeats.
+///
+/// ⚠ **This module argues that a doc cannot win an argument with a per-turn
+/// reminder, and that cuts both ways.** A density read's findings used to be the
+/// tail of a successful edit: said once, to a session in the middle of something
+/// else, and gone with its scrollback. Of the 43 tasks read more than once in
+/// the 5.6 days to 2026-08-29, 28 only ever grew.
+mod sprawl {
+    use super::*;
+
+    fn flagged(chars: u32) -> Task {
+        let mut task = open(1, "a body that got away");
+        task.sprawl_chars = Some(chars);
+        task
+    }
+
+    #[test]
+    fn a_flagged_body_says_so_in_the_prompt() {
+        let digest = render(&[flagged(18_162)]);
+        assert!(digest.contains("[sprawl 18.2K]"), "{digest}");
+    }
+
+    #[test]
+    fn a_body_with_nothing_outstanding_costs_nothing() {
+        // Nearly every task. The marker is allowed in the one place every
+        // session pays for on every turn only because it is free when absent.
+        let plain = open(1, "a body that got away");
+        let quiet = render(std::slice::from_ref(&plain));
+        assert!(!quiet.contains("sprawl"), "{quiet}");
+        assert!(
+            render(&[flagged(18_162)]).len() > quiet.len(),
+            "the marker has to cost something when it is there, or it is not there"
+        );
+    }
+
+    #[test]
+    fn the_words_never_reach_the_prompt() {
+        // The findings are prose and belong in `task show`. A digest that
+        // carried them would be the accretion it is warning about, one level up
+        // — so what a flag costs a prompt is bounded by the marker, whatever the
+        // model wrote. `Task` has no field for the words, which is what makes
+        // that structural; this pins the size it buys.
+        let plain = render(&[open(1, "a body that got away")]);
+        let flagged = render(&[flagged(18_162)]);
+        let cost = flagged.len() - plain.len();
+        assert!(cost <= 20, "a marker grew into content: {cost} bytes");
+        assert_eq!(
+            flagged.lines().count(),
+            plain.lines().count(),
+            "one line per task, and a flag does not buy a second"
+        );
+    }
 }

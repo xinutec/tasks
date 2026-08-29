@@ -383,8 +383,37 @@ fn line(task: &Task) -> String {
         let on: Vec<String> = task.blocked_on.iter().map(|id| format!("#{id}")).collect();
         line.push_str(&format!(" ⛔{}", on.join(",")));
     }
+    // ⚠ **The one place this can be said where it cannot evaporate.** A density
+    // read's findings used to exist only as the tail of a successful edit, in
+    // the transcript of whichever session happened to make it — and were read
+    // past: of the 43 tasks read more than once in the 5.6 days to 2026-08-29,
+    // 28 only ever grew. This module already argues that a doc cannot win an
+    // argument with a per-turn reminder; that cuts both ways, and this is the
+    // reminder.
+    //
+    // ⚠ **The size, not the words.** The findings are prose and belong in `task
+    // show`; a number is what makes the marker worth reading, and it is the one
+    // thing about a sprawling body that is not a matter of taste. Costs nothing
+    // on a task with nothing outstanding, which is nearly all of them.
+    if let Some(chars) = task.sprawl_chars {
+        line.push_str(&format!(" [sprawl {}]", thousands(chars)));
+    }
     if task.assignee.kind != AssigneeKind::Nobody {
         line.push_str(&format!(" ({})", task.assignee.label()));
     }
     line
+}
+
+/// A character count as a reader thinks of it: `18.2K`, `940`.
+///
+/// Rounded because the precision is not the point — the reader is deciding
+/// whether a body has got away from them, and `18162` invites arithmetic where
+/// `18.2K` invites a rewrite. Under a thousand it is printed as it is: a body
+/// that small is not what this marks, and `0.9K` would be a claim about
+/// precision the number does not have.
+pub fn thousands(chars: u32) -> String {
+    if chars < 1_000 {
+        return chars.to_string();
+    }
+    format!("{:.1}K", f64::from(chars) / 1_000.0)
 }

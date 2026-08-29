@@ -119,6 +119,10 @@ struct Row {
     /// the wire to answer a boolean — the mistake this whole service exists to
     /// avoid, in miniature.
     detailed: i8,
+    /// How long the body was when a model last read it and spoke. NULL when
+    /// nothing is outstanding — see [`Task::sprawl_chars`]. The words it said
+    /// are deliberately NOT here: a list must not carry prose.
+    sprawl_chars: Option<u32>,
     /// The filing session's current name, or `NULL` where there is nothing to
     /// say — see [`Task::filed_by`].
     filed_by: Option<String>,
@@ -160,6 +164,7 @@ impl Row {
             blocked: self.open_blockers > 0,
             assignee,
             detailed: self.detailed != 0,
+            sprawl_chars: self.sprawl_chars,
             filed_by: self.filed_by,
             created_at: utc(self.created_at),
             updated_at: utc(self.updated_at),
@@ -210,7 +215,7 @@ macro_rules! select {
             still_open!("bt.status"),
             ") AS open_blockers, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
-            "(LENGTH(TRIM(t.body)) > 0) AS detailed, ",
+            "(LENGTH(TRIM(t.body)) > 0) AS detailed, t.sprawl_chars, ",
             // Correlated rather than joined: a task has one `created` event, but
             // a join that ever saw two would silently DUPLICATE the task in
             // every list — a list is the one thing here that must not gain rows.
@@ -319,12 +324,15 @@ pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
     let Some(row) = row else {
         return Ok(None);
     };
-    let body: Option<(String,)> = sqlx::query_as("SELECT body FROM tasks WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .context("reading a task body")?;
-    let body = body.map(|(b,)| b).unwrap_or_default();
+    // The critique rides along with the body it is about: one read, and the one
+    // place prose is allowed to cross the wire.
+    let body: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT body, sprawl_said FROM tasks WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .context("reading a task body")?;
+    let (body, sprawl_said) = body.unwrap_or_default();
     let events = events(pool, id).await?;
     // ⚠ **A boolean answered in SQL, for the reason `detailed` is.** The app has
     // to know whether there is anything to put back before it can offer to;
@@ -344,6 +352,7 @@ pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
         body,
         events,
         restorable,
+        sprawl_said,
     }))
 }
 
@@ -1381,6 +1390,24 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             .execute(&mut *tx)
             .await
             .context("changing a body")?;
+        // ⚠ **An edit that makes the body SMALLER clears the sprawl flag, and
+        // nothing else does.** This is the same step that resets [`accreted`] —
+        // the first one backwards that removed text — so the flag and the
+        // sampler cannot disagree about what counts as having consolidated
+        // something. Deliberately not "a model looked again and approved": a
+        // clear you can ask for is a clear that gets asked for, and the whole
+        // finding behind this flag is that the cheap action wins.
+        //
+        // In the same transaction as the write it describes: a critique left
+        // standing over a body that no longer exists is the failure this
+        // replaced, pointing the other way.
+        if body.chars().count() < was_body.chars().count() {
+            sqlx::query("UPDATE tasks SET sprawl_said = NULL, sprawl_chars = NULL WHERE id = ?")
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .context("clearing a body's sprawl flag")?;
+        }
         // ⚠ **The size of the change belongs in the row, not only in the reply.**
         // The reply says `3109 → 4 chars` to whoever made the edit and is then
         // gone with their scrollback; stored, it is what tells the next reader

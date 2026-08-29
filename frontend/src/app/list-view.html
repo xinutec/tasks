@@ -93,6 +93,20 @@
               @if (row.task.blocked) {
                 <mat-icon class="blocked" aria-label="blocked">block</mat-icon>
               }
+              <!-- An icon for the same reason the deadline is one: a body that
+                   got away is a yes/no in a list, and the size and the findings
+                   are both on the task. Drawn only where a read spoke and an
+                   edit has not since made the body smaller.
+                   ⚠ **NOT `notes`, which is two icons down and means "has a
+                   body".** The first render of this used it and the same glyph
+                   appeared twice in one row meaning two different things —
+                   invisible in the markup, obvious in the screenshot. `compress`
+                   says what the remedy is. -->
+              @if (row.task.sprawl_chars) {
+                <mat-icon class="sprawl" aria-label="a model found this body sprawling"
+                  >compress</mat-icon
+                >
+              }
               <span class="id">#{{ row.task.id }}</span>
               @if (row.task.assignee.kind !== 'nobody') {
                 <span class="holder">{{ row.holder }}</span>

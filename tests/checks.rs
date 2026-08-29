@@ -62,6 +62,7 @@ async fn a_filing_check_is_recorded_before_there_is_a_task_to_name() {
             elapsed_ms: 24_000,
             outcome: Outcome::Quiet,
             subject_key: None,
+            said: None,
         },
     )
     .await
@@ -95,6 +96,7 @@ async fn a_density_run_keeps_what_crossed_the_sampler() {
             elapsed_ms: 20_500,
             outcome: Outcome::Spoke,
             subject_key: None,
+            said: None,
         },
     )
     .await
@@ -186,6 +188,7 @@ async fn what_is_read_back_is_the_window_asked_for() {
                 elapsed_ms: 1_000,
                 outcome: Outcome::Quiet,
                 subject_key: None,
+                said: None,
             },
         )
         .await
@@ -349,6 +352,7 @@ async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
             elapsed_ms: 9_500,
             outcome: Outcome::Spoke,
             subject_key: Some(checks::subject_key(subject)),
+            said: None,
         },
     )
     .await
@@ -391,6 +395,7 @@ async fn a_check_that_said_nothing_licenses_nothing() {
             elapsed_ms: 7_100,
             outcome: Outcome::Quiet,
             subject_key: None,
+            said: None,
         },
     )
     .await
@@ -414,4 +419,196 @@ fn the_licence_ignores_what_a_retype_varies() {
         checks::subject_key("MEMORY.md is too big"),
         checks::subject_key("MEMORY.md is too big now")
     );
+}
+
+/// The flag a density read leaves behind, and the one edit that takes it away.
+///
+/// ⚠ **This is the half that used to not exist.** `check_run` recorded that a
+/// read SPOKE and what it cost, and threw away what it said — so a finding
+/// survived only as long as the transcript of whichever session ran the edit,
+/// addressed to a session doing something else. Measured over the 5.6 days to
+/// 2026-08-29: 229 of 268 reads spoke, and of the 43 tasks read more than once,
+/// 28 only ever grew. These pin that the words outlive the tool result and that
+/// exactly one thing retires them.
+mod sprawl {
+    use super::*;
+    use sqlx::MySqlPool;
+    use tasks::tasks::repo::{self, Change, NewTask};
+    use tasks::tasks::types::{Actor, Ranking};
+
+    async fn filed(pool: &MySqlPool, body: &str) -> u64 {
+        repo::create(
+            pool,
+            NewTask {
+                subject: "a body that grows".into(),
+                checked: true,
+                body: body.into(),
+                priority: Ranking::Unassessed,
+                due: None,
+                blocked_on: Vec::new(),
+                assignee: None,
+            },
+            &Actor::Person("pippijn".into()),
+        )
+        .await
+        .expect("filing")
+        .id
+    }
+
+    async fn read_said(pool: &MySqlPool, id: u64, outcome: Outcome, said: Option<&str>) {
+        checks::record(
+            pool,
+            "s-1",
+            &Run {
+                kind: Kind::Density,
+                task_id: Some(id),
+                input_chars: 18_162,
+                accreted: Some(5_991),
+                elapsed_ms: 33_735,
+                outcome,
+                subject_key: None,
+                said: said.map(str::to_string),
+            },
+        )
+        .await
+        .expect("recording the read");
+    }
+
+    async fn rewrite(pool: &MySqlPool, id: u64, body: &str) {
+        repo::update(
+            pool,
+            id,
+            Change {
+                body: Some(body.into()),
+                replace_body: true,
+                ..Default::default()
+            },
+            &Actor::Session("s-1".into()),
+        )
+        .await
+        .expect("rewriting");
+    }
+
+    #[tokio::test]
+    async fn what_a_read_said_outlives_the_tool_result() {
+        let pool = common::fresh_db().await;
+        let id = filed(&pool, &"x".repeat(4_000)).await;
+        read_said(
+            &pool,
+            id,
+            Outcome::Spoke,
+            Some("Move 'Method note' bullets to a checklist AFTER 'What to do next'."),
+        )
+        .await;
+
+        let detail = repo::get(&pool, id)
+            .await
+            .expect("reading")
+            .expect("a task");
+        assert_eq!(
+            detail.sprawl_said.as_deref(),
+            Some("Move 'Method note' bullets to a checklist AFTER 'What to do next'."),
+            "the critique did not survive the call that recorded the run"
+        );
+        assert_eq!(
+            detail.task.sprawl_chars,
+            Some(18_162),
+            "a digest line needs the number, and it is the size that was read"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_shrinking_edit_is_what_retires_it() {
+        let pool = common::fresh_db().await;
+        let id = filed(&pool, &"x".repeat(4_000)).await;
+        read_said(&pool, id, Outcome::Spoke, Some("this sprawls")).await;
+
+        // Longer: a rewrite that adds is not a consolidation, and the flag has
+        // to survive it or every append would clear its own warning.
+        rewrite(&pool, id, &"y".repeat(5_000)).await;
+        let still = repo::get(&pool, id)
+            .await
+            .expect("reading")
+            .expect("a task");
+        assert_eq!(
+            still.task.sprawl_chars,
+            Some(18_162),
+            "growing the body cleared the flag about the body growing"
+        );
+
+        rewrite(&pool, id, &"z".repeat(1_200)).await;
+        let done = repo::get(&pool, id)
+            .await
+            .expect("reading")
+            .expect("a task");
+        assert_eq!(
+            done.sprawl_said, None,
+            "a rewrite left the critique standing"
+        );
+        assert_eq!(done.task.sprawl_chars, None);
+    }
+
+    #[tokio::test]
+    async fn a_timeout_must_not_retire_a_finding_nobody_addressed() {
+        // 37 of 268 reads timed out. A timeout means the body was never judged,
+        // so treating it as silence would let a slow model clear a flag — the
+        // exact `Quiet` versus `Timeout` confusion this file opens with, now
+        // with a write behind it.
+        let pool = common::fresh_db().await;
+        let id = filed(&pool, &"x".repeat(4_000)).await;
+        read_said(&pool, id, Outcome::Spoke, Some("this sprawls")).await;
+
+        for missed in [Outcome::Timeout, Outcome::Error] {
+            read_said(&pool, id, missed, None).await;
+            let after = repo::get(&pool, id)
+                .await
+                .expect("reading")
+                .expect("a task");
+            assert_eq!(
+                after.sprawl_said.as_deref(),
+                Some("this sprawls"),
+                "{missed:?} retired a finding that was never re-judged"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_later_verdict_replaces_an_earlier_one() {
+        let pool = common::fresh_db().await;
+        let id = filed(&pool, &"x".repeat(4_000)).await;
+        read_said(
+            &pool,
+            id,
+            Outcome::Spoke,
+            Some("the conclusion is at the bottom"),
+        )
+        .await;
+        read_said(
+            &pool,
+            id,
+            Outcome::Spoke,
+            Some("section 3 is superseded by section 5"),
+        )
+        .await;
+
+        let detail = repo::get(&pool, id)
+            .await
+            .expect("reading")
+            .expect("a task");
+        assert_eq!(
+            detail.sprawl_said.as_deref(),
+            Some("section 3 is superseded by section 5"),
+            "this is the last thing said about the body, not a log of opinions"
+        );
+
+        // DENSE is a verdict about the body as it stands, and outranks the older
+        // one. It cannot be summoned: the read only fires on 3,000 characters of
+        // fresh accretion, so the cheapest route to it is making the body worse.
+        read_said(&pool, id, Outcome::Quiet, None).await;
+        let quiet = repo::get(&pool, id)
+            .await
+            .expect("reading")
+            .expect("a task");
+        assert_eq!(quiet.sprawl_said, None);
+    }
 }

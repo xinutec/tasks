@@ -570,6 +570,21 @@ pub struct Task {
     /// once.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filed_by: Option<String>,
+    /// How long this body was when a model last read it and had something to
+    /// say — absent when nothing is outstanding.
+    ///
+    /// ⚠ **The number, not the words.** The critique itself is on
+    /// [`TaskDetail::sprawl_said`], because a list must not carry prose: this is
+    /// the same trade [`detailed`](Self::detailed) makes, and for the same
+    /// reason — forty rows would otherwise cross the wire carrying forty
+    /// paragraphs nobody asked to read.
+    ///
+    /// ⚠ **Present means the LAST read spoke, not that it ever did.** It is
+    /// cleared by an edit that makes the body smaller, which is exactly the step
+    /// that resets `repo::accreted`, so the flag and the sampler cannot disagree
+    /// about what counts as having consolidated something.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sprawl_chars: Option<u32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -686,6 +701,15 @@ pub struct TaskDetail {
     /// back. Answered in SQL rather than by handing the client a revision it
     /// mostly will not want — the same reasoning as [`Task::detailed`].
     pub restorable: bool,
+    /// What a model last said about this body, verbatim, when it had something
+    /// to say.
+    ///
+    /// ⚠ **Stored because it used to evaporate.** It was printed once, as the
+    /// tail of a successful edit, to a session that was recording a finding
+    /// rather than judging a document — and then it was gone. Kept here it is
+    /// read by whoever opens the task next, which is who it was always about.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sprawl_said: Option<String>,
 }
 
 /// Something that happened to a task.

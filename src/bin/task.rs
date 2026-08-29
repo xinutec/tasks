@@ -1137,6 +1137,10 @@ async fn already_filed(
             elapsed_ms,
             outcome: checks::outcome(&said, !found.is_empty()),
             subject_key: refused,
+            // A filing check judges a title against a list, and the caller is
+            // holding the body it was about to file — there is no task yet to
+            // keep anything on.
+            said: None,
         },
     )
     .await;
@@ -1348,6 +1352,15 @@ fn line(task: &Value) -> String {
             .map(|v| format!("#{v}"))
             .collect();
         out.push_str(&format!("  ⛔{}", ids.join(",")));
+    }
+    // The same marker the digest carries, from the same field, so a session
+    // that sees `[sprawl 18.2K]` in its prompt and then runs `task list` is not
+    // shown two different accounts of the same body.
+    if let Some(chars) = task["sprawl_chars"].as_u64() {
+        out.push_str(&format!(
+            "  [sprawl {}]",
+            tasks::digest::thousands(chars as u32)
+        ));
     }
     let holder = &task["assignee"];
     if holder["kind"].as_str().unwrap_or("nobody") != "nobody" {
@@ -1631,6 +1644,23 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 let body = task["body"].as_str().unwrap_or("").trim();
                 if !body.is_empty() {
                     println!("\n{body}");
+                }
+                // ⚠ **Between the body and the history, because it is about
+                // the body and it is not something that happened.** Printed on
+                // every `task show` until an edit makes the body smaller, which
+                // is the point: the shape this replaced was said once, to
+                // whoever ran an unrelated edit, and then was gone.
+                if let Some(said) = task["sprawl_said"].as_str().map(str::trim)
+                    && !said.is_empty()
+                {
+                    println!("\na model read this body, and it is a guess:");
+                    for finding in said.lines().map(str::trim).filter(|l| !l.is_empty()) {
+                        println!("  {finding}");
+                    }
+                    println!(
+                        "  `task edit {} --body -` is how it gets rewritten.",
+                        id.id()
+                    );
                 }
                 if let Some(events) = task["events"].as_array()
                     && !events.is_empty()
@@ -2263,6 +2293,15 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
             outcome: checks::outcome(&said, advice.is_some()),
             // A density read has no subject to license anything with.
             subject_key: None,
+            // ⚠ **What the MODEL said, not what this prints.** `advice` wraps
+            // the findings in a header, a hedge and the remedy command — all of
+            // which are addressed to whoever ran the edit, at the moment they
+            // ran it. Stored, the reader is somebody opening the task later, and
+            // the wrapper would be a note about a session that has gone.
+            said: advice
+                .is_some()
+                .then(|| said.as_ref().ok().map(|words| words.trim().to_string()))
+                .flatten(),
         },
     )
     .await;

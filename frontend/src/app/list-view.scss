@@ -138,6 +138,15 @@
     opacity: 0.7;
   }
 
+  // The same 16px mark as the two above, so a row with all three still fits at
+  // phone width — that budget is what `ui-check` guards.
+  .sprawl {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    opacity: 0.7;
+  }
+
   // ⚠ **Weight, not hue alone.** P0 and P1 are the two that have to be spotted
   // while scrolling; P3 and P4 are marked so they can be recognised and passed
   // over, which is the opposite job and wants the opposite emphasis. Reading

@@ -98,6 +98,19 @@ pub struct Run {
     /// no subject and a check that passed has nothing to license.
     #[serde(default)]
     pub subject_key: Option<String>,
+    /// What a density read said, verbatim, so it outlives the tool result.
+    ///
+    /// ⚠ **Sent on the run that is already being recorded, not by a second
+    /// call.** The alternative was a `PATCH /api/tasks/{id}`, which would put a
+    /// write to a task on the failure path of a check that is explicitly allowed
+    /// to fail silently — `accreting()` swallows everything, because the edit
+    /// has already landed and a session must not pay attention to the checker.
+    ///
+    /// Absent on a filing check, which has no body to be about, and absent on a
+    /// density read that was quiet — which is not the same as absent, and is
+    /// handled by [`record`] as the clear it is.
+    #[serde(default)]
+    pub said: Option<String>,
 }
 
 /// The key a refusal is remembered by.
@@ -148,6 +161,45 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     .execute(pool)
     .await
     .context("recording what a check did")?;
+    remember(pool, run).await
+}
+
+/// Keep what a density read said, on the task it was about.
+///
+/// ⚠ **Only `spoke` and `quiet` touch the flag; a timeout or an error must
+/// not.** Those two mean the body was never judged — 37 of 268 reads timed out
+/// over the 5.6 days to 2026-08-29 — and clearing on them would let a slow model
+/// retire a finding nobody has addressed. Silence from a checker that never ran
+/// is not a verdict, which is the distinction [`Outcome`] exists to preserve.
+async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
+    let (Kind::Density, Some(id)) = (run.kind, run.task_id) else {
+        return Ok(());
+    };
+    match run.outcome {
+        // A later read replaces an earlier one: this is the last thing said
+        // about the body, not a log of opinions. `check_run` keeps the log.
+        Outcome::Spoke => {
+            sqlx::query("UPDATE tasks SET sprawl_said = ?, sprawl_chars = ? WHERE id = ?")
+                .bind(run.said.as_deref())
+                .bind(run.input_chars)
+                .bind(id)
+                .execute(pool)
+                .await
+                .context("keeping what a density read said")?;
+        }
+        // `DENSE` is a verdict about the body as it stands now, and a later
+        // verdict outranks an earlier one. It cannot be summoned to clear a
+        // flag: the read only fires on 3,000 characters of fresh accretion, so
+        // the cheapest way to reach it is to make the body worse.
+        Outcome::Quiet => {
+            sqlx::query("UPDATE tasks SET sprawl_said = NULL, sprawl_chars = NULL WHERE id = ?")
+                .bind(id)
+                .execute(pool)
+                .await
+                .context("clearing what a density read said")?;
+        }
+        Outcome::Timeout | Outcome::Error => {}
+    }
     Ok(())
 }
 
