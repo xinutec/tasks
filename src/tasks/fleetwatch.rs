@@ -102,6 +102,7 @@ fn check(label: &str, observed: String, value: f64, unit: &str, verdict: &str) -
 pub fn checks(report: &Value) -> Vec<Value> {
     let mut out = Vec::new();
     let mut failed_total = 0u64;
+    let mut refused_total = 0u64;
     let mut run_total = 0u64;
     let mut worst: Option<(String, u64)> = None;
     for line in report["commands"].as_array().unwrap_or(&Vec::new()) {
@@ -143,6 +144,7 @@ pub fn checks(report: &Value) -> Vec<Value> {
             ));
         }
         failed_total += failed;
+        refused_total += line["refused"].as_u64().unwrap_or(0);
         run_total += runs;
         if failed > 0 && worst.as_ref().is_none_or(|(_, most)| failed > *most) {
             worst = Some((verb.to_string(), failed));
@@ -173,6 +175,26 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "commands that failed",
             observed,
             failed_total as f64,
+            "",
+            "pass",
+        ));
+        // ⚠ **Its own line, because it is not a fault and the two moved
+        // together.** `add` ended badly on 149 of 272 runs, which reads as a
+        // broken command; 76 of those ended in 0-14 ms — under a round trip —
+        // so they are the CLI declining a malformed invocation, and the rest are
+        // the duplicate check refusing. Both are the tool working. Folded into
+        // one figure, a real fault would have to double the total before it
+        // showed.
+        //
+        // ⚠ **This number is LOW for a fortnight and that is not an
+        // improvement.** Rows written before 2026-08-29 said `error` for both
+        // and are not re-attributed, so `refused` climbs and `failed` falls as
+        // the old window ages out. Say so on the graph rather than in a comment
+        // nobody reading it will see.
+        out.push(check(
+            "commands the tool declined",
+            format!("{refused_total} of {run_total} runs"),
+            refused_total as f64,
             "",
             "pass",
         ));

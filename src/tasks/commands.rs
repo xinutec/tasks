@@ -35,12 +35,23 @@ type Result<T> = std::result::Result<T, AppError>;
 /// ⚠ **Counted apart, never folded together.** The error path is usually the
 /// fast one — a refusal prints and returns without a round trip — so a median
 /// over both reports the tool as quicker than any session experiences it.
+///
+/// ⚠ **`Refused` was inside `Error` until 2026-08-29, and that made the failure
+/// rate unreadable.** `add` failed on 149 of 272 runs, which reads as a broken
+/// command; split by how long they took, 76 of them ended in **0-14 ms** — a
+/// round trip costs ~200 ms, so those never reached the service at all. They are
+/// the CLI declining a malformed invocation, which is it working. The other half
+/// took 5-20 s and is the duplicate check refusing, which is also it working.
+/// One number was carrying two findings and neither could be read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ended {
     /// It did what was asked.
     Ok,
-    /// It refused, or could not.
+    /// The tool DECLINED — a guard fired, or a check refused. Not a fault: this
+    /// is the tool doing its job, and counting it as breakage hides both.
+    Refused,
+    /// It could not. Something went wrong that nobody chose.
     Error,
 }
 
@@ -48,16 +59,56 @@ impl Ended {
     fn as_str(self) -> &'static str {
         match self {
             Ended::Ok => "ok",
+            Ended::Refused => "refused",
             Ended::Error => "error",
         }
     }
 
+    /// ⚠ **An older client sends `error` for both**, and those rows stay
+    /// `Error`. They are not re-attributed: nothing recorded which they were,
+    /// and guessing would invent the split this exists to measure.
     fn read(word: &str) -> Option<Ended> {
         match word {
             "ok" => Some(Ended::Ok),
+            "refused" => Some(Ended::Refused),
             "error" => Some(Ended::Error),
             _ => None,
         }
+    }
+}
+
+/// The tool DECLINED, as against something going wrong.
+///
+/// ⚠ **A type, never a message match.** `checks::outcome` already makes this
+/// argument for timeouts: it turns on the error's chain so that rewording a line
+/// a caller prints cannot silently reclassify a month of runs. The same holds
+/// here, and harder — these messages are long, they get edited, and the
+/// formatter rewrites the text anyone would have matched on.
+#[derive(Debug)]
+pub struct Refused;
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the tool declined")
+    }
+}
+
+impl std::error::Error for Refused {}
+
+/// An error that says the tool declined, carrying the same words as before.
+///
+/// The context IS the message a caller reads, so nothing about the output
+/// changes; the marker rides underneath it where only the classifier looks.
+pub fn declined(said: impl std::fmt::Display) -> anyhow::Error {
+    anyhow::Error::new(Refused).context(said.to_string())
+}
+
+/// How this command ended, read off the error rather than its wording.
+pub fn ended(done: &anyhow::Result<()>) -> Ended {
+    match done {
+        Ok(()) => Ended::Ok,
+        Err(why) if why.chain().any(|link| link.is::<Refused>()) => Ended::Refused,
+        Err(_) => Ended::Error,
     }
 }
 
@@ -186,7 +237,13 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
 pub struct Tally {
     pub verb: String,
     pub runs: usize,
+    /// Went wrong. ⚠ **No longer includes a refusal** — see [`Ended`]. Rows from
+    /// before 2026-08-29 could not tell them apart and are all counted here, so
+    /// this figure falls as the old window ages out rather than because anything
+    /// improved.
     pub failed: usize,
+    /// The tool declined: a guard fired, or a check refused.
+    pub refused: usize,
     /// Milliseconds, by nearest rank over the runs that SUCCEEDED.
     ///
     /// ⚠ **Successes only, and this is the one place the two are not summed.**
@@ -263,6 +320,7 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
                 verb: verb.to_string(),
                 runs: mine.len(),
                 failed: mine.iter().filter(|r| r.outcome == Ended::Error).count(),
+                refused: mine.iter().filter(|r| r.outcome == Ended::Refused).count(),
                 median_ms: rank(&spent, 0.5),
                 p90_ms: rank(&spent, 0.9),
                 worst_ms: *spent.last().unwrap_or(&0),

@@ -186,6 +186,7 @@ fn the_keys_are_the_ones_the_service_actually_sends() {
             verb: "edit".into(),
             runs: 12,
             failed: 4,
+            refused: 0,
             median_ms: 900,
             p90_ms: 27_000,
             worst_ms: 31_000,

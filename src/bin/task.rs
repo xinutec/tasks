@@ -737,6 +737,14 @@ impl Client {
                 // IS the message there, so nothing is being defaulted away.
                 Err(_) => body,
             };
+            // ⚠ **A 4xx is the service DECIDING; a 5xx is it falling over.**
+            // Both used to reach `clocked` as one word. `unlicensed()` — the
+            // guard that refuses `--no-duplicate-check` from a session nothing
+            // has refused — answers 400 with no work done, and counting that as
+            // breakage is what made the failure rate unreadable.
+            if status.is_client_error() {
+                return Err(commands::declined(format!("{status}: {said}")));
+            }
             bail!("{status}: {said}");
         }
         if wrote {
@@ -1446,18 +1454,19 @@ impl Command {
 /// ⚠ **`timings` and `checks` are not recorded.** Reading the measurements is
 /// not use of the tool, and a readout that writes a row every time somebody
 /// looks would show a command whose whole population is people looking at it.
-async fn clocked(client: &Client, verb: &'static str, started: std::time::Instant, ok: bool) {
+async fn clocked(
+    client: &Client,
+    verb: &'static str,
+    started: std::time::Instant,
+    outcome: commands::Ended,
+) {
     if matches!(verb, "timings" | "checks") {
         return;
     }
     let run = commands::Run {
         verb: verb.to_string(),
         elapsed_ms: started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32,
-        outcome: if ok {
-            commands::Ended::Ok
-        } else {
-            commands::Ended::Error
-        },
+        outcome,
         // ⚠ **Always `Some`, never left absent.** This client knows the answer
         // for every command it runs; `None` on the wire means an OLDER client
         // that could not say, and the tally counts those apart rather than
@@ -1509,7 +1518,7 @@ async fn main() -> Result<()> {
 
     let verb = cli.command.verb();
     let done = run(cli, &client).await;
-    clocked(&client, verb, started, done.is_ok()).await;
+    clocked(&client, verb, started, commands::ended(&done)).await;
     done
 }
 
@@ -1714,25 +1723,31 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             check_only,
         } => {
             if repo.is_some() || project.is_some() {
-                bail!(
+                return Err(commands::declined(
                     "a task has no repo and no project — the field went in migration 0004, \
                      and the holder is the whole of an assignment. What this touches goes in \
                      the subject, where every list shows it: `task list` prints one line per \
-                     task and that line is all most sessions will read."
-                );
+                     task and that line is all most sessions will read.",
+                ));
             }
             let subject = match (subject, subject_flag) {
                 (Some(subject), None) => subject,
-                (None, Some(said)) => bail!(
-                    "the subject is the first argument, not a flag: \
-                     `task add {said:?} --priority P2`. Nothing was filed."
-                ),
-                (Some(_), Some(_)) => bail!(
-                    "the subject was given twice, as the argument and as `--subject`. \
-                     Nothing was filed, because there is no way to tell which one you meant."
-                ),
+                (None, Some(said)) => {
+                    return Err(commands::declined(format!(
+                        "the subject is the first argument, not a flag: \
+                         `task add {said:?} --priority P2`. Nothing was filed."
+                    )));
+                }
+                (Some(_), Some(_)) => {
+                    return Err(commands::declined(
+                        "the subject was given twice, as the argument and as `--subject`. \
+                         Nothing was filed, because there is no way to tell which one you meant.",
+                    ));
+                }
                 (None, None) => {
-                    bail!("a filing needs a subject: `task add \"one line\" --priority P2`.")
+                    return Err(commands::declined(
+                        "a filing needs a subject: `task add \"one line\" --priority P2`.",
+                    ));
                 }
             };
             client.writing()?;
@@ -1755,7 +1770,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 }),
             };
             if let Some(already) = duplicates::same_subject(&subject, &corpus) {
-                bail!("{}", duplicates::collision(already));
+                return Err(commands::declined(duplicates::collision(already)));
             }
             // ⚠ **The model runs BEFORE the POST, because a refusal it comes
             // after is not a refusal.** This cost the filing 8-25 seconds of
