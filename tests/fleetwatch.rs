@@ -219,3 +219,97 @@ fn the_keys_are_the_ones_the_service_actually_sends() {
     assert_eq!(value("commands that failed"), 4.0);
     assert_eq!(value("edit latency"), 27_000.0);
 }
+
+/// The lines about the WORK, driven from the real tally.
+///
+/// ⚠ **Same gap, same guard as `the_keys_are_the_ones_the_service_actually_sends`.**
+/// `checks()` reads `work["sprawling"]` out of a `Value` and falls back to
+/// skipping the line, so a field renamed on `work::Tally` would silently drop
+/// the series and fail nothing. This drives the struct through serde.
+mod the_work {
+    use super::*;
+    use tasks::tasks::work::Tally;
+
+    fn from(work: Option<Tally>) -> Vec<serde_json::Value> {
+        let mut report = serde_json::json!({
+            "interval_s": 3600,
+            "commands": [],
+            "checks": [],
+        });
+        if let Some(work) = work {
+            report["work"] = serde_json::to_value(work).expect("a work tally serialises");
+        }
+        fleetwatch::checks(&report)
+    }
+
+    fn standing() -> Tally {
+        Tally {
+            open: 173,
+            unheld: 0,
+            overdue: 0,
+            urgent: 14,
+            blocked: 6,
+            sprawling: 3,
+        }
+    }
+
+    fn line(built: &[serde_json::Value], label: &str) -> serde_json::Value {
+        built
+            .iter()
+            .find(|c| c["label"] == label)
+            .unwrap_or_else(|| panic!("no line labelled {label:?}"))
+            .clone()
+    }
+
+    #[test]
+    fn the_backlog_reaches_the_wire_with_the_names_the_service_sends() {
+        let built = from(Some(standing()));
+        assert_eq!(line(&built, "open tasks")["value"], 173.0);
+        assert_eq!(line(&built, "tasks in the pile")["value"], 0.0);
+        assert_eq!(line(&built, "tasks at P0 or P1")["value"], 14.0);
+        assert_eq!(line(&built, "tasks blocked on open work")["value"], 6.0);
+        assert_eq!(
+            line(&built, "bodies carrying an unaddressed finding")["value"],
+            3.0,
+            "the number 0014 exists to move is the one that must not go missing"
+        );
+    }
+
+    #[test]
+    fn a_count_that_could_not_be_taken_sends_nothing() {
+        // ⚠ **Zero is a legitimate reading** — it is what an empty tracker looks
+        // like — so a failed query must not answer with one. `standing()` is
+        // called with `.ok()` in the route for exactly this, and the section is
+        // skipped rather than zeroed.
+        let built = from(None);
+        assert!(
+            !built.iter().any(|c| c["label"] == "open tasks"),
+            "a missing tally published itself as an empty backlog: {built:?}"
+        );
+    }
+
+    #[test]
+    fn a_missed_deadline_is_the_one_thing_here_that_claims_a_bound() {
+        // Zero is defensible: a deadline is the only thing in this tracker that
+        // somebody outside it set, the digest already shouts OVERDUE, and the
+        // rank escalates a week out. The rest have no derived bound, so a
+        // verdict on them would publish a guess as a measurement.
+        let clear = from(Some(standing()));
+        assert_eq!(line(&clear, "tasks past their deadline")["verdict"], "pass");
+        assert_eq!(line(&clear, "open tasks")["verdict"], "pass");
+
+        let missed = from(Some(Tally {
+            overdue: 2,
+            ..standing()
+        }));
+        assert_eq!(
+            line(&missed, "tasks past their deadline")["verdict"],
+            "warn"
+        );
+        assert_eq!(
+            line(&missed, "tasks at P0 or P1")["verdict"],
+            "pass",
+            "urgency is a level somebody chose, not a state that changed"
+        );
+    }
+}

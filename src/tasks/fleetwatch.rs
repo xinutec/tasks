@@ -217,6 +217,42 @@ pub fn checks(report: &Value) -> Vec<Value> {
             },
         ));
     }
+    // ⚠ **The WORK, which no line here described until 2026-08-29.** Everything
+    // above measures the tracker's machinery; this measures what it is holding.
+    // Absent when the service could not count — a section that reported zeros on
+    // a failed query would publish "the backlog is clear" as a finding.
+    if let Some(work) = report.get("work").filter(|w| w.is_object()) {
+        for (label, key) in [
+            ("open tasks", "open"),
+            ("tasks in the pile", "unheld"),
+            ("tasks at P0 or P1", "urgent"),
+            ("tasks blocked on open work", "blocked"),
+            // The number `0014` exists to move. Nothing charted it, so whether
+            // the digest mark changes behaviour was unanswerable — see #1252.
+            ("bodies carrying an unaddressed finding", "sprawling"),
+        ] {
+            let Some(count) = work[key].as_u64() else {
+                continue;
+            };
+            out.push(check(label, format!("{count}"), count as f64, "", "pass"));
+        }
+        // ⚠ **The one line here that claims a bound, on the same ground the
+        // filing line does: zero is defensible.** A deadline is the only thing
+        // in this tracker that anybody outside it set, the digest already SHOUTS
+        // `OVERDUE`, and the rank escalates to `P0` a week out — three places
+        // that already treat a missed date as a state change rather than a
+        // level. The rest stay values: their distributions have no derived
+        // bounds and inventing one now would publish a guess as a measurement.
+        if let Some(overdue) = work["overdue"].as_u64() {
+            out.push(check(
+                "tasks past their deadline",
+                format!("{overdue}"),
+                overdue as f64,
+                "",
+                if overdue > 0 { "warn" } else { "pass" },
+            ));
+        }
+    }
     out
 }
 

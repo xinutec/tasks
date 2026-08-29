@@ -704,3 +704,81 @@ mod pile {
         );
     }
 }
+
+/// The hourly report, driven through the real router.
+///
+/// ⚠ **The half the builder's tests cannot reach.** `tests/fleetwatch.rs` pins
+/// that `checks()` turns a work tally into lines, and it would keep doing so
+/// while this route stopped putting one in the payload — the same shape as the
+/// `pile` parameter above, and the same shape as the ULID: both ends
+/// self-consistent, disagreeing with each other. What decides is one field in
+/// one struct literal in `routes::api`.
+mod reporting {
+    use super::*;
+
+    /// Record a command and hand back whatever the service said.
+    async fn command_ran(app: &axum::Router, session: &str) -> serde_json::Value {
+        let res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/commands")
+                    .method("POST")
+                    .header("Authorization", format!("Bearer {TOKEN}"))
+                    .header("X-Session-Id", session)
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(
+                        r#"{"verb":"list","elapsed_ms":42,"outcome":"ok"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .expect("the router answered");
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 256 * 1024)
+            .await
+            .expect("a body");
+        serde_json::from_slice(&body).expect("an answer")
+    }
+
+    #[tokio::test]
+    async fn the_first_caller_of_the_hour_is_handed_the_work_as_well_as_the_timings() {
+        let pool = common::fresh_db().await;
+        seed(&pool).await;
+        let app = app(pool);
+
+        let carried = command_ran(&app, "sess-1").await;
+        let report = carried
+            .get("report")
+            .filter(|r| !r.is_null())
+            .expect("the first caller of the hour carries the report");
+
+        // The two that were always there.
+        assert!(report.get("commands").is_some(), "{report}");
+        assert!(report.get("checks").is_some(), "{report}");
+        // The one that was not. `seed` files four tasks, one of them unheld.
+        let work = report
+            .get("work")
+            .expect("nothing about the WORK reached the wire — see #1252");
+        assert_eq!(work["open"], 4, "{work}");
+        assert_eq!(work["unheld"], 1, "the pile is its own number: {work}");
+        assert_eq!(work["sprawling"], 0, "{work}");
+    }
+
+    #[tokio::test]
+    async fn only_one_caller_an_hour_pays_for_it() {
+        // ⚠ **The guard that keeps this off the hot path.** Every command posts
+        // here; a report on each would put six aggregates and two windows on the
+        // path of every `task list`. The second caller must get nothing.
+        let pool = common::fresh_db().await;
+        seed(&pool).await;
+        let app = app(pool);
+
+        assert!(command_ran(&app, "sess-1").await.get("report").is_some());
+        let second = command_ran(&app, "sess-2").await;
+        assert!(
+            second.get("report").is_none() || second["report"].is_null(),
+            "a second caller inside the hour was also handed the job: {second}"
+        );
+    }
+}

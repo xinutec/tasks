@@ -18,6 +18,7 @@ use crate::tasks::commands;
 use crate::tasks::focus;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
 use crate::tasks::types::{Revision, Task, TaskDetail, Updated};
+use crate::tasks::work;
 use crate::wire::{RequiredKeys, Wire};
 
 /// Every `/api` path that is not a route.
@@ -470,11 +471,17 @@ pub async fn command_ran(
     }
     let window = commands::recent(&app.db, 1).await.unwrap_or_default();
     let checks = checks::recent(&app.db, 1).await.unwrap_or_default();
+    // ⚠ **Absent rather than zeroed when the count fails.** A tally of zero open
+    // tasks is a legitimate reading — it is what an empty tracker looks like —
+    // so answering with one because a query errored would publish "the backlog
+    // is clear" as a measurement. `checks()` skips the section it cannot see.
+    let work = work::standing(&app.db).await.ok();
     Ok(Json(Carry {
         report: Some(Report {
             interval_s: commands::REPORTING_INTERVAL_S,
             commands: commands::tally(&window),
             checks: checks::tally(&checks),
+            work,
         }),
     }))
 }
@@ -500,6 +507,11 @@ pub struct Report {
     interval_s: u64,
     commands: Vec<commands::Tally>,
     checks: Vec<checks::Tally>,
+    /// What is standing in the tracker — the half that is about the WORK rather
+    /// than about the tool. Absent when the count could not be taken, which is
+    /// not the same as a tracker with nothing in it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    work: Option<work::Tally>,
 }
 
 /// What the CLI has been doing, newest first.
