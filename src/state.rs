@@ -11,7 +11,13 @@ use sqlx::MySqlPool;
 
 use crate::config::Config;
 
-const OAUTH_TTL: Duration = Duration::from_secs(600); // 10 minutes
+/// How long a started sign-in stays valid, for the in-memory entry AND for the
+/// cookie that binds it to the browser — one number, because two would let the
+/// cookie outlive the entry it names and turn a stale sign-in into a confusing
+/// refusal rather than a clear one.
+pub const OAUTH_TTL_SECS: i64 = 600; // 10 minutes
+
+const OAUTH_TTL: Duration = Duration::from_secs(OAUTH_TTL_SECS as u64);
 
 pub struct PendingOauth {
     created: Instant,
