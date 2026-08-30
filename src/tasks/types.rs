@@ -172,6 +172,35 @@ macro_rules! due_soon {
     };
 }
 
+/// SQL for *the body as a reader actually sees it*: trimmed at both ends, the
+/// way `task show` trims it before printing.
+///
+/// ⚠⚠ **`TRIM()` IS NOT `trim()` — it removes SPACES AND NOTHING ELSE.** This
+/// macro exists because that difference was live in `detailed` and silently
+/// wrong: a body of three blank lines has `LENGTH(TRIM(body)) = 3`, so the
+/// service reported prose behind a task that prints as nothing, and the app
+/// offered to open an empty sheet — the exact thing `detailed`'s own doc says it
+/// exists to prevent. It surfaced only when a second expression over the same
+/// column had to agree with it.
+///
+/// `[[:space:]]` rather than `\s` deliberately: a backslash in a SQL literal is
+/// an escape that `NO_BACKSLASH_ESCAPES` turns off, and this would then trim
+/// nothing while still looking right.
+///
+/// Spelled once because two projections depend on agreeing: whether there is a
+/// body, and how many lines it is. Two definitions of *trimmed* are two answers
+/// about one body.
+#[macro_export]
+macro_rules! body_shown {
+    ($column:literal) => {
+        concat!(
+            "REGEXP_REPLACE(",
+            $column,
+            ", '^[[:space:]]+|[[:space:]]+$', '')"
+        )
+    };
+}
+
 #[macro_export]
 macro_rules! still_open {
     ($column:literal) => {
@@ -548,6 +577,23 @@ pub struct Task {
     /// one-line reminder has none, and offering to open an empty sheet is worse
     /// than not offering.
     pub detailed: bool,
+    /// How many lines the body prints as, `0` when there is none.
+    ///
+    /// ⚠ **So a reader that truncates knows what it truncated.**
+    /// [`detailed`](Self::detailed) answers *is there prose*; this answers *how
+    /// much*, which is the question anyone piping to `head` is actually asking
+    /// and the one the output could not answer. Measured 2026-08-30 over the
+    /// 160 open tasks: median 42 lines, p90 136, max 509 — half the corpus was
+    /// longer than a `head -40`, and `head -40` over all of it dropped 4,997 of
+    /// 9,491 lines while printing nothing to say so. A truncated read that
+    /// looks exactly like a complete one is the failure this exists to stop.
+    ///
+    /// ⚠ **A count, not a flag, and unconditional.** A threshold would put the
+    /// number only on bodies already known to be long, which is the one case a
+    /// reader can already see coming; the reader who needs it is the one who
+    /// does not yet know. Cheap enough to always carry — it is a `u32`, against
+    /// the prose it is describing.
+    pub body_lines: u32,
     /// What the session that filed it calls itself — `observe`, `health`,
     /// `dev-lint`. Absent when Pippijn filed it, or when the filing session had
     /// not named itself.

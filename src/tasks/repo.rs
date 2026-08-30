@@ -14,7 +14,7 @@ use crate::tasks::types::{
     Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Ranking, Replaced, Revision,
     Status, Task, TaskDetail, Updated,
 };
-use crate::{due_soon, still_open};
+use crate::{body_shown, due_soon, still_open};
 
 type Result<T> = std::result::Result<T, AppError>;
 
@@ -119,6 +119,9 @@ struct Row {
     /// the wire to answer a boolean — the mistake this whole service exists to
     /// avoid, in miniature.
     detailed: i8,
+    /// How many lines the body prints as. Counted in SQL for the reason
+    /// `detailed` is, and over the TRIMMED body — see the projection.
+    body_lines: i64,
     /// How long the body was when a model last read it and spoke. NULL when
     /// nothing is outstanding — see [`Task::sprawl_chars`]. The words it said
     /// are deliberately NOT here: a list must not carry prose.
@@ -164,6 +167,7 @@ impl Row {
             blocked: self.open_blockers > 0,
             assignee,
             detailed: self.detailed != 0,
+            body_lines: self.body_lines.max(0) as u32,
             sprawl_chars: self.sprawl_chars,
             filed_by: self.filed_by,
             created_at: utc(self.created_at),
@@ -215,7 +219,29 @@ macro_rules! select {
             still_open!("bt.status"),
             ") AS open_blockers, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
-            "(LENGTH(TRIM(t.body)) > 0) AS detailed, t.sprawl_chars, ",
+            // Both of these are questions about the body a reader SEES, so
+            // both go through `body_shown!` — see it for what `TRIM()` does
+            // not do, and for why one definition rather than two.
+            "(LENGTH(",
+            body_shown!("t.body"),
+            ") > 0) AS detailed, t.sprawl_chars, ",
+            // ⚠ **Counted the way `show` PRINTS it.** Newlines by subtraction:
+            // `LENGTH` is bytes, but the difference of two byte counts over a
+            // one-byte needle is an exact newline count whatever else is in the
+            // body — which matters, since these bodies are full of `⚠` and
+            // em-dashes. `CHAR(10)` rather than `'\n'` for the escaping reason
+            // `body_shown!` gives. `+ 1` because a body with no trailing
+            // newline still ends a line, and after trimming that is every body.
+            // `CAST(... AS SIGNED)` for the reason `work::standing` casts:
+            // unsigned arithmetic comes back as `BIGINT UNSIGNED`, which sqlx
+            // refuses to give an `i64` — at RUNTIME, against a real row only.
+            "CAST(IF(LENGTH(",
+            body_shown!("t.body"),
+            ") = 0, 0, LENGTH(",
+            body_shown!("t.body"),
+            ") - LENGTH(REPLACE(",
+            body_shown!("t.body"),
+            ", CHAR(10), '')) + 1) AS SIGNED) AS body_lines, ",
             // Correlated rather than joined: a task has one `created` event, but
             // a join that ever saw two would silently DUPLICATE the task in
             // every list — a list is the one thing here that must not gain rows.

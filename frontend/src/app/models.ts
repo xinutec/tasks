@@ -88,6 +88,16 @@ export interface Task {
   /** Whether there is prose behind it worth opening. */
   detailed: boolean;
   /**
+   * How many lines the body prints as, `0` when there is none.
+   *
+   * ⚠ **`detailed` says whether there is prose; this says how much.** It exists
+   * for the CLI, where a reader pipes `task show` to `head` and a truncated
+   * read looks exactly like a complete one. The app scrolls, so it has no such
+   * problem — carried here because the wire carries it, not because a view
+   * needs to draw it.
+   */
+  body_lines: number;
+  /**
    * What the session that filed it calls itself. Absent when Pippijn filed it,
    * or when the filing session had never named itself — both mean "not said",
    * which is why it is drawn only where there is no holder.

@@ -1372,6 +1372,17 @@ fn line(task: &Value) -> String {
             .collect();
         out.push_str(&format!("  ⛔{}", ids.join(",")));
     }
+    // ⚠ **On `line()` rather than beside the body, because THAT is what
+    // survives.** This is the first line `task show` prints, so a reader that
+    // pipes to `head` still gets the count no matter where it cuts — a note
+    // printed above the body would be the first thing a small enough `head`
+    // removed. It costs `task list` about ten characters a row, and buys the
+    // same number in both places, which is the trade `[sprawl]` below makes.
+    match task["body_lines"].as_u64().unwrap_or(0) {
+        0 => {}
+        1 => out.push_str("  [1 line]"),
+        n => out.push_str(&format!("  [{n} lines]")),
+    }
     // The same marker the digest carries, from the same field, so a session
     // that sees `[sprawl 18.2K]` in its prompt and then runs `task list` is not
     // shown two different accounts of the same body.

@@ -31,6 +31,7 @@ fn task(id: u64, subject: &str, status: Status, assignee: Assignee) -> Task {
         blocked: false,
         assignee,
         detailed: false,
+        body_lines: 0,
         sprawl_chars: None,
         filed_by: None,
         created_at: at,

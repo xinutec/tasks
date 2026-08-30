@@ -1658,3 +1658,124 @@ mod unknown_holder {
         .expect("a person id is not validated here");
     }
 }
+
+/// How much prose is behind a task, which `detailed` only ever answered as a
+/// boolean.
+///
+/// ⚠ **The oracle is the STORED body, not a number written here.** Every case
+/// reads the body back and counts it with Rust's own `lines()` over
+/// `trim()` — exactly the two operations `task show` performs before printing —
+/// and asserts SQL agrees. A hand-written expectation would encode my reading of
+/// the projection, which is the thing under test; and `create` is free to
+/// normalise what it stores without this becoming a lie.
+mod how_much_prose {
+    use super::*;
+
+    /// What `task show` does to a body before printing it.
+    fn as_printed(body: &str) -> usize {
+        match body.trim() {
+            "" => 0,
+            printed => printed.lines().count(),
+        }
+    }
+
+    async fn stored(pool: &sqlx::MySqlPool, body: &str) -> (u32, String) {
+        let task = repo::create(
+            &pool.clone(),
+            NewTask {
+                body: body.into(),
+                ..filed("Something with prose behind it")
+            },
+            &pippijn(),
+        )
+        .await
+        .expect("filing");
+        let detail = repo::get(pool, task.id)
+            .await
+            .expect("reading it back")
+            .expect("it was just filed");
+        (detail.task.body_lines, detail.body)
+    }
+
+    #[tokio::test]
+    async fn the_count_is_the_one_show_would_print() {
+        let pool = common::fresh_db().await;
+
+        // ⚠ Each of these breaks a different part of the projection. The
+        // trailing-newline pair is `+ 1` — count newlines alone and a body with
+        // no final newline is short by one, which is EVERY body here, since
+        // `--body` deliberately emits none. The blank-line cases are `TRIM`:
+        // stored padding the reader never sees must not be charged to it. The
+        // last is `LENGTH` being bytes — a body of multibyte characters has far
+        // more bytes than characters, and only a difference over a one-byte
+        // needle survives that.
+        for body in [
+            "one line, no newline at the end",
+            "one line, newline at the end\n",
+            "first\nsecond\nthird",
+            "first\nsecond\nthird\n",
+            "\n\n\npadded above and below\n\n\n",
+            "a paragraph\n\nand another after a blank line",
+            "⚠ **a warning** — with an em-dash\n⚠ and a second such line",
+            "мультибайт\nна двух строках\n",
+        ] {
+            let (counted, back) = stored(&pool, body).await;
+            assert_eq!(
+                counted as usize,
+                as_printed(&back),
+                "SQL and `show` disagree about {body:?}, stored as {back:?}"
+            );
+        }
+    }
+
+    /// ⚠ The two must agree, because they are answered by two different
+    /// expressions over the same column: `detailed` is `LENGTH(TRIM(body)) > 0`
+    /// and the count is its own `IF`. A reader shown `detailed: true` beside
+    /// `body_lines: 0` would have no way to tell which one to believe.
+    #[tokio::test]
+    async fn nothing_to_read_is_zero_and_detailed_agrees() {
+        let pool = common::fresh_db().await;
+
+        for empty in ["", "   ", "\n\n\n", " \n\t\n "] {
+            let task = repo::create(
+                &pool,
+                NewTask {
+                    body: empty.into(),
+                    ..filed("Filed as a one-line reminder")
+                },
+                &pippijn(),
+            )
+            .await
+            .expect("filing");
+            assert_eq!(
+                (task.body_lines, task.detailed),
+                (0, false),
+                "a body of {empty:?} was counted as prose"
+            );
+        }
+
+        let (counted, _) = stored(&pool, "actual prose").await;
+        assert_eq!(counted, 1, "one line of prose counted as {counted}");
+    }
+
+    /// ⚠ **The list carries it too, and from the same projection.** `show` and
+    /// `list` are two reads of one `select!`, and the whole reason the count
+    /// sits on the shared row is that a session cannot be shown two different
+    /// accounts of one body.
+    #[tokio::test]
+    async fn a_list_row_carries_the_same_count_as_the_task_itself() {
+        let pool = common::fresh_db().await;
+
+        let (counted, _) = stored(&pool, "first\nsecond\nthird").await;
+        let listed = repo::list(&pool, &Filter::default())
+            .await
+            .expect("listing");
+        let row = listed.first().expect("the task that was just filed");
+        assert_eq!(row.body_lines, counted, "the list disagrees with the task");
+        assert_eq!(
+            row.body_lines, 3,
+            "three lines counted as {}",
+            row.body_lines
+        );
+    }
+}

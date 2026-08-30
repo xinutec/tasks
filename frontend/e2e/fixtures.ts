@@ -74,6 +74,7 @@ export const TASKS = [
     // In the pile and says where it came from — the row `filed_by` exists for.
     filed_by: 'health',
     detailed: true,
+    body_lines: 37,
     created_at: '2026-08-05T09:00:00Z',
     updated_at: '2026-08-05T09:00:00Z',
   },
@@ -89,6 +90,7 @@ export const TASKS = [
     // two names, and who is carrying it is the more useful one.
     filed_by: 'dev-lint',
     detailed: true,
+    body_lines: 4,
     created_at: '2026-08-05T09:00:00Z',
     updated_at: '2026-08-08T09:00:00Z',
   },
@@ -108,6 +110,7 @@ export const TASKS = [
     // No name: drawn as the raw uuid, which is wider than the phone.
     assignee: { kind: 'session', id: SESSIONS[1].id },
     detailed: false,
+    body_lines: 0,
     created_at: '2026-08-08T09:00:00Z',
     updated_at: '2026-08-08T09:00:00Z',
   },
@@ -117,6 +120,7 @@ export const TASKS = [
     status: 'open',
     assignee: { kind: 'person', id: 'pippijn', name: 'pippijn' },
     detailed: true,
+    body_lines: 182,
     created_at: '2026-08-06T09:00:00Z',
     updated_at: '2026-08-06T09:00:00Z',
   },
@@ -129,6 +133,7 @@ export const TASKS = [
     status: 'open',
     assignee: { kind: 'nobody' },
     detailed: false,
+    body_lines: 0,
     created_at: '2026-08-07T09:00:00Z',
     updated_at: '2026-08-07T09:00:00Z',
   },
@@ -138,6 +143,7 @@ export const TASKS = [
     status: 'open',
     assignee: { kind: 'person', id: 'pippijn', name: 'pippijn' },
     detailed: false,
+    body_lines: 0,
     created_at: '2026-08-08T09:00:00Z',
     updated_at: '2026-08-08T09:00:00Z',
   },
