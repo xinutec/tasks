@@ -79,12 +79,14 @@ in  { name = "tasks"
         , name = "frontend deps match the lockfile"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend lint"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "lint" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , {-  `ng build` compiles only what `src/main.ts` imports, and Playwright
@@ -96,13 +98,14 @@ in  { name = "tasks"
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "typecheck" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend unit tests"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "test" ]
-        , env = G.oneAngularWorker
+        , env = G.nonInteractive # G.oneAngularWorker
         , timeout_s = 1800
         }
       , {-  `ng`'s own output path is asserted on, and `ngBuild` additionally
@@ -114,13 +117,14 @@ in  { name = "tasks"
         , name = "frontend build"
         , cwd = "frontend"
         , argv = G.ngBuild "../../" [ "dist/tasks-web/browser" ] [ "pnpm", "run", "build" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , G.Check::{
         , name = "frontend ui-check (phone-width layout harness)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
-        , env = G.oneAngularWorker
+        , env = G.nonInteractive # G.oneAngularWorker
         , timeout_s = 1800
         }
       , {-  The CLI is delivered by nix, not by the container, so `cargo build`
