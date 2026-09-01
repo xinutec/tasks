@@ -55,7 +55,7 @@ use tasks::tasks::fleetwatch;
 use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
 use tasks::tasks::selection::{self, list_query};
-use tasks::tasks::types::Priority;
+use tasks::tasks::types::{AssigneeKind, Priority, Status, Task};
 
 /// Where the service lives. The VPN name, because that is the only place it is.
 const DEFAULT_URL: &str = "https://tasks.xinutec.org";
@@ -1079,8 +1079,13 @@ async fn settled_now(client: &Client) -> (Vec<duplicates::Settled>, usize) {
     let mut kept = Vec::new();
     let mut skipped = 0usize;
     for task in rows {
-        let status = task["status"].as_str().unwrap_or("");
-        if !matches!(status, "done" | "dropped") {
+        let Some(status) = task["status"]
+            .as_str()
+            .and_then(|s| s.parse::<Status>().ok())
+        else {
+            continue;
+        };
+        if status.is_open() {
             continue;
         }
         let (Some(id), Some(subject)) = (task["id"].as_u64(), task["subject"].as_str()) else {
@@ -1093,7 +1098,7 @@ async fn settled_now(client: &Client) -> (Vec<duplicates::Settled>, usize) {
         kept.push(duplicates::Settled {
             id,
             subject: subject.to_string(),
-            dropped: status == "dropped",
+            dropped: status == Status::Dropped,
         });
     }
     (kept, skipped)
@@ -1332,13 +1337,8 @@ fn body(arg: &str) -> Result<String> {
 /// asked what to pick up, and that is the moment the answer is worth its bytes.
 /// So: seeing the pile stays free, and deciding costs one command rather than
 /// opening a task (548 bytes against 2,732, measured on #19).
-fn line(task: &Value) -> String {
-    let marker = match task["status"].as_str().unwrap_or("open") {
-        "doing" => "- [>]",
-        "done" => "- [x]",
-        "dropped" => "- [-]",
-        _ => "- [ ]",
-    };
+fn line(task: &Task) -> String {
+    let marker = task.status.marker();
     // Before the subject rather than after it: a column of ranks is scannable
     // down the left edge, and the list is already sorted so they arrive in
     // order. Two spaces where there is no rank, so nothing shifts sideways
@@ -1346,30 +1346,25 @@ fn line(task: &Value) -> String {
     // A near deadline raises the rank; `!` marks a level nobody chose, so the
     // order never reads as random. The rule lives in SQL — this only prints
     // whichever value the service says the list was sorted by.
-    let rank = match task["escalated_to"].as_str() {
-        Some(raised) => format!("{raised}!"),
-        None => task["priority"].as_str().unwrap_or("").to_string(),
+    // `!` marks a level nobody chose — [`Task::urgency`] is the rule, and it is
+    // the same one the list was sorted by.
+    let rank = match task.escalated_to {
+        Some(raised) => format!("{}!", raised.as_str()),
+        None => task
+            .priority
+            .map(|p| p.as_str().to_string())
+            .unwrap_or_default(),
     };
-    let mut out = format!(
-        "{marker} #{:<4} {rank:<3} {}",
-        task["id"].as_u64().unwrap_or(0),
-        task["subject"].as_str().unwrap_or("")
-    );
-    if let Some(due) = task["due"].as_str() {
-        if task["overdue"].as_bool().unwrap_or(false) {
+    let mut out = format!("{marker} #{:<4} {rank:<3} {}", task.id, task.subject);
+    if let Some(due) = task.due {
+        if task.overdue {
             out.push_str(&format!("  OVERDUE {due}"));
         } else {
             out.push_str(&format!("  due {due}"));
         }
     }
-    if task["blocked"].as_bool().unwrap_or(false)
-        && let Some(on) = task["blocked_on"].as_array()
-    {
-        let ids: Vec<String> = on
-            .iter()
-            .filter_map(|v| v.as_u64())
-            .map(|v| format!("#{v}"))
-            .collect();
+    if task.blocked && !task.blocked_on.is_empty() {
+        let ids: Vec<String> = task.blocked_on.iter().map(|v| format!("#{v}")).collect();
         out.push_str(&format!("  ⛔{}", ids.join(",")));
     }
     // ⚠ **On `line()` rather than beside the body, because THAT is what
@@ -1378,7 +1373,7 @@ fn line(task: &Value) -> String {
     // printed above the body would be the first thing a small enough `head`
     // removed. It costs `task list` about ten characters a row, and buys the
     // same number in both places, which is the trade `[sprawl]` below makes.
-    match task["body_lines"].as_u64().unwrap_or(0) {
+    match task.body_lines {
         0 => {}
         1 => out.push_str("  [1 line]"),
         n => out.push_str(&format!("  [{n} lines]")),
@@ -1386,20 +1381,14 @@ fn line(task: &Value) -> String {
     // The same marker the digest carries, from the same field, so a session
     // that sees `[sprawl 18.2K]` in its prompt and then runs `task list` is not
     // shown two different accounts of the same body.
-    if let Some(chars) = task["sprawl_chars"].as_u64() {
-        out.push_str(&format!(
-            "  [sprawl {}]",
-            tasks::digest::thousands(chars as u32)
-        ));
+    if let Some(chars) = task.sprawl_chars {
+        out.push_str(&format!("  [sprawl {}]", tasks::digest::thousands(chars)));
     }
-    let holder = &task["assignee"];
-    if holder["kind"].as_str().unwrap_or("nobody") != "nobody" {
-        let who = holder["name"]
-            .as_str()
-            .or_else(|| holder["id"].as_str())
-            .unwrap_or("?");
-        out.push_str(&format!("  ({who})"));
-    } else if let Some(from) = task["filed_by"].as_str() {
+    // `label()` is the one spelling of name-else-id, and it is why this no
+    // longer prints a blank for a holder whose name is present but empty.
+    if task.assignee.kind != AssigneeKind::Nobody {
+        out.push_str(&format!("  ({})", task.assignee.label()));
+    } else if let Some(from) = &task.filed_by {
         out.push_str(&format!("  (from {from})"));
     }
     out
@@ -1588,9 +1577,14 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
             let tasks = client.send(req).await?.unwrap_or(json!([]));
+            // ⚠ **Decoded here rather than inside the closure**, which cannot
+            // use `?`: a list this CLI could not read is an error and says so,
+            // where the `Value` it used to draw from had a default for every
+            // field and would have printed a plausible wrong row instead.
+            let shown: Vec<Task> = serde_json::from_value(tasks.clone())
+                .context("the service answered with a list this CLI could not read")?;
             emit(cli.json, &tasks, || {
-                let tasks = tasks.as_array().cloned().unwrap_or_default();
-                if tasks.is_empty() {
+                if shown.is_empty() {
                     // Which question came back empty, because the three read
                     // very differently: an empty pile is the fleet keeping up,
                     // and an empty plate is this session having nothing to do.
@@ -1607,7 +1601,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                         }
                     );
                 }
-                for task in &tasks {
+                for task in &shown {
                     println!("{}", line(task));
                 }
             });
@@ -1685,8 +1679,10 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 print!("{}", task["body"].as_str().unwrap_or_default());
                 return Ok(());
             }
+            let shown: Task = serde_json::from_value(task.clone())
+                .context("the service answered with a task this CLI could not read")?;
             emit(cli.json, &task, || {
-                println!("{}", line(&task));
+                println!("{}", line(&shown));
                 let body = task["body"].as_str().unwrap_or("").trim();
                 if !body.is_empty() {
                     println!("\n{body}");
@@ -1876,7 +1872,9 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 .request(reqwest::Method::POST, "/api/tasks")
                 .json(&payload);
             let task = client.send(req).await?.context("no task came back")?;
-            emit(cli.json, &task, || println!("{}", line(&task)));
+            let shown: Task = serde_json::from_value(task.clone())
+                .context("the service answered with a task this CLI could not read")?;
+            emit(cli.json, &task, || println!("{}", line(&shown)));
             // After the filing and on stderr: the task landed, and this is a
             // note about it rather than a failure of it.
             if let Some(note) = closed_match {
@@ -2295,8 +2293,10 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
         .request(reqwest::Method::PATCH, &format!("/api/tasks/{id}"))
         .json(&change);
     let task = client.send(req).await?.context("no task came back")?;
+    let shown: Task = serde_json::from_value(task.clone())
+        .context("the service answered with a task this CLI could not read")?;
     emit(json, &task, || {
-        println!("{}", line(&task));
+        println!("{}", line(&shown));
         if task["changed"].as_array().is_some_and(|c| c.is_empty()) {
             println!("nothing changed — it was already like that");
         }
