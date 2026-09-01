@@ -501,10 +501,16 @@ async fn last_written(
     let row: Option<EventRow> = sqlx::query_as(
         "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, e.kind, e.detail \
          FROM task_events e LEFT JOIN sessions s ON s.id = e.actor_id \
-         WHERE e.task_id = ? AND e.kind IN ('created', 'edited') \
+         WHERE e.task_id = ? AND e.kind IN (?, ?) \
          ORDER BY e.id DESC LIMIT 1",
     )
     .bind(id)
+    // ⚠ **Bound from [`Moved`], not spelled.** These two were the last hand
+    // written copy of that vocabulary: a variant renamed here and nowhere else
+    // fails no test and silently stops matching the writes it is looking for —
+    // the `still_open!` shape, one table over.
+    .bind(Moved::Created.as_str())
+    .bind(Moved::Edited.as_str())
     .fetch_optional(&mut **tx)
     .await
     .context("reading who last wrote a task")?;
