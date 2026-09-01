@@ -211,6 +211,51 @@ So: **the present tense at the top, the history under it.** Whoever opens this
 next wants to know where it stands, not how it got here — and the second
 question is only asked once the first is answered.
 
+### What is safe to cut, measured rather than judged
+
+⚠ **Tested 2026-09-01 on twelve bodies.** Each was cut, then a question set was
+written from the ORIGINAL and answered twice — once by a reader holding only the
+original, once by a reader holding only the cut — neither knowing the other
+existed. 72 question-pairs. Two cuts of 65-77% came out AHEAD of their originals
+and two tied, so a large cut is not itself the risk.
+
+**Do not ask "what is missing".** The first attempt compared the two texts and
+asked what the short one lacked. A reader holding the original always finds
+absences and always rationalises them: on one task it named six things as needed
+and the paired test showed the real losses were two, neither on its list. Ask
+instead whether a reader can ANSWER the same question from either.
+
+Safe to cut, no regression across twelve bodies:
+
+  * **Chronology** — `REPHRASED 2026-08-10`, `STOPPED BEFORE BUILDING IT`, the
+    order in which you learned things.
+  * **Restating the subject** in the first paragraph.
+  * **Narrative colour about your own process** — who pushed back, what you
+    nearly concluded.
+  * **Measurement tables** where one line is the operative number. Keep that
+    line.
+
+⚠ **NOT safe, and each cost an answer:**
+
+  * **A rejected alternative.** Cutting the argument is right; cutting the FACT
+    that it was on the table and lost means it gets re-proposed.
+  * **A consequence that reads as obvious.** This is the most dangerous class
+    precisely because cutting it feels safest — "retention needs no policy, the
+    FK cascades" is derivable and a reader still could not answer whether
+    pruning was in scope.
+  * **Who a decision belongs to**, and whether it may be overruled.
+  * **A commit sha.** The DATE is chronology; the SHA is the artefact pointer,
+    and a reader wants it so it does not redo shipped work.
+  * **The open tail.** Every one of the four worst cuts was a body that settled
+    something AND left something open. Cutting the narrative took the open half
+    with it.
+
+⚠ **A layered body actively misleads, which is worse than being long.** Two
+originals held a settled answer at the top and a superseded "still open" section
+below it; readers given the full text concluded the dead question was live, and
+readers given the cut got it right. If you find both in one body, the fix is not
+to hoist — it is to delete the stale layer.
+
 ## When a body has grown without anyone rewriting it
 
 ⚠ **`--prepend` is cheap and reading is not, so bodies accrete.** Once a task's
