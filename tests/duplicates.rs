@@ -200,7 +200,9 @@ fn a_refusal_says_nothing_was_filed_and_how_to_file_it_anyway() {
         id: 689,
         why: "the same signal.dhall apply".into(),
     }]);
-    assert!(text.contains("nothing was filed"), "{text}");
+    // ⚠ The verdict lives in the LAST line now — see `what_survives_the_tail`
+    // for why. This still asserts both halves are present at all.
+    assert!(text.contains("NOT FILED"), "{text}");
     assert!(text.contains("--no-duplicate-check"), "{text}");
 }
 
@@ -507,4 +509,104 @@ fn a_filing_may_declare_an_edge_in_each_direction() {
 fn an_identical_subject_still_collides_with_what_a_filing_unblocks() {
     let corpus = vec![(42, "Fix the parser".to_string())];
     assert_eq!(same_subject("Fix the parser", &corpus), Some(42));
+}
+
+/// What a session actually reads of a refusal.
+///
+/// ⚠ **Sessions pipe this to `tail -3`** — Pippijn, 2026-09-01 — so anything
+/// above the last three lines is written for nobody. Measured before the fix:
+/// `task add` with a colliding subject printed four lines, and the three that
+/// survived the tail were a blank, `Caused by:` and `the tool declined`. The
+/// verdict, the id it collided with and the way past it were all on line one.
+///
+/// These pin the shape that survives the cut: **one line per finding, and a
+/// LAST line that alone says it did not file, why, and what to do.**
+mod what_survives_the_tail {
+    use super::*;
+
+    /// The last line of anything a refused filing prints.
+    fn verdict(text: &str) -> &str {
+        text.lines().last().expect("a refusal is never empty")
+    }
+
+    #[test]
+    fn a_collision_says_everything_in_its_last_line() {
+        let text = collision(1206);
+        let last = verdict(&text);
+        assert!(
+            last.contains("NOT FILED"),
+            "the verdict is not in it: {last}"
+        );
+        assert!(
+            last.contains("#1206"),
+            "what it collided with is lost: {last}"
+        );
+        assert!(
+            last.contains("task edit 1206"),
+            "no way to update it: {last}"
+        );
+        assert!(
+            last.contains("--no-duplicate-check"),
+            "no way past it: {last}"
+        );
+    }
+
+    #[test]
+    fn a_collision_is_one_line() {
+        // ⚠ Not tidiness. A second line pushes the verdict out of a `tail -1`
+        // and starts the same erosion this module exists to stop.
+        assert_eq!(collision(1206).lines().count(), 1, "{}", collision(1206));
+    }
+
+    #[test]
+    fn a_model_refusal_says_everything_in_its_last_line() {
+        let text = refusal(&[
+            Match {
+                id: 255,
+                why: "the same suspended cron".into(),
+            },
+            Match {
+                id: 689,
+                why: "the same signal.dhall apply".into(),
+            },
+        ]);
+        let last = verdict(&text);
+        assert!(
+            last.contains("NOT FILED"),
+            "the verdict is not in it: {last}"
+        );
+        // ⚠ It must still admit whose opinion it is, and that admission was in
+        // the header line the tail cut. It moved down, it did not go.
+        assert!(
+            last.contains("model"),
+            "it no longer says who is talking: {last}"
+        );
+        assert!(
+            last.contains("--no-duplicate-check"),
+            "no way past it: {last}"
+        );
+    }
+
+    #[test]
+    fn a_refusal_spends_one_line_per_finding_and_one_on_the_verdict() {
+        // Three findings is the most the parser keeps, so four lines is the
+        // worst case — and `tail -3` still reaches the verdict and two of them.
+        let three: Vec<Match> = (1..=3)
+            .map(|n| Match {
+                id: n,
+                why: format!("finding {n}"),
+            })
+            .collect();
+        let text = refusal(&three);
+        assert_eq!(text.lines().count(), 4, "{text}");
+        let tail: Vec<&str> = text.lines().rev().take(3).collect();
+        assert!(
+            tail.iter().any(|line| line.contains("NOT FILED")),
+            "the verdict fell out of the tail: {text}"
+        );
+        assert!(
+            tail.iter().any(|line| line.contains("#3")),
+            "no finding survived beside the verdict: {text}"
+        );
+    }
 }

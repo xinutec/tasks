@@ -107,8 +107,41 @@ pub fn declined(said: impl std::fmt::Display) -> anyhow::Error {
 pub fn ended(done: &anyhow::Result<()>) -> Ended {
     match done {
         Ok(()) => Ended::Ok,
-        Err(why) if why.chain().any(|link| link.is::<Refused>()) => Ended::Refused,
+        Err(why) if was_refused(why) => Ended::Refused,
         Err(_) => Ended::Error,
+    }
+}
+
+fn was_refused(why: &anyhow::Error) -> bool {
+    why.chain().any(|link| link.is::<Refused>())
+}
+
+/// What a caller reads when a command ends badly.
+///
+/// ⚠⚠ **A REFUSAL PRINTS ITS SENTENCE AND NOTHING UNDER IT, BECAUSE SESSIONS
+/// READ THE LAST THREE LINES.** `declined` puts the message in the context and
+/// the `Refused` marker underneath, where only [`ended`] looks — but anyhow's
+/// default rendering prints the whole chain, so a one-line refusal came out as
+/// four lines whose last three were a blank, `Caused by:` and `the tool
+/// declined`. Piped to `tail -3` that is the trailer with the cause cut off.
+///
+/// ⚠ **It cost a session a wrong story it told Pippijn twice.** 2026-09-01: a
+/// filing was refused three times, each output read through `tail -3`, each
+/// time yielding only `the tool declined`. From that the session concluded the
+/// permission layer had tightened since its last successful filing, said so,
+/// and stopped retrying. The actual cause was one line above the cut and named
+/// the remedy outright — a `--no-duplicate-check` carried over out of habit.
+/// **A truncated error does not read as truncated; it reads as the whole
+/// answer**, and an explanation gets built on it.
+///
+/// ⚠ **The chain STAYS for anything that actually went wrong.** A transport
+/// failure is diagnosed from its causes, so this is a branch and not a blanket
+/// `{}`. Same argument as [`Refused`] being a type: the classifier's marker was
+/// never a message.
+pub fn said(why: &anyhow::Error) -> String {
+    match was_refused(why) {
+        true => format!("{why}"),
+        false => format!("{why:?}"),
     }
 }
 

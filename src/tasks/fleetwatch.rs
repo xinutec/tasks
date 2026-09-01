@@ -156,10 +156,15 @@ pub fn checks(report: &Value) -> Vec<Value> {
     // One aggregate rather than a line per verb: eight more series to say a
     // number that is almost always zero would crowd out the ones that move.
     //
-    // ⚠ **No verdict, deliberately.** A refusal is a failure here — the
-    // duplicate check declining a filing returns an error — so a non-zero count
-    // is the tool working, and warning on it would train everyone to ignore the
-    // one line that is supposed to mean something.
+    // ⚠ **No verdict, deliberately** — and the reason CHANGED on 2026-09-01
+    // without the decision changing. It used to be that a refusal landed here:
+    // the model arm of the duplicate check `bail!`d, so declining a filing was
+    // counted as breakage. It now returns `commands::declined` like every other
+    // refusal and lands in the line below instead, which is what the `Refused`
+    // split was for. So this figure is finally only faults — but nobody has
+    // measured what a normal day's fault count is, and a threshold picked
+    // without that is the kind of bound that fires on ordinary noise and trains
+    // everyone to ignore the one line that is supposed to mean something.
     if !report["commands"]
         .as_array()
         .unwrap_or(&Vec::new())

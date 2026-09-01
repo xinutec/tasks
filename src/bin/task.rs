@@ -1530,7 +1530,16 @@ async fn main() -> Result<()> {
     let verb = cli.command.verb();
     let done = run(cli, &client).await;
     clocked(&client, verb, started, commands::ended(&done)).await;
-    done
+    // ⚠ **Printed here rather than returned, because anyhow's own rendering is
+    // what buried the reason.** Returning the error prints the whole chain, and
+    // on a refusal the chain is a blank line, `Caused by:` and the classifier's
+    // marker — exactly the three lines a session keeps when it pipes this to
+    // `tail -3`. `commands::said` decides which endings deserve a chain.
+    if let Err(why) = &done {
+        eprintln!("{}", commands::said(why));
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 /// Everything the CLI does, so that `main` can time all of it.
@@ -1813,8 +1822,13 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                         let (open, over) = duplicates::split(&found, &settled);
                         // Open first, and it wins outright: it is the arm that
                         // refuses, so an answer naming both must not file.
+                        // ⚠ **`declined`, never `bail!`.** This is the arm that
+                        // refuses most often, and a plain error puts it in the
+                        // FAILED column of the very measurement the
+                        // `Refused` split exists to make readable — and denies
+                        // it the one-line printing in `commands::said`.
                         if !open.is_empty() {
-                            bail!("{}", duplicates::refusal(&open));
+                            return Err(commands::declined(duplicates::refusal(&open)));
                         }
                         closed_match = Some(duplicates::advice(&over, settled.len(), unread));
                     }

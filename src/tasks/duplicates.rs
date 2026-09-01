@@ -129,7 +129,7 @@ pub fn same_subject(subject: &str, corpus: &[(u64, String)]) -> Option<u64> {
 /// holding a body on stdin.
 pub fn collision(already: u64) -> String {
     format!(
-        "#{already} is already open with this exact subject. Nothing was filed. \
+        "NOT FILED — #{already} is already open with this exact subject. \
          `task show {already}` to read it, `task edit {already}` if this is an update to it, \
          or re-run with --no-duplicate-check if they really are two tasks."
     )
@@ -332,14 +332,14 @@ fn one(line: &str) -> Option<Match> {
 /// is what keeps a false positive cheap, and a false positive is the price this
 /// refusal is paid for.
 pub fn refusal(found: &[Match]) -> String {
-    let mut out =
-        String::from("already filed, by a model's reading of the titles — nothing was filed:\n");
+    let mut out = String::new();
     for one in found {
         out.push_str(&format!("  #{:<4} {}\n", one.id, one.why));
     }
     out.push_str(
-        "`task show <id>` to check one. If this really is different work, re-run the same \
-         command with --no-duplicate-check.",
+        "NOT FILED — a model reading the open titles says this is already one of them. \
+         `task show <id>` to check one, or re-run the same command with \
+         --no-duplicate-check if this really is different work.",
     );
     out
 }

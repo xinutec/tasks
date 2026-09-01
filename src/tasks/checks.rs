@@ -410,8 +410,8 @@ pub async fn refused_recently(pool: &MySqlPool, session: &str, subject: &str) ->
 /// a refusal from the service, which is confusing unless the message says
 /// plainly what to do — and what to do is the easy thing: drop the flag.
 pub fn unlicensed() -> String {
-    "--no-duplicate-check is for overruling a refusal you have already seen, and nothing \
-     has refused this one. Re-run without it. If the check then names something that is \
-     genuinely different work, re-run the same command WITH the flag and it will file."
+    "NOT FILED — --no-duplicate-check is for overruling a refusal you have already seen, \
+     and nothing has refused this one. Re-run without it. If the check then names something \
+     that is genuinely different work, re-run the same command WITH the flag and it will file."
         .to_string()
 }

@@ -339,3 +339,56 @@ mod classifying {
         assert_eq!(ended(&sounds_like_one), Ended::Error);
     }
 }
+
+/// What a caller reads when a command ends badly.
+///
+/// ⚠ **The chain is noise on a refusal and it is what a `tail -3` keeps.**
+/// `declined` puts the sentence in the context and a `Refused` marker under it,
+/// and anyhow's default rendering prints both — so a one-line refusal came out
+/// as four lines, of which the last three were a blank, `Caused by:` and `the
+/// tool declined`. The marker is for the classifier; it was never a message.
+mod what_a_bad_ending_prints {
+    use tasks::tasks::commands::{declined, said};
+
+    #[test]
+    fn a_refusal_prints_its_sentence_and_nothing_under_it() {
+        let text = said(&declined(
+            "NOT FILED — #1206 is already open with this exact subject.",
+        ));
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert!(text.contains("NOT FILED"), "{text}");
+        assert!(!text.contains("Caused by"), "the chain survived: {text}");
+        assert!(
+            !text.contains("the tool declined"),
+            "the classifier's marker reached the caller: {text}"
+        );
+    }
+
+    /// ⚠ **The other half of the same fix, and the half with a number on it.**
+    /// The model arm — the refusal that fires most often — used `bail!`, so it
+    /// carried no `Refused` marker and every one of them was counted as a
+    /// failed command. That is the exact measurement the marker was introduced
+    /// to make readable, and it was being corrupted by its busiest source.
+    #[test]
+    fn a_refused_filing_is_never_counted_as_a_fault() {
+        use tasks::tasks::commands::{Ended, ended};
+        let refused: anyhow::Result<()> = Err(declined("NOT FILED — a model reading the titles"));
+        assert_eq!(ended(&refused), Ended::Refused);
+        let broke: anyhow::Result<()> = Err(anyhow::anyhow!("the socket went away"));
+        assert_eq!(ended(&broke), Ended::Error);
+    }
+
+    #[test]
+    fn something_that_actually_went_wrong_keeps_its_chain() {
+        // ⚠ The opposite case, and it is why this is a branch rather than a
+        // blanket `{}`. A transport failure is diagnosed from its causes, and
+        // dropping them to tidy the refusal would cost the one output where the
+        // chain is the whole value.
+        let text = said(&anyhow::anyhow!("the socket went away").context("reading the open list"));
+        assert!(text.contains("reading the open list"), "{text}");
+        assert!(
+            text.contains("the socket went away"),
+            "the cause was dropped: {text}"
+        );
+    }
+}
