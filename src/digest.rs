@@ -25,30 +25,10 @@
 //!    into content is the exact failure this replaced, and the old hook refused
 //!    one over the same limit.
 //!
-//! **Who it selects for is a fourth rule, and it arrived late.** A session is
-//! shown *its own* open tasks and *the pile* — never what another conversation
-//! is holding. The first shape filtered on repository alone, which was inherited
-//! rather than decided: one `TASKS.md` per repo put both parties' work in one
-//! file because there was nowhere else to put it. In a database that made every
-//! session pay, every turn, for work it could not act on.
-//!
-//! The repository is gone entirely as of `0004`. A session spans checkouts, so
-//! it was never a question with one answer, and selecting on the *claimed* set
-//! made an unclaimed session's empty digest indistinguishable from a broken
-//! service. What is left is the holder, which was always the real question.
-//!
-//! ⚠ **The pile is the half that must not be dropped.** Narrowing to strictly
-//! *mine* is smaller again and breaks the handover: a task left for whichever
-//! conversation is around would become invisible to all of them at once, and the
-//! objection that stalled this decision for a day — a session that cannot see
-//! what is already in hand will re-file it — is answered by the pile rather than
-//! by showing everything. Looking across holders is something to ask for, and
-//! the CLI is where you ask: `task list --all`, `task sessions`.
-//!
-//! Bare `task list` answers this same question — own plus the pile — as of
-//! 2026-08-09. It used to answer with every open task there is, which put the
-//! cost this module refuses behind the one command a session runs to decide
-//! what to do next: 12,804 bytes, against one line for the session that ran it.
+//! **Who it selects for is a fourth rule**: a session sees its own open tasks
+//! and the pile, never what another conversation holds. That selection is
+//! [`crate::tasks::repo::Filter::digest_for`] and the reasoning lives with it,
+//! including why the pile may not be dropped.
 //!
 //! **A fifth rule arrived with the ranks: `P4` is counted and never recited.**
 //! It is defined as *"kept as a record rather than a plan; it may never
@@ -157,7 +137,7 @@ pub const FOCUS_HINT_LINES: usize = 12;
 /// ranked P2 to stay visible — a change to what the ranks mean rather than to
 /// what a page shows.
 fn parked(task: &Task) -> bool {
-    !task.overdue && task.escalated_to.or(task.priority) == Some(Priority::P4)
+    !task.overdue && task.urgency() == Some(Priority::P4)
 }
 
 /// Render the index for a set of tasks, already filtered to the open ones.

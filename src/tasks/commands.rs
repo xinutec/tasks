@@ -145,7 +145,6 @@ pub fn said(why: &anyhow::Error) -> String {
     }
 }
 
-/// One command, as the CLI reports it.
 ///
 /// The clock and the session are the service's and the caller's respectively,
 /// for the same reason as [`checks::Run`](crate::tasks::checks::Run): a client
@@ -193,7 +192,6 @@ impl RequiredKeys for Run {
 /// and the break would look like the command had never run before.
 const VERB_MAX: usize = 32;
 
-/// Write one down.
 pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     if run.verb.is_empty() || run.verb.len() > VERB_MAX {
         return Err(AppError::from(anyhow::anyhow!(
@@ -216,7 +214,6 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     Ok(())
 }
 
-/// One recorded command, as it comes back out.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ran {
     pub ran_at: DateTime<Utc>,

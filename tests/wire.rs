@@ -196,3 +196,55 @@ async fn filing_a_whole_task_still_works() {
     assert_eq!(task["priority"], "P3");
     assert_eq!(task["subject"], "A filing that says how urgent it is");
 }
+
+/// The response types survive a round trip, with the absent fields absent.
+///
+/// ⚠ **This is what makes the CLI able to stop working in `serde_json::Value`.**
+/// `Task` and its siblings derived `Serialize` and never `Deserialize`, so the
+/// binary re-derived on raw JSON what the library already had typed — a second
+/// `Status::marker()`, a second effective-rank rule, a third holder label. The
+/// derive is the fix; this is what says it holds for a task whose optional
+/// fields are all absent, which is the ordinary case and the one a missing
+/// `#[serde(default)]` would break.
+mod a_response_comes_back_as_itself {
+    use chrono::Utc;
+    use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};
+
+    fn bare() -> Task {
+        Task {
+            id: 7,
+            subject: "nothing optional is set".into(),
+            status: Status::Open,
+            priority: None,
+            due: None,
+            escalated_to: None,
+            overdue: false,
+            blocked_on: Vec::new(),
+            blocked: false,
+            assignee: Assignee {
+                kind: AssigneeKind::Nobody,
+                id: None,
+                name: None,
+            },
+            detailed: false,
+            body_lines: 0,
+            filed_by: None,
+            sprawl_chars: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            closed_at: None,
+        }
+    }
+
+    #[test]
+    fn a_task_with_every_option_empty_deserialises() {
+        let json = serde_json::to_string(&bare()).expect("serialises");
+        // The skipped fields really are absent — otherwise this proves nothing.
+        assert!(!json.contains("priority"), "{json}");
+        assert!(!json.contains("closed_at"), "{json}");
+        let back: Task = serde_json::from_str(&json).expect("deserialises");
+        assert_eq!(back.id, 7);
+        assert_eq!(back.priority, None);
+        assert_eq!(back.assignee.kind, AssigneeKind::Nobody);
+    }
+}

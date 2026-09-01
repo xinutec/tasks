@@ -7,7 +7,7 @@ mod common;
 
 use tasks::sessions;
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
-use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Ranking, Status};
+use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Moved, Ranking, Status};
 
 fn pippijn() -> Actor {
     Actor::Person("pippijn".into())
@@ -1082,7 +1082,7 @@ async fn a_write_that_moves_nothing_says_so() {
     .expect("starting");
     assert_eq!(
         started.changed,
-        vec!["status"],
+        vec![Moved::Status],
         "a real change named the wrong thing"
     );
 
@@ -1157,7 +1157,7 @@ async fn a_write_that_moves_nothing_says_so() {
     )
     .await
     .expect("closing");
-    assert_eq!(closed.changed, vec!["status", "assigned"]);
+    assert_eq!(closed.changed, vec![Moved::Status, Moved::Assigned]);
 
     // And what a write reports is what the history holds: one vocabulary, so the
     // two cannot drift into different spellings of the same event.

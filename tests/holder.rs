@@ -126,3 +126,154 @@ fn nothing_known_at_all_is_still_a_refusal() {
     // fallback this whole function exists to avoid.
     assert_eq!(resolve(vec![], "health"), Holder::Unknown(vec![]));
 }
+
+/// The rules that infer a holder when the caller did not name one.
+///
+/// ⚠ **These two have regressed twice, both times against a live database.** A
+/// session running `start` took a task off another session that had not got to
+/// it yet; and `start` on a task left `doing` in the pile — the state #19 sat in
+/// — reported success and moved nobody. Both were found by reproducing them on
+/// a real service because `repo::update` needs a MySQL pool, so the decision
+/// itself had never been asserted anywhere cheap. `inferred_holder` is that
+/// decision, and this is the cheap assertion.
+mod who_it_lands_on {
+    use chrono::Utc;
+    use tasks::tasks::repo::{Change, inferred_holder};
+    use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Status, Task};
+
+    const ME: &str = "2be586d6-c868-4717-8364-7b5b8610abe5";
+    const SOMEBODY_ELSE: &str = "7c0202eb-080b-40a5-a654-8758b4ca723e";
+
+    fn held_by(kind: AssigneeKind, id: Option<&str>) -> Assignee {
+        Assignee {
+            kind,
+            id: id.map(str::to_string),
+            name: None,
+        }
+    }
+
+    fn task(status: Status, assignee: Assignee) -> Task {
+        Task {
+            id: 1,
+            subject: "a task".into(),
+            status,
+            priority: None,
+            due: None,
+            escalated_to: None,
+            overdue: false,
+            blocked_on: Vec::new(),
+            blocked: false,
+            assignee,
+            detailed: false,
+            body_lines: 0,
+            filed_by: None,
+            sprawl_chars: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            closed_at: None,
+        }
+    }
+
+    fn moving_to(status: Status) -> Change {
+        Change {
+            status: Some(status),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn closing_a_task_claims_it_for_whoever_closed_it() {
+        let before = task(Status::Open, held_by(AssigneeKind::Nobody, None));
+        let got = inferred_holder(
+            &before,
+            &moving_to(Status::Done),
+            &Actor::Session(ME.into()),
+        );
+        assert_eq!(got.map(|a| a.id), Some(Some(ME.to_string())));
+    }
+
+    #[test]
+    fn dropping_counts_as_closing() {
+        // ⚠ Not cosmetic: a drop is a decision somebody made, and a list that
+        // credits it to nobody cannot say who decided.
+        let before = task(Status::Open, held_by(AssigneeKind::Nobody, None));
+        let got = inferred_holder(
+            &before,
+            &moving_to(Status::Dropped),
+            &Actor::Session(ME.into()),
+        );
+        assert_eq!(got.map(|a| a.id), Some(Some(ME.to_string())));
+    }
+
+    #[test]
+    fn reopening_leaves_the_holder_alone() {
+        // The last person to touch it is a better guess than nobody.
+        let before = task(
+            Status::Done,
+            held_by(AssigneeKind::Session, Some(SOMEBODY_ELSE)),
+        );
+        let got = inferred_holder(
+            &before,
+            &moving_to(Status::Open),
+            &Actor::Session(ME.into()),
+        );
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn starting_a_task_in_the_pile_claims_it() {
+        let before = task(Status::Open, held_by(AssigneeKind::Nobody, None));
+        let got = inferred_holder(
+            &before,
+            &moving_to(Status::Doing),
+            &Actor::Session(ME.into()),
+        );
+        assert_eq!(got.map(|a| a.id), Some(Some(ME.to_string())));
+    }
+
+    #[test]
+    fn starting_a_task_another_session_holds_takes_nothing() {
+        // ⚠ The regression that narrowed the rule. Taking somebody else's task
+        // is a handover, and `move` is the word for it.
+        let before = task(
+            Status::Open,
+            held_by(AssigneeKind::Session, Some(SOMEBODY_ELSE)),
+        );
+        let got = inferred_holder(
+            &before,
+            &moving_to(Status::Doing),
+            &Actor::Session(ME.into()),
+        );
+        assert_eq!(got, None);
+    }
+
+    #[test]
+    fn starting_a_task_already_doing_in_the_pile_still_claims_it() {
+        // ⚠ #19's state, and the second regression. A session that puts work
+        // down without closing it leaves the task `doing` AND unheld; `start`
+        // used to read the status, report success, and move nobody.
+        let before = task(Status::Doing, held_by(AssigneeKind::Nobody, None));
+        let got = inferred_holder(
+            &before,
+            &moving_to(Status::Doing),
+            &Actor::Session(ME.into()),
+        );
+        assert_eq!(got.map(|a| a.id), Some(Some(ME.to_string())));
+    }
+
+    #[test]
+    fn a_caller_naming_a_holder_is_not_second_guessed() {
+        // `update` prefers `change.assignee`; this function never sees a reason
+        // to fire when one was given.
+        let before = task(Status::Open, held_by(AssigneeKind::Nobody, None));
+        let named = Change {
+            status: Some(Status::Done),
+            assignee: Some(held_by(AssigneeKind::Session, Some(SOMEBODY_ELSE))),
+            ..Default::default()
+        };
+        assert_eq!(
+            inferred_holder(&before, &named, &Actor::Session(ME.into())),
+            None
+        );
+    }
+}

@@ -151,34 +151,6 @@ pub struct Match {
 /// of everything in that area, which is the failure mode measured above.
 const MOST: usize = 3;
 
-/// What the model is asked.
-///
-/// `corpus` is `(id, subject)` for every open task, and **must not contain the
-/// task just filed** — it is on the list by the time this runs, and a filing
-/// that matches itself is the one answer guaranteed to be useless.
-///
-/// ⚠ **The negative half of the instruction is doing most of the work.** Asked
-/// plainly whether two tasks are "similar", a model answers about subject
-/// matter and returns every task in the same repository. Naming what is *not* a
-/// duplicate — same area, same file, same technology — is what moved the
-/// replayed cases from noise to 5/5.
-/// The list a model is shown, without the tasks this filing declares it waits
-/// for.
-///
-/// ⚠ **A `--blocked-on` edge is the filer saying, in the same command, that
-/// these are two different pieces of work and one comes first.** On 2026-08-17
-/// the check refused phonos's language-decision task for resembling #984 — the
-/// task that same command had just declared it blocked on. The reader could not
-/// see the edge, because a new task's `blocked_on` reaches the service only in
-/// the POST that follows this check.
-///
-/// ⚠ **[`same_subject`] runs against the WHOLE list and is not narrowed by
-/// this.** Two byte-identical subjects are one task however they are ordered,
-/// and that guard has no error rate to protect.
-pub fn candidates(corpus: &[(u64, String)], waiting_on: &[u64]) -> Vec<(u64, String)> {
-    edged(corpus, waiting_on, &[])
-}
-
 /// The list a model is shown, without either end of an edge the filing declares.
 ///
 /// ⚠ **`--blocked-on` exempted one direction and the other was the expensive
@@ -194,6 +166,11 @@ pub fn candidates(corpus: &[(u64, String)], waiting_on: &[u64]) -> Vec<(u64, Str
 /// ⚠ **[`same_subject`] still runs against the WHOLE list.** An identical title
 /// is one task whatever edge was declared, and that guard has no error rate to
 /// protect.
+///
+/// The `--blocked-on` half arrived first, on 2026-08-17, when the check refused
+/// phonos's language-decision task for resembling the very task that command had
+/// just declared it blocked on — a new task's edges reach the service only in
+/// the POST that follows this check, so the reader cannot see them.
 pub fn edged(corpus: &[(u64, String)], waiting_on: &[u64], unblocks: &[u64]) -> Vec<(u64, String)> {
     corpus
         .iter()
@@ -202,6 +179,17 @@ pub fn edged(corpus: &[(u64, String)], waiting_on: &[u64], unblocks: &[u64]) -> 
         .collect()
 }
 
+/// What the model is asked.
+///
+/// `corpus` is `(id, subject)` for every open task, and **must not contain the
+/// task just filed** — it is on the list by the time this runs, and a filing
+/// that matches itself is the one answer guaranteed to be useless.
+///
+/// ⚠ **The negative half of the instruction is doing most of the work.** Asked
+/// plainly whether two tasks are "similar", a model answers about subject
+/// matter and returns every task in the same repository. Naming what is *not* a
+/// duplicate — same area, same file, same technology — is what moved the
+/// replayed cases from noise to 5/5.
 pub fn prompt(subject: &str, corpus: &[(u64, String)], settled: bool) -> String {
     let lines: String = corpus
         .iter()
@@ -434,19 +422,12 @@ pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, S
 
 /// What a filing is told when it resembles something already closed.
 ///
-/// ⚠ **It advises and never refuses, and `dropped` does not change that.** The
-/// obvious rule — a dropped task was decided against, so refuse — was written
-/// and then refuted by the corpus it would run on: `task drop` records a status
-/// and no reason, so `dropped` alone does not mean anybody decided anything.
-/// #863 is dropped, carries a full plan, and states no reason at all; asked
-/// about it, a model reported that it "concluded the work wasn't justified",
-/// which the row does not say. A refusal built on that signal refuses real work
-/// while citing a decision nobody made.
+/// ⚠ **Advises, never refuses** — the module doc carries why, and the reason is
+/// the corpus rather than a preference.
 ///
-/// ⚠ **The remedy is the point, not the match.** A session that learns its
-/// filing already exists as #863 still has to be told that the move is
-/// `task reopen`, because the alternative it will otherwise reach for is filing
-/// anyway.
+/// ⚠ **The remedy is the point, not the match.** A session told its filing
+/// already exists as a closed task still has to be told the move is
+/// `task reopen`, because the alternative it reaches for is filing anyway.
 pub fn advice(found: &[(Match, Settled)], read: usize, unread: usize) -> String {
     let mut out = String::from(
         "this may already exist, closed — a model's reading of the titles. It was filed \

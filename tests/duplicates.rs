@@ -14,8 +14,8 @@
 //! pins that whatever comes back is read correctly.
 
 use tasks::tasks::duplicates::{
-    Match, Settled, advice, candidates, collision, edged, parse, prompt, refusal, same_subject,
-    settled_block, split, worth_reading,
+    Match, Settled, advice, collision, edged, parse, prompt, refusal, same_subject, settled_block,
+    split, worth_reading,
 };
 
 /// An id that is deliberately NOT in [`corpus`], so a test can assert that a
@@ -255,7 +255,7 @@ fn what_a_filing_waits_for_is_not_shown_to_the_reader() {
         (984, "Decide the language phonos is written in".to_string()),
         (985, "Something else entirely".to_string()),
     ];
-    let shown = candidates(&corpus, &[984]);
+    let shown = edged(&corpus, &[984], &[]);
     assert_eq!(shown, vec![(985, "Something else entirely".to_string())]);
 }
 
@@ -266,12 +266,12 @@ fn a_filing_that_waits_for_nothing_sees_the_whole_list() {
         (2, "two".to_string()),
         (3, "three".to_string()),
     ];
-    assert_eq!(candidates(&corpus, &[]), corpus);
+    assert_eq!(edged(&corpus, &[], &[]), corpus);
     // Order is the list's, not the filter's: `parse` reads ids back against
     // this same slice, and a reordered corpus would still be correct but would
     // make a diff of two runs unreadable.
     assert_eq!(
-        candidates(&corpus, &[2]),
+        edged(&corpus, &[2], &[]),
         vec![(1, "one".to_string()), (3, "three".to_string())]
     );
 }

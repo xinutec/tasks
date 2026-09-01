@@ -82,9 +82,19 @@ impl Focus {
     /// Whether this focus still applies, at a given moment.
     ///
     /// Taken as an argument rather than read from the clock so that a test can
-    /// state the hour it means. Every caller in the service passes `Utc::now()`.
+    /// state the hour it means; [`current`] passes `Utc::now()`.
     pub fn holds_at(&self, now: DateTime<Utc>) -> bool {
-        self.until > now
+        Self::live_at(self.until, now)
+    }
+
+    /// The rule itself, before there is a [`Focus`] to ask.
+    ///
+    /// ⚠ **One spelling, for the reason `still_open!` and `due_soon!` exist.**
+    /// [`current`] has to decide this from a bare timestamp, before it has read
+    /// the task ids — and the inline `until <= Utc::now()` that used to sit
+    /// there was a second copy of a rule with no test on it.
+    pub fn live_at(until: DateTime<Utc>, now: DateTime<Utc>) -> bool {
+        until > now
     }
 }
 
@@ -100,7 +110,7 @@ impl Focus {
 /// date with no rank at all, and the one thing a deadline that has already
 /// passed must not do is go quiet.
 pub fn breaks_through(task: &Task) -> bool {
-    task.overdue || task.escalated_to.or(task.priority) == Some(Priority::P0)
+    task.overdue || task.urgency() == Some(Priority::P0)
 }
 
 /// Read a session's focus, if it has one that still applies.
@@ -122,7 +132,7 @@ pub async fn current(pool: &MySqlPool, session: &str) -> Result<Option<Focus>> {
         return Ok(None);
     };
     let until = until.and_utc();
-    if until <= Utc::now() {
+    if !Focus::live_at(until, Utc::now()) {
         return Ok(None);
     }
     let tasks: Vec<u64> =

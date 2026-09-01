@@ -131,22 +131,6 @@ impl FromStr for Status {
     }
 }
 
-/// SQL for *this task is still work*, spelled in exactly one place.
-///
-/// ⚠ **The obvious spelling is the wrong one.** Six queries said `status <>
-/// 'done'` and meant "open", which was true while there were three states and
-/// false the moment [`Status::Dropped`] existed — a dropped task would have gone
-/// on being counted as open in the list, the digest's counts and all three
-/// of the `/who` tallies, none of which would have failed loudly.
-///
-/// A macro rather than a `const` because sqlx 0.9 takes only `&'static str`:
-/// this expands inside `concat!` and the compiler assembles the literal, so
-/// there is still nothing built at runtime for anybody to audit. The column is
-/// an argument because half these queries join and have to qualify it.
-///
-/// `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere` is what ties this to
-/// [`Status::is_open`]: nothing else can compare a match arm against a string
-/// living in a database.
 /// SQL for *a deadline close enough to raise the rank*, in exactly one place.
 ///
 /// Pippijn's rule, 2026-08-11: **less than one week**. Seven days is his number
@@ -201,6 +185,22 @@ macro_rules! body_shown {
     };
 }
 
+/// SQL for *this task is still work*, spelled in exactly one place.
+///
+/// ⚠ **The obvious spelling is the wrong one.** Six queries said `status <>
+/// 'done'` and meant "open", which was true while there were three states and
+/// false the moment [`Status::Dropped`] existed — a dropped task would have gone
+/// on being counted as open in the list, the digest's counts and all three
+/// of the `/who` tallies, none of which would have failed loudly.
+///
+/// A macro rather than a `const` because sqlx 0.9 takes only `&'static str`:
+/// this expands inside `concat!` and the compiler assembles the literal, so
+/// there is still nothing built at runtime for anybody to audit. The column is
+/// an argument because half these queries join and have to qualify it.
+///
+/// `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere` is what ties this to
+/// [`Status::is_open`]: nothing else can compare a match arm against a string
+/// living in a database.
 #[macro_export]
 macro_rules! still_open {
     ($column:literal) => {
@@ -493,7 +493,7 @@ impl Assignee {
 /// service exists is that a list carrying bodies cost 86 kB to render 3.9 kB.
 /// [`TaskDetail`] is the one that carries prose, and it is fetched for one task
 /// at a time.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: u64,
     pub subject: String,
@@ -636,6 +636,64 @@ pub struct Task {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub closed_at: Option<DateTime<Utc>>,
 }
+impl Task {
+    /// The rank this actually sorts and renders as.
+    ///
+    /// ⚠⚠ **`escalated_to` first, and never the other way round.** A deadline
+    /// inside the week raises a task to `P0` without anybody writing one, so
+    /// reading `priority` alone shows the chosen rank and hides the effective
+    /// one — a task the escalation exists to raise reads as ordinary. Reversed
+    /// to `priority.or(escalated_to)` nothing fails to compile and nothing fails
+    /// a test; the list simply stops agreeing with itself.
+    ///
+    /// ⚠ **Spelled once because it was spelled four times** — `digest::parked`,
+    /// `focus::breaks_through`, `digest::line` and the CLI's own renderer, with
+    /// `focus.rs`'s comment already noting it is "the same `escalated_to ??
+    /// priority` every renderer draws" and nothing holding them together. Same
+    /// reason `still_open!` exists.
+    pub fn urgency(&self) -> Option<Priority> {
+        self.escalated_to.or(self.priority)
+    }
+}
+
+/// What a write moved, in the words the history uses.
+///
+/// ⚠⚠ **One vocabulary, because there were two and they had already drifted.**
+/// `task_events.kind` and the `changed` list on a write's response name the same
+/// seven facts, and were spelled by hand at every site: adjacent lines in
+/// `repo::update` recorded `ranked` into the history while pushing `priority`
+/// into the response, and `blocked` against `blocked_on`. Nothing linked them,
+/// so a client keying off one and a reader of the other disagreed about what had
+/// happened — and the frontend's own doc asserted they were the same list.
+///
+/// This is the [`Status`] lesson at one remove: six queries once said
+/// `status <> 'done'` and meant *open*, which is why `still_open!` exists. A
+/// vocabulary spelled by hand at N sites drifts at the first addition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Moved {
+    Created,
+    Edited,
+    Status,
+    Ranked,
+    Due,
+    Blocked,
+    Assigned,
+}
+
+impl Moved {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Moved::Created => "created",
+            Moved::Edited => "edited",
+            Moved::Status => "status",
+            Moved::Ranked => "ranked",
+            Moved::Due => "due",
+            Moved::Blocked => "blocked",
+            Moved::Assigned => "assigned",
+        }
+    }
+}
 
 /// A task after a write, and what the write actually moved.
 ///
@@ -654,12 +712,12 @@ pub struct Task {
 /// The vocabulary is `task_events`' own — `status`, `assigned`, `edited` — so
 /// what a write reports and what the history records cannot drift into two
 /// spellings of the same event.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Updated {
     #[serde(flatten)]
     pub task: Task,
     /// The event kinds written, in the order written.
-    pub changed: Vec<&'static str>,
+    pub changed: Vec<Moved>,
     /// What this edit displaced, when it displaced any text. Absent for a
     /// change that moved only a status, a rank or a holder.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -676,7 +734,7 @@ pub struct Updated {
 /// refusing a frequent correct operation costs. So the write goes through and
 /// says what it landed on. A writer who believes a body is three days old, told
 /// it was rewritten yesterday by somebody else, has everything needed to stop.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Replaced {
     /// When the text this edit replaced was last written.
     pub at: DateTime<Utc>,
@@ -733,7 +791,7 @@ pub struct Revision {
 }
 
 /// One task with its prose and its history — what opening a task returns.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskDetail {
     #[serde(flatten)]
     pub task: Task,
@@ -759,7 +817,7 @@ pub struct TaskDetail {
 }
 
 /// Something that happened to a task.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub at: DateTime<Utc>,
     pub kind: String,

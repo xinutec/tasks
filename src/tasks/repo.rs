@@ -11,8 +11,8 @@ use sqlx::{MySql, MySqlPool, QueryBuilder, Transaction};
 
 use crate::error::AppError;
 use crate::tasks::types::{
-    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Priority, Ranking, Replaced, Revision,
-    Status, Task, TaskDetail, Updated,
+    Actor, Assignee, AssigneeKind, Event, MAX_SUBJECT, Moved, Priority, Ranking, Replaced,
+    Revision, Status, Task, TaskDetail, Updated,
 };
 use crate::{body_shown, due_soon, still_open};
 
@@ -83,6 +83,14 @@ impl Filter {
     /// half of this and was dropped in `0004`: a session spans checkouts, and
     /// selecting on a *claimed* set meant a session that had claimed nothing saw
     /// an empty digest that looked exactly like a broken service.
+    ///
+    /// ⚠ **`or_unheld` is the half that must not be dropped.** Narrowing to
+    /// strictly *mine* is smaller again and breaks the handover — a task left
+    /// for whichever conversation is around would go invisible to all of them at
+    /// once. The objection that stalled this for a day, that a session which
+    /// cannot see work already in hand will re-file it, is answered by the pile
+    /// and not by showing everything. Looking across holders is something to ask
+    /// for: `task list --all`, `task sessions`.
     pub fn digest_for(session: &str) -> Self {
         Self {
             session: Some(session.to_string()),
@@ -1172,7 +1180,7 @@ async fn record(
     tx: &mut Transaction<'_, MySql>,
     task_id: u64,
     actor: &Actor,
-    kind: &str,
+    kind: Moved,
     detail: Option<String>,
 ) -> Result<u64> {
     let done = sqlx::query(
@@ -1182,7 +1190,7 @@ async fn record(
     .bind(task_id)
     .bind(actor.kind())
     .bind(actor.id())
-    .bind(kind)
+    .bind(kind.as_str())
     .bind(detail)
     .execute(&mut **tx)
     .await
@@ -1224,25 +1232,85 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     .bind(&new.body)
     .bind(new.priority.stored())
     .bind(new.due)
-    .bind(kind)
+    .bind(kind.as_str())
     .bind(person)
     .bind(session)
     .execute(&mut *tx)
     .await
     .map_err(|e| unknown_holder(e, session, "filing a task"))?;
     let id = done.last_insert_id();
-    record(&mut tx, id, actor, "created", Some(subject.clone())).await?;
+    record(&mut tx, id, actor, Moved::Created, Some(subject.clone())).await?;
     if let Some(moved) = set_blockers(&mut tx, id, &new.blocked_on).await? {
-        record(&mut tx, id, actor, "blocked", Some(moved)).await?;
+        record(&mut tx, id, actor, Moved::Blocked, Some(moved)).await?;
         blocking_is_consistent(&mut tx, id, new.priority.stored(), new.due).await?;
     }
     if kind != AssigneeKind::Nobody {
         let to = label_of(&mut tx, &assignee).await?;
-        record(&mut tx, id, actor, "assigned", Some(format!("→ {to}"))).await?;
+        record(&mut tx, id, actor, Moved::Assigned, Some(format!("→ {to}"))).await?;
     }
     tx.commit().await.context("committing a new task")?;
 
     list_one(pool, id).await
+}
+
+/// Who a write hands the task to, when the caller did not say.
+///
+/// ⚠ **Pure, and out here on purpose.** These two rules have regressed twice
+/// against a live database — each fix is a named test below — and `update` is
+/// reachable only through a real MySQL pool, so every check of a rule that
+/// touches no I/O used to cost a container. `tests/holder.rs` still drives the
+/// whole path; this is what lets the decision itself be asserted in a
+/// millisecond.
+///
+/// An explicit `change.assignee` always wins and is not considered here: a
+/// caller naming where a task should go is more specific than any inference.
+pub fn inferred_holder(before: &Task, change: &Change, actor: &Actor) -> Option<Assignee> {
+    // FINISHING a task claims it.
+    // Only on the way OUT of open — reopening leaves the holder alone, because
+    // the last person to touch it is a better guess than nobody, and done →
+    // dropped is a correction to a closed task rather than a new closing.
+    let finisher = (change.status.is_some_and(|status| !status.is_open())
+        && before.status.is_open()
+        && change.assignee.is_none())
+    .then(|| actor_holder(actor));
+
+    // Starting a task claims it too — the same rule read at the other end.
+    //
+    // ⚠ **Without this the holder column could only ever describe the past.** It
+    // was set when a task was closed and at no other time, so a list could say
+    // who had finished something and never who was carrying it; every session
+    // showed its in-flight work as belonging to nobody. `task start` was already
+    // documented as the way a session takes a task on, and it did not do it.
+    //
+    // ⚠ **Out of the PILE only, which is narrower than it first shipped.** The
+    // guard was on the status — claim unless the task was already `doing` — and
+    // that read as safe while being wrong: a task Pippijn had handed to one
+    // conversation, which had not got to it yet, was taken off it by any other
+    // session running `start`, silently. `starting_a_task_assigned_to_another_
+    // session_takes_nothing` is that case, and it failed against the rule the
+    // comment here originally claimed to implement.
+    //
+    // So: a holder is inferred only where there is none. If the task is already
+    // yours there is nothing to move; if it is somebody else's, taking it is a
+    // handover and `move` is the word for that.
+    //
+    // ⚠ **And it does not read the status, which was the last thing keeping this
+    // from firing where it was most needed.** A `&& before.status != Doing`
+    // clause survived that narrowing, on the argument that starting an
+    // already-started task should write no history — true of every task that is
+    // `doing` *because somebody is doing it*, and false of the one state where
+    // the status says nothing about the holder. A session that stops work
+    // deliberately hands the task back without closing it, leaving it `doing`
+    // and in the pile (#19), and `start` — the documented way to pick something
+    // up — then reported success and moved nobody. The no-history property was
+    // never this clause's to keep: `moved` below compares the holders and
+    // suppresses a write when they already match.
+    let starter = (change.status == Some(Status::Doing)
+        && before.assignee.kind == AssigneeKind::Nobody
+        && change.assignee.is_none())
+    .then(|| actor_holder(actor));
+
+    finisher.or(starter)
 }
 
 /// Apply a partial change.
@@ -1293,7 +1361,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // ARE the answer — a write that writes no history changed nothing — and two
     // lists that have to be kept level by hand would drift the first time an
     // axis was added.
-    let mut changed: Vec<&'static str> = Vec::new();
+    let mut changed: Vec<Moved> = Vec::new();
 
     // ⚠ **The prior text is read ONCE, inside the transaction, whether or not
     // it is about to change.** Two things need it and both need the same
@@ -1344,9 +1412,9 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 .execute(&mut *tx)
                 .await
                 .context("changing a subject")?;
-            let event = record(&mut tx, id, actor, "edited", Some(subject)).await?;
+            let event = record(&mut tx, id, actor, Moved::Edited, Some(subject)).await?;
             edit_event.get_or_insert(event);
-            changed.push("edited");
+            changed.push(Moved::Edited);
         }
     }
 
@@ -1444,9 +1512,9 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             was_body.chars().count(),
             body.chars().count()
         );
-        let event = record(&mut tx, id, actor, "edited", Some(detail)).await?;
+        let event = record(&mut tx, id, actor, Moved::Edited, Some(detail)).await?;
         edit_event.get_or_insert(event);
-        changed.push("edited");
+        changed.push(Moved::Edited);
     }
 
     // ⚠ **One snapshot per update, not per event.** A `task edit --subject
@@ -1483,11 +1551,11 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             &mut tx,
             id,
             actor,
-            "status",
+            Moved::Status,
             Some(format!("{} → {}", before.status, status)),
         )
         .await?;
-        changed.push("status");
+        changed.push(Moved::Status);
     }
 
     // ⚠ **Compared before writing, like every other field here.** Re-ranking a
@@ -1506,11 +1574,11 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             &mut tx,
             id,
             actor,
-            "ranked",
+            Moved::Ranked,
             Some(format!("{was} → {priority}")),
         )
         .await?;
-        changed.push("priority");
+        changed.push(Moved::Ranked);
     }
 
     // `clear_due` wins over `due`: a caller sending both has contradicted
@@ -1535,18 +1603,18 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             &mut tx,
             id,
             actor,
-            "due",
+            Moved::Due,
             Some(format!("{} → {}", show(before.due), show(due))),
         )
         .await?;
-        changed.push("due");
+        changed.push(Moved::Due);
     }
 
     if let Some(want) = &change.blocked_on
         && let Some(moved) = set_blockers(&mut tx, id, want).await?
     {
-        record(&mut tx, id, actor, "blocked", Some(moved)).await?;
-        changed.push("blocked_on");
+        record(&mut tx, id, actor, Moved::Blocked, Some(moved)).await?;
+        changed.push(Moved::Blocked);
     }
 
     // ⚠ **After BOTH writes, and once — not inside either.** A change may move
@@ -1579,57 +1647,9 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // is what distinguishes the two.
     //
     // An explicit assignee in the same change wins: a caller saying where a task
-    // should go is more specific than this rule inferring it from who is asking.
-    // Only on the way OUT of open — reopening leaves the holder alone, because
-    // the last person to touch it is a better guess than nobody, and done →
-    // dropped is a correction to a closed task rather than a new closing.
-    let finisher = (change.status.is_some_and(|status| !status.is_open())
-        && before.status.is_open()
-        && change.assignee.is_none())
-    .then(|| actor_holder(actor));
+    let inferred = inferred_holder(&before, &change, actor);
 
-    // Starting a task claims it too — the same rule read at the other end.
-    //
-    // ⚠ **Without this the holder column could only ever describe the past.** It
-    // was set when a task was closed and at no other time, so a list could say
-    // who had finished something and never who was carrying it; every session
-    // showed its in-flight work as belonging to nobody. `task start` was already
-    // documented as the way a session takes a task on, and it did not do it.
-    //
-    // ⚠ **Out of the PILE only, which is narrower than it first shipped.** The
-    // guard was on the status — claim unless the task was already `doing` — and
-    // that read as safe while being wrong: a task Pippijn had handed to one
-    // conversation, which had not got to it yet, was taken off it by any other
-    // session running `start`, silently. `starting_a_task_assigned_to_another_
-    // session_takes_nothing` is that case, and it failed against the rule the
-    // comment here originally claimed to implement.
-    //
-    // So: a holder is inferred only where there is none. If the task is already
-    // yours there is nothing to move; if it is somebody else's, taking it is a
-    // handover and `move` is the word for that.
-    //
-    // ⚠ **And it does not read the status, which was the last thing keeping this
-    // from firing where it was most needed.** A `&& before.status != Doing`
-    // clause survived that narrowing, on the argument that starting an
-    // already-started task should write no history — true of every task that is
-    // `doing` *because somebody is doing it*, and false of the one state where
-    // the status says nothing about the holder. A session that stops work
-    // deliberately hands the task back without closing it, leaving it `doing`
-    // and in the pile (#19), and `start` — the documented way to pick something
-    // up — then reported success and moved nobody. The no-history property was
-    // never this clause's to keep: `moved` below compares the holders and
-    // suppresses a write when they already match.
-    let starter = (change.status == Some(Status::Doing)
-        && before.assignee.kind == AssigneeKind::Nobody
-        && change.assignee.is_none())
-    .then(|| actor_holder(actor));
-
-    if let Some(assignee) = change
-        .assignee
-        .as_ref()
-        .or(finisher.as_ref())
-        .or(starter.as_ref())
-    {
+    if let Some(assignee) = change.assignee.as_ref().or(inferred.as_ref()) {
         check_assignee(assignee)?;
         let (kind, person, session) = assignee_columns(assignee);
         // Compared as (kind, id), which is what the three columns encode: for
@@ -1643,7 +1663,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 "UPDATE tasks SET assignee_kind = ?, assignee_person = ?, assignee_session = ? \
                  WHERE id = ?",
             )
-            .bind(kind)
+            .bind(kind.as_str())
             .bind(person)
             .bind(session)
             .bind(id)
@@ -1655,11 +1675,11 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 &mut tx,
                 id,
                 actor,
-                "assigned",
+                Moved::Assigned,
                 Some(format!("{} → {to}", before.assignee.label())),
             )
             .await?;
-            changed.push("assigned");
+            changed.push(Moved::Assigned);
         }
     }
 

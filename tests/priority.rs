@@ -16,7 +16,7 @@
 mod common;
 
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
-use tasks::tasks::types::{Actor, Priority, Ranking, Status};
+use tasks::tasks::types::{Actor, Moved, Priority, Ranking, Status};
 
 fn pippijn() -> Actor {
     Actor::Person("pippijn".into())
@@ -164,7 +164,9 @@ async fn ranking_a_task_afterwards_says_so_in_its_history() {
     .await
     .expect("ranking");
     assert_eq!(updated.task.priority, Some(Priority::P1));
-    assert_eq!(updated.changed, vec!["priority"]);
+    // ⚠ `Moved::Ranked`, not "priority": the history and this list are one
+    // vocabulary now, and this assertion used to pin them apart.
+    assert_eq!(updated.changed, vec![Moved::Ranked]);
 
     let detail = repo::get(&pool, task.id)
         .await
