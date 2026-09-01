@@ -28,6 +28,8 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
+use crate::tasks::checks;
+
 /// Where reports go. Ingest is token-authed; the read UI is not.
 const URL: &str = "https://fleetwatch.xinutec.org/api/reports";
 
@@ -259,7 +261,10 @@ pub fn checks(report: &Value) -> Vec<Value> {
             format!("{timeout} timed out, {errored} errored, of {runs}"),
             unanswered as f64,
             "",
-            if kind == "filing" && unanswered > 0 {
+            // ⚠ From [`checks::Kind`], not spelled: this is the one place the
+            // filing check's name is compared outside the module that defines
+            // it, and a rename there would silently stop this warning firing.
+            if kind == checks::Kind::Filing.as_str() && unanswered > 0 {
                 "warn"
             } else {
                 "pass"

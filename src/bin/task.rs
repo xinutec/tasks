@@ -1185,11 +1185,6 @@ async fn recorded(client: &Client, run: checks::Run) {
 /// is named here rather than left to the CLI, and the file goes the moment the
 /// answer is in hand — including on the failing paths, which leave exactly the
 /// same file as the working one.
-async fn ask(prompt: &str, patience: std::time::Duration) -> (Result<String>, u32) {
-    ask_with(prompt, None, patience).await
-}
-
-/// The same call, with a block of instructions in front of the question.
 ///
 /// ⚠ **`prefix` is where a cached prefix goes, and it must not vary per call.**
 /// See [`duplicates::settled_block`] for the measurement: the same bytes below
@@ -2334,7 +2329,7 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
     };
     let asked = density::prompt(id.id(), accreted as usize, body);
     let input_chars = asked.chars().count().min(u32::MAX as usize) as u32;
-    let (said, elapsed_ms) = ask(&asked, READING).await;
+    let (said, elapsed_ms) = ask_with(&asked, None, READING).await;
     let advice = said
         .as_ref()
         .ok()

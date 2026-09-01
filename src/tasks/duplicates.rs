@@ -135,17 +135,13 @@ pub fn collision(already: u64) -> String {
     )
 }
 
-/// A task the model thinks the new one might already be.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Match {
-    /// The task it named.
     pub id: u64,
     /// Its one clause about what the two share. Printed as given.
     pub why: String,
 }
 
-/// At most this many, however many come back.
-///
 /// The prompt asks for three and a model occasionally supplies five. A fourth
 /// line is not a fourth candidate worth opening — by then the answer is a list
 /// of everything in that area, which is the failure mode measured above.
@@ -220,7 +216,6 @@ pub fn prompt(subject: &str, corpus: &[(u64, String)], settled: bool) -> String 
     )
 }
 
-/// The matches in what came back, and nothing else.
 ///
 /// ⚠ **Anything unparseable is dropped rather than shown.** A model that decided
 /// to explain itself would otherwise put a paragraph into a refusal. A line that
@@ -279,8 +274,6 @@ fn ordinal(line: &str) -> &str {
     if rest.starts_with('#') { rest } else { line }
 }
 
-/// One line, if it is one.
-///
 /// Tolerant of the wrappers a model adds despite being asked not to: a leading
 /// bullet or number, `#` on the id or not, and `--`, `—` or `:` between the id
 /// and the reason. Not tolerant of a missing id, which is what separates an
@@ -332,8 +325,6 @@ pub fn refusal(found: &[Match]) -> String {
     out
 }
 
-/// A task that is over, as the check sees it.
-///
 /// ⚠ **`dropped` and `done` are kept apart because their remedies differ**, not
 /// because one is worse. A finished task whose bug came back is a legitimate new
 /// filing; an abandoned one being filed again means a decision is being made
@@ -403,8 +394,6 @@ pub fn settled_block(corpus: &[Settled]) -> String {
     )
 }
 
-/// The matches, split by where each one was found.
-///
 /// Ids the model returned that belong to neither list are already gone by the
 /// time this runs — [`parse`] drops them — so an id here is real, and the only
 /// question left is which list it came off.

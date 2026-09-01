@@ -30,8 +30,6 @@ use crate::wire::RequiredKeys;
 
 type Result<T> = std::result::Result<T, AppError>;
 
-/// How a command ended.
-///
 /// ⚠ **Counted apart, never folded together.** The error path is usually the
 /// fast one — a refusal prints and returns without a round trip — so a median
 /// over both reports the tool as quicker than any session experiences it.
@@ -46,7 +44,6 @@ type Result<T> = std::result::Result<T, AppError>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ended {
-    /// It did what was asked.
     Ok,
     /// The tool DECLINED — a guard fired, or a check refused. Not a fault: this
     /// is the tool doing its job, and counting it as breakage hides both.
@@ -77,8 +74,6 @@ impl Ended {
     }
 }
 
-/// The tool DECLINED, as against something going wrong.
-///
 /// ⚠ **A type, never a message match.** `checks::outcome` already makes this
 /// argument for timeouts: it turns on the error's chain so that rewording a line
 /// a caller prints cannot silently reclassify a month of runs. The same holds
@@ -103,7 +98,6 @@ pub fn declined(said: impl std::fmt::Display) -> anyhow::Error {
     anyhow::Error::new(Refused).context(said.to_string())
 }
 
-/// How this command ended, read off the error rather than its wording.
 pub fn ended(done: &anyhow::Result<()>) -> Ended {
     match done {
         Ok(()) => Ended::Ok,
@@ -224,7 +218,6 @@ pub struct Ran {
     pub waited_for_a_model: Option<bool>,
 }
 
-/// Every command in the last `days`, newest first.
 ///
 /// ⚠ **An outcome this module cannot read is an error, not a skipped row** —
 /// the same rule as `checks::recent`, and for the same reason: dropping it would
@@ -262,7 +255,6 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
         .collect()
 }
 
-/// What one command did over the period.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tally {
     pub verb: String,
@@ -308,7 +300,6 @@ pub struct Tally {
     pub unknown: usize,
 }
 
-/// Nearest rank, on a slice that is already sorted.
 fn rank(sorted: &[u32], part: f64) -> u32 {
     if sorted.is_empty() {
         return 0;
@@ -317,8 +308,6 @@ fn rank(sorted: &[u32], part: f64) -> u32 {
     sorted[at.clamp(1, sorted.len()) - 1]
 }
 
-/// Fold runs into one line per verb, busiest first.
-///
 /// ⚠ **Ordered by how often a command is RUN, not by how slow it is.** The
 /// question this answers is what sessions spend their time on, and a rarely-used
 /// command with a bad worst case sorts above `list` on latency while costing

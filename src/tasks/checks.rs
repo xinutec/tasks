@@ -54,7 +54,7 @@ pub enum Outcome {
 }
 
 impl Kind {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Kind::Filing => "filing",
             Kind::Density => "density",

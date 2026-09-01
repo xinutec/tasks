@@ -239,10 +239,16 @@ Safe to cut, no regression across twelve bodies:
 
   * **A rejected alternative.** Cutting the argument is right; cutting the FACT
     that it was on the table and lost means it gets re-proposed.
-  * **A consequence that reads as obvious.** This is the most dangerous class
-    precisely because cutting it feels safest — "retention needs no policy, the
-    FK cascades" is derivable and a reader still could not answer whether
-    pruning was in scope.
+  * **A DECISION wearing the clothes of a derivation.** "Retention needs no
+    policy, the FK cascades" reads as something you could work out, and cutting
+    it left a reader unable to say whether pruning was in scope — because it is
+    not a derivation, it is a decision not to build one.
+
+    ⚠ **The test is not *is this obvious*, it is *does this stop somebody doing
+    a wrong thing*.** `// increment the counter` above `n += 1` stops nothing and
+    goes. A sentence that forecloses work stays, however derivable it looks. I
+    had this as "obvious things are dangerous to cut", which is backwards: what
+    was dangerous was mislabelling a constraint as obvious.
   * **Who a decision belongs to**, and whether it may be overruled.
   * **A commit sha.** The DATE is chronology; the SHA is the artefact pointer,
     and a reader wants it so it does not redo shipped work.
