@@ -81,7 +81,6 @@ pub fn minted() -> String {
     ulid::Ulid::new().to_string()
 }
 
-/// One check line, in the shape the ingest API takes.
 fn check(label: &str, observed: String, value: f64, unit: &str, verdict: &str) -> Value {
     json!({
         "section": "tasks",

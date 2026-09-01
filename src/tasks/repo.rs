@@ -1,6 +1,6 @@
 //! Reading and writing tasks.
 //!
-//! Every write records a [`task_events`] row in the same transaction as the
+//! Every write records a `task_events` row in the same transaction as the
 //! change it describes, because the history is not a log beside the data — it
 //! is the part of the old file scheme that git used to provide, and a history
 //! that can be absent for a write nobody noticed is not one.
@@ -619,7 +619,7 @@ pub struct Change {
     /// characters of filing, and the only way to say that was to read the body
     /// out, concatenate by hand, and send the whole thing back as a
     /// replacement. Twice on 2026-08-15 the read half was skipped and the
-    /// paragraph landed as the entire body — once caught by [`collapses`], once
+    /// paragraph landed as the entire body — once caught by `collapses`, once
     /// under its threshold at 52% kept, which nothing catches.
     ///
     /// ⚠ **Above rather than below is the ordinary case, and deliberately.** A
@@ -650,7 +650,6 @@ pub struct Change {
     /// Ranking a task wrongly is corrected by ranking it again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
-    /// Set the day it has to be done by.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<NaiveDate>,
     /// Take the deadline off.
@@ -677,7 +676,7 @@ pub struct Change {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
     /// Say that a body which keeps almost nothing of the one it replaces is
-    /// meant. See [`collapses`] for what is refused without it, and why.
+    /// meant. See `collapses` for what is refused without it, and why.
     ///
     /// ⚠ **Undo sets this, and has to.** Putting back what an edit replaced is
     /// a PATCH of subject and body like any other, so undoing an edit that
@@ -720,13 +719,21 @@ fn check_subject(subject: &str) -> Result<String> {
     Ok(subject.to_string())
 }
 
-/// A body worth guarding, and the share of it an edit has to leave standing.
+/// The size below which a body is not worth guarding at all.
 ///
-/// Both numbers are deliberately far from anything a real rewrite does. The
-/// point is not to catch every loss — it is to catch the writes that were never
-/// edits at all, and to do it without asking anybody about the ordinary ones.
+/// ⚠ **Deliberately far from anything a real rewrite does**, as is
+/// [`KEEPS_AT_LEAST`]. The point is not to catch every loss — it is to catch the
+/// writes that were never edits at all, and to do it without asking anybody
+/// about the ordinary ones. Measured 2026-08-16: 95 real sized edits, 89
+/// guarded, zero false positives.
 const WORTH_GUARDING: usize = 500;
-const KEEPS_AT_LEAST: usize = 4; // i.e. a quarter
+
+/// The share of a guarded body an edit has to leave standing — a quarter.
+///
+/// ⚠ **A rewrite that keeps half is NOT caught**, and one at 52% is the loss
+/// nothing catches; this is a backstop against truncation, not against a
+/// confident overwrite. `task undo` is what covers the rest.
+const KEEPS_AT_LEAST: usize = 4;
 
 /// Whether a new body keeps so little of the old one that it is more likely a
 /// mistake than a rewrite.
@@ -803,7 +810,6 @@ fn joined(was: &str, prepend: Option<&str>, append: Option<&str>) -> String {
         .join("\n\n")
 }
 
-/// Split an assignee into the three columns that store it.
 fn assignee_columns(assignee: &Assignee) -> (AssigneeKind, Option<&str>, Option<&str>) {
     match assignee.kind {
         AssigneeKind::Nobody => (AssigneeKind::Nobody, None, None),
@@ -906,7 +912,7 @@ async fn blocking_is_consistent(
     //
     // Checked before the rank, because it is the harder fact.
     if let Some(mine) = due {
-        // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+        // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
         let ahead: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
             "SELECT bt.id, bt.due FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
             "WHERE b.task_id = ? AND bt.due IS NOT NULL AND bt.due > ? AND ",
@@ -925,7 +931,7 @@ async fn blocking_is_consistent(
         }
     }
     // And the other end: a blocker pushed out past something waiting on it.
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let stranded: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
         "SELECT t.id, t.due FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
         "WHERE b.blocked_on = ? AND t.due IS NOT NULL AND ",
@@ -954,7 +960,7 @@ async fn blocking_is_consistent(
     let mine = Priority::rank(Some(stated));
 
     // This end: what this task waits for, of those still open.
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let blockers: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
         "SELECT bt.id, bt.priority FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
         "WHERE b.task_id = ? AND ",
@@ -989,7 +995,7 @@ async fn unblocked_end(
     priority: Option<Priority>,
 ) -> Result<()> {
     let mine = Priority::rank(priority);
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` below.
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let waiting: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
         "SELECT t.id, t.priority FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
         "WHERE b.blocked_on = ? AND ",
@@ -1103,7 +1109,7 @@ async fn set_blockers(
 
 /// A blocker id with no task behind it, said plainly instead of as a 500.
 ///
-/// The same defect and the same fix as `unknown_holder` above — both foreign
+/// The same defect and the same fix as `unknown_holder` — both foreign
 /// keys arrive as `ErrorKind::ForeignKeyViolation`, and on this statement there
 /// is one row that can be missing.
 fn unknown_blocker(e: sqlx::Error, blocker: u64) -> AppError {
@@ -1204,7 +1210,6 @@ async fn record(
     Ok(done.last_insert_id())
 }
 
-/// File a new task.
 pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Task> {
     let subject = check_subject(&new.subject)?;
     // Filing a task takes it on, unless the caller says where it goes.
@@ -1639,20 +1644,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         .await?;
     }
 
-    // Closing a task makes the closer its holder.
-    //
-    // ⚠ **Not decoration: `assignee` is the only place a LIST can say who did
-    // something.** The history knows — every change records its actor — but no
-    // list renders a history, so a task closed while held by `nobody` reads as
-    // "done by nobody" everywhere it is ever seen again. That was true of #461,
-    // finished by the session that wrote this.
-    //
-    // **Dropping counts as closing here**, on the same argument read the other
-    // way: *who decided this was not worth doing* is exactly as much a thing a
-    // list should be able to say as who did it, and the status beside the name
-    // is what distinguishes the two.
-    //
-    // An explicit assignee in the same change wins: a caller saying where a task
+    // Who this lands on when the caller did not say — the rules, and the two
+    // regressions behind them, are on `inferred_holder`.
     let inferred = inferred_holder(&before, &change, actor);
 
     if let Some(assignee) = change.assignee.as_ref().or(inferred.as_ref()) {
@@ -1767,7 +1760,7 @@ async fn accreted(pool: &MySqlPool, id: u64, now: usize) -> Result<usize> {
 /// One task without its prose or history — the read every write does first,
 /// and the value every write returns.
 async fn list_one(pool: &MySqlPool, id: u64) -> Result<Task> {
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get` above.
+    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
         .fetch_optional(pool)

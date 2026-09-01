@@ -84,7 +84,6 @@ pub struct Run {
     /// The task whose body was read. Absent on a filing check.
     #[serde(default)]
     pub task_id: Option<u64>,
-    /// Characters put to the model.
     pub input_chars: u32,
     /// What crossed the sampler, on a density read.
     #[serde(default)]
@@ -143,7 +142,6 @@ impl RequiredKeys for Run {
     }
 }
 
-/// Write one down.
 pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     sqlx::query(
         "INSERT INTO check_run \

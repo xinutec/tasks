@@ -46,13 +46,6 @@
 
 use anyhow::{Context, Result};
 
-/// The query parameters for `GET /api/tasks`.
-///
-/// **Without a session id there is no "own" to narrow to**, so the caller gets
-/// everything — the same answer `/api/digest` gives a person who names no
-/// session. In practice this is not reachable through the token path, which
-/// refuses to run at all without an id; it is the honest answer rather than a
-/// live case.
 /// Whose list is being asked for, once a name has been resolved.
 ///
 /// ⚠ **A person and a session are different columns**, which is why this is not
@@ -67,6 +60,13 @@ pub enum Holder<'a> {
     Nobody,
 }
 
+/// The query parameters for `GET /api/tasks`.
+///
+/// **Without a session id there is no "own" to narrow to**, so the caller gets
+/// everything — the same answer `/api/digest` gives a person who names no
+/// session. In practice this is not reachable through the token path, which
+/// refuses to run at all without an id; it is the honest answer rather than a
+/// live case.
 pub fn list_query(
     all: bool,
     mine: bool,

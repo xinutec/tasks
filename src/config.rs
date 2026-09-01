@@ -11,7 +11,6 @@ use anyhow::{Context, Result};
 pub struct Config {
     /// Full `mysql://` DSN for this app's own database.
     pub database_url: String,
-    /// Address to bind the HTTP server to.
     pub bind_addr: String,
     /// Directory of the built Angular bundle to serve (SPA fallback). Unset →
     /// API-only (dev, where `ng serve` proxies).

@@ -13,7 +13,6 @@ use serde::Deserialize;
 
 use crate::config::AuthConfig;
 
-/// Build the URL the browser is redirected to in order to grant access.
 pub fn authorize_url(auth: &AuthConfig, state: &str) -> String {
     let mut url = url::Url::parse(&format!(
         "{}/index.php/apps/oauth2/authorize",
@@ -53,7 +52,6 @@ struct TokenResponse {
     access_token: String,
 }
 
-/// Exchange an authorization `code` for an access token.
 pub async fn exchange_code(
     http: &reqwest::Client,
     auth: &AuthConfig,

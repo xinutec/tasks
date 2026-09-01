@@ -157,7 +157,6 @@ pub async fn start_focus(
     Ok(Json(focus))
 }
 
-/// End one early, or report that there was not one.
 pub async fn end_focus(
     Access(viewer): Access,
     State(app): State<AppState>,
@@ -168,7 +167,6 @@ pub async fn end_focus(
     Ok(Json(json!({ "was": was })))
 }
 
-/// What this session is focused on, if anything.
 pub async fn read_focus(
     Access(viewer): Access,
     State(app): State<AppState>,
@@ -224,7 +222,6 @@ pub struct ListQuery {
     handed_out: Option<String>,
 }
 
-/// Tasks matching a filter.
 pub async fn list(
     Access(_): Access,
     State(app): State<AppState>,
@@ -241,7 +238,6 @@ pub async fn list(
     Ok(Json(repo::list(&app.db, &filter).await?))
 }
 
-/// One task, with its prose and its history.
 pub async fn detail(
     Access(_): Access,
     State(app): State<AppState>,
@@ -283,7 +279,6 @@ pub async fn holders(
     Ok(Json(sessions::holders(&app.db).await?))
 }
 
-/// File a task.
 pub async fn create(
     Access(viewer): Access,
     SeenAs(called): SeenAs,

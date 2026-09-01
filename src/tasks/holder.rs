@@ -38,7 +38,6 @@ pub enum Holder {
     Unknown(Vec<String>),
 }
 
-/// Resolve `typed` against what the service says exists.
 ///
 /// **An exact id wins over a name.** They cannot collide in practice — one is a
 /// uuid — but the id is the identity and the name is an attribute of it, so if

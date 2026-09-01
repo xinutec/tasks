@@ -989,7 +989,7 @@ const CHECKER: &str = "claude-haiku-4-5-20251001";
 /// answered. Only that tail pays the wider one.
 ///
 /// Provisional, and it is the last number here that will be a guess:
-/// [`checks`](tasks::tasks::checks) now records the elapsed time of every call,
+/// [`checks`] now records the elapsed time of every call,
 /// so the next reading comes from a distribution.
 const PATIENCE: std::time::Duration = std::time::Duration::from_secs(120);
 
@@ -1176,6 +1176,16 @@ async fn recorded(client: &Client, run: checks::Run) {
     let _ = client.send(req).await;
 }
 
+/// Whether this process ever waited for a model.
+///
+/// ⚠ **The one variable that explains the `edit` distribution.** Set here rather
+/// than at either check's call site because this is the function that WAITS —
+/// both checks funnel through it, and a timeout counts: a run that waited 90
+/// seconds and got nothing belongs in the slow population, not the fast one.
+/// A process runs one command, so a flag is the whole of the state needed.
+static WAITED_FOR_A_MODEL: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Put the question to a one-shot session and leave nothing behind.
 ///
 /// ⚠ **Every call is a conversation, and a conversation is a file that outlives
@@ -1195,16 +1205,6 @@ async fn recorded(client: &Client, run: checks::Run) {
 /// gives about the prompt — this block is 87 kB of closed titles, and while
 /// `ARG_MAX` is a megabyte here, an argument that size is at the mercy of
 /// anything that logs a command line. The file goes with the transcript.
-/// Whether this process ever waited for a model.
-///
-/// ⚠ **The one variable that explains the `edit` distribution.** Set here rather
-/// than at either check's call site because this is the function that WAITS —
-/// both checks funnel through it, and a timeout counts: a run that waited 90
-/// seconds and got nothing belongs in the slow population, not the fast one.
-/// A process runs one command, so a flag is the whole of the state needed.
-static WAITED_FOR_A_MODEL: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
 async fn ask_with(
     prompt: &str,
     prefix: Option<&str>,
@@ -1339,10 +1339,8 @@ fn line(task: &Task) -> String {
     // order. Two spaces where there is no rank, so nothing shifts sideways
     // between a ranked line and an unranked one.
     // A near deadline raises the rank; `!` marks a level nobody chose, so the
-    // order never reads as random. The rule lives in SQL — this only prints
-    // whichever value the service says the list was sorted by.
-    // `!` marks a level nobody chose — [`Task::urgency`] is the rule, and it is
-    // the same one the list was sorted by.
+    // order never reads as random. `Task::urgency` is the rule and the SQL sorts
+    // by it — this only prints whichever value came back.
     let rank = match task.escalated_to {
         Some(raised) => format!("{}!", raised.as_str()),
         None => task
@@ -2166,18 +2164,6 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
     Ok(())
 }
 
-/// Change a task, named either way.
-///
-/// ⚠ **A write that moved nothing says so**, because until 2026-08-10 it printed
-/// a line identical to the one a real change produces. `task start` on a task
-/// already `doing` in the pile claimed nobody and looked like it had worked;
-/// so did a rename to a blank name, and closing into the pile. Each was found
-/// by reproducing it on a scratch task rather than by the caller noticing.
-///
-/// It is a note, not an error: a no-op is often the right answer — starting a
-/// task already yours is meant to be quiet — and a non-zero exit would turn a
-/// silent success into a spurious failure. The service reports which
-/// `task_events` it wrote; empty means none.
 /// The task as it stood before its last edit, or why there is no such thing.
 ///
 /// ⚠ **The service answers 404 for two different states** — a task that does
@@ -2281,6 +2267,18 @@ async fn written(client: &Client, id: &TaskRef, note: Option<&str>) -> Result<()
     Ok(())
 }
 
+/// Change a task, named either way.
+///
+/// ⚠ **A write that moved nothing says so**, because until 2026-08-10 it printed
+/// a line identical to the one a real change produces. `task start` on a task
+/// already `doing` in the pile claimed nobody and looked like it had worked;
+/// so did a rename to a blank name, and closing into the pile. Each was found
+/// by reproducing it on a scratch task rather than by the caller noticing.
+///
+/// It is a note, not an error: a no-op is often the right answer — starting a
+/// task already yours is meant to be quiet — and a non-zero exit would turn a
+/// silent success into a spurious failure. The service reports which
+/// `task_events` it wrote; empty means none.
 async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Result<Value> {
     client.writing()?;
     let id = id.id();

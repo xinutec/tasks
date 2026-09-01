@@ -35,7 +35,7 @@
 //! happen"*, and putting that in front of a session on every turn contradicts
 //! its own definition. Measured 2026-08-17, the `life` session's entire
 //! 1112-byte digest was its P3/P4 tail: 12 of 13 open tasks were `P4`, so it
-//! paid for a parked wishlist every turn and for nothing else. See [`parked`],
+//! paid for a parked wishlist every turn and for nothing else. See `parked`,
 //! which also records why `P3` is not treated the same way.
 //!
 //! **A session can narrow this further, for a few hours, and only itself.**

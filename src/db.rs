@@ -30,7 +30,6 @@ pub async fn connect(database_url: &str) -> Result<MySqlPool> {
     Ok(pool)
 }
 
-/// Name of the advisory lock that serialises migrations across processes.
 const MIGRATION_LOCK: &str = "tasks_migrations";
 /// Long enough to outlast a real migration, short enough to fail loudly if a
 /// previous holder wedged.

@@ -48,12 +48,6 @@ const NEEDLES: [&str; 2] = [
     r#"{"type":"custom-title","customTitle":""#,
 ];
 
-/// The name a session goes by now, from the tail of its own transcript.
-///
-/// `None` is the whole failure mode: an unreadable file, a CLI that has changed
-/// the shape of the line, a name older than [`TAIL_WINDOW`]. The caller keeps
-/// whatever name the service already had, which is the behaviour that existed
-/// before this module.
 /// Where a session's transcript is, by id rather than by working out the path.
 ///
 /// ⚠ **The directory under `projects/` is an undocumented encoding of the
@@ -73,6 +67,12 @@ pub fn transcript_of(projects_root: &Path, session: &str) -> Option<std::path::P
         .find(|path| path.exists())
 }
 
+/// The name a session goes by now, from the tail of its own transcript.
+///
+/// `None` is the whole failure mode: an unreadable file, a CLI that has changed
+/// the shape of the line, a name older than [`TAIL_WINDOW`]. The caller keeps
+/// whatever name the service already had, which is the behaviour that existed
+/// before this module.
 pub fn from_projects(projects_root: &Path, session: &str) -> Option<String> {
     let Ok(entries) = std::fs::read_dir(projects_root) else {
         return None;

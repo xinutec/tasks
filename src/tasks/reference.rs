@@ -25,7 +25,6 @@ use std::str::FromStr;
 pub struct TaskRef(pub u64);
 
 impl TaskRef {
-    /// Where to GET it.
     pub fn path(&self) -> String {
         format!("/api/tasks/{}", self.0)
     }

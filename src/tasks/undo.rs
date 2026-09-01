@@ -32,7 +32,6 @@
 
 use crate::tasks::types::Revision;
 
-/// Whether restoring this version needs saying out loud first.
 ///
 /// Only the authorship question. A revision that is the caller's own is theirs
 /// to put back, however old.
@@ -40,7 +39,6 @@ pub fn needs_saying(was: &Revision) -> bool {
     !was.mine
 }
 
-/// What to say when it does, naming whose edit is at stake and when.
 ///
 /// The date is included because "by dev-lint" alone does not tell you whether
 /// you are looking at a collision seconds old or an edit from last week, and the
