@@ -1777,12 +1777,12 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             match (matches!(to, Some(To::Nobody)), spare.is_some()) {
                 (true, false) => {
                     return Err(commands::declined(
-                        "filing to the pile needs a reason: `--spare \"why this is nobody's\"`.                          Most work belongs to whoever files it, which is what `--to me` does                          by default. Nothing was filed.",
+                        "filing to the pile needs a reason: `--spare \"why this is nobody's\"`. Most work belongs to whoever files it, which is what `--to me` does by default. Nothing was filed.",
                     ));
                 }
                 (false, true) => {
                     return Err(commands::declined(
-                        "`--spare` says why a task is nobody's, so it only fits `--to nobody`.                          Nothing was filed.",
+                        "`--spare` says why a task is nobody's, so it only fits `--to nobody`. Nothing was filed.",
                     ));
                 }
                 _ => {}
