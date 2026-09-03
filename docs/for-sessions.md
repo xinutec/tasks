@@ -126,7 +126,8 @@ task move <id> pippijn          # hand it to Pippijn
 task move <id> <session-id>     # hand it to another conversation
 task move <id> nobody           # put it back in the pile
 task add "One line" --priority P2 --body -   # yours, by default
-task add "One line" --priority P1 --to nobody  # for whoever picks it up
+task add "One line" --priority P1 --to nobody --spare "why it is nobody's"
+                                    # the pile: refused without a reason
 task add "One line" --unassessed    # not yours to judge; whoever takes it decides
 task add "One line" --priority P2 --no-duplicate-check   # skip the check below
 task edit <id> --prepend "DONE in <sha>."  # add ABOVE the body, keeping all of it
@@ -161,7 +162,9 @@ takes it on, and `task start` claims it **out of the pile** — the same way `ta
 done` already put your name on it. It never takes one off somebody else: if a
 task is already held, starting it moves the status and nothing else, and taking
 it on properly is `task move <id> me`. If you want it in the pile instead, say
-`--to nobody` — that is a decision rather than a default.
+`--to nobody` AND `--spare "<why>"` — the pile is a decision, and since
+2026-09-03 one you have to argue: it was corrected 47 times out of 47, so a
+reason is now required and a bare `--to nobody` is refused.
 
 Until 2026-08-09 none of that was true: a holder was recorded when a task was
 *closed* and at no other moment, so a session could show three finished tasks and

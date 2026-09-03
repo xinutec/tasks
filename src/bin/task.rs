@@ -97,6 +97,12 @@ ordinary case. Both are answers and both sort at P2; the difference is that P2
 claims somebody read it and called it ordinary, where UNASSESSED claims nobody
 has. Leaving both off is not an answer and is refused.
 
+THE PILE IS THE SECOND THING THAT MUST BE SAID. `--to nobody` needs
+`--spare \"<why>\"` beside it, and a bare one is refused the same way a missing
+priority is. `--to me` is the default and needs no argument; the pile is the one
+holder that does, because it was corrected 47 times out of 47. A reason without
+`--to nobody` is refused too: it would say nothing true about a held task.
+
 UNASSESSED is not a sixth level — it sorts exactly where P2 does. So P0 and P1
 rise above it and P3 and P4 sink below, and anything nobody has judged keeps its
 place: oldest first, which is what makes old work get fixed rather than buried.

@@ -320,6 +320,7 @@ task show <id> [--body]                   # one task, its prose and its history
 task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
 task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody] [--priority P1]
+                                          # `--to nobody` needs `--spare "<why>"`
 task start <id> / task done <id> [--to W] # move it along
 task drop <id>                            # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
@@ -493,10 +494,13 @@ that row must not say.
 removed two things at once and only one of them was wrong. *Which sessions
 should be shown this* hid work and is gone for good; *where does this work live*
 is what a session needs to rule a task out, and without it that cost 2,732 bytes
-of `task show` against 548 for seeing the whole pile. The digest stays silent
-because most open tasks are in the pile, so a word on each is a per-task charge
-on every session on every turn — `the_digest_never_says_who_filed_a_task` is the
-guard, because that argument will come back wearing a good suit. And the filer is
+of `task show` against 548 for seeing the whole pile. The digest stays silent because a word on each
+filer is a per-task charge on every session on every turn —
+`the_digest_never_says_who_filed_a_task` is the guard, because that argument will
+come back wearing a good suit. ⚠ **This used to argue from "most open tasks are
+in the pile", which is no longer true and is no longer needed:** filing there
+takes a reason now, and `task list --pile` is where the current size lives. The
+per-task charge was always the load-bearing half. And the filer is
 not always the place: #683 was filed by the tasks session about memview.
 
 ⚠ **`doing` and `nobody` together is a real state, not a leftover.** A session
@@ -518,10 +522,14 @@ separate places where a session's own work was not its own. The visible symptom
 was a conversation showing `0 open` while it was hours into a task, because a
 holder was recorded on the way out and at no other time.
 
-⚠ **The pile is a decision now, not a default.** `--to nobody` — or "nobody" in
-the form — is how work is left for whoever picks it up, which is how Pippijn
-hands a task to no conversation in particular. It is still the second thing a
-digest carries, deliberately: see below.
+⚠ **The pile is a decision now, and since 2026-09-03 an argued one.**
+`--to nobody` — or "nobody" in the form — is how work is left for whoever picks
+it up, which is how Pippijn hands a task to no conversation in particular. It
+needs `--spare "<why>"` beside it: filing to the pile was corrected 47 times out
+of 47 across every real filing, so absence of a holder is now something stated
+rather than a way of not choosing. A reason WITHOUT the pile is refused too — it
+would say nothing true about a task somebody holds. It is still the second thing
+a digest carries, deliberately: see below.
 
 ⚠ **"Open" is `Status::is_open`, never `status <> 'done'`.** Six queries spelled
 it the second way, which was the same thing until it wasn't: a dropped task would

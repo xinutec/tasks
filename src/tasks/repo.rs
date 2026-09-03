@@ -579,7 +579,14 @@ pub struct NewTask {
     /// The tasks this one waits for, if they are known at filing time.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocked_on: Vec<u64>,
-    /// Who it is for. Absent leaves it in the pile.
+    /// Who it is for. **Absent means the filer**, not the pile.
+    ///
+    /// ⚠ **This said "absent leaves it in the pile" until 2026-09-03, and that
+    /// had been false since the default was inverted** — see `create`, which
+    /// takes the task on unless told otherwise. A client trusting this line
+    /// would have omitted the key to reach the pile and quietly filed to
+    /// itself; since [`spare`](Self::spare) it would instead have been refused,
+    /// which is the better failure and still not the documented one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
     /// Why this belongs to nobody — **required when, and only when, it does**.
