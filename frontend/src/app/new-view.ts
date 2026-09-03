@@ -62,6 +62,8 @@ export class NewView {
     this.store.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
   );
   readonly me = computed(() => this.store.personId());
+  /** Why the pile, when the pile is chosen — see the note on `file`. */
+  readonly spare = signal('');
   readonly saving = signal(false);
   readonly failed = signal<string | null>(null);
 
@@ -96,6 +98,10 @@ export class NewView {
     const priority = this.priority();
     // `undefined` is unanswered; `null` is a chosen `unassessed`. The button
     // is disabled in the same state, so this is the second of two guards.
+    // The pile needs its reason, and the service refuses without one. Guarded
+    // here so the form says so instead of round-tripping to a 400.
+    const spare = this.spare().trim();
+    if (this.to() === 'nobody' && !spare) return;
     if (!subject || priority === undefined || this.saving()) return;
     this.saving.set(true);
     this.failed.set(null);
@@ -107,6 +113,9 @@ export class NewView {
         // the service now, and that is the point: it cannot be skipped.
         priority,
         assignee: this.assignee(),
+        // Sent only with the pile: the service refuses a reason that arrives
+        // beside a real holder, because it would say nothing true about it.
+        ...(this.to() === 'nobody' ? { spare } : {}),
         // The UI has no way to skip the duplicate check, so this is always
         // true — and it says so rather than relying on the service's default.
         checked: true,

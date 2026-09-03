@@ -37,6 +37,7 @@ async fn file(pool: &sqlx::MySqlPool, subject: &str, body: &str) -> u64 {
             due: None,
             blocked_on: Vec::new(),
             assignee: None,
+            spare: None,
         },
         &pippijn(),
     )

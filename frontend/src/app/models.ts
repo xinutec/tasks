@@ -291,6 +291,18 @@ export interface NewTask {
   due?: string | null;
   blocked_on?: number[];
   assignee?: Assignee | null;
+  /**
+   * Why this is nobody's — **required when `assignee` is the pile, refused
+   * otherwise**, so the two travel together or not at all.
+   *
+   * ⚠ **Filing to the pile was corrected 47 times out of 47** (#1334, every
+   * real filing scanned 2026-09-03), so it is now argued for rather than
+   * typed. Omitting it with a `nobody` assignee is a **400**, and sending it
+   * alongside a real holder is a **400** too: a reason for the pile says
+   * nothing true about a task on somebody's plate. Whitespace is not an
+   * answer.
+   */
+  spare?: string | null;
 }
 
 /**

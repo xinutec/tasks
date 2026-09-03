@@ -39,6 +39,7 @@ fn filed(subject: &str) -> NewTask {
         due: None,
         blocked_on: Vec::new(),
         assignee: None,
+        spare: None,
     }
 }
 
@@ -47,6 +48,7 @@ fn filed(subject: &str) -> NewTask {
 fn unclaimed(subject: &str) -> NewTask {
     NewTask {
         assignee: Some(Assignee::nobody()),
+        spare: Some("nobody's to take".into()),
         ..filed(subject)
     }
 }
@@ -92,6 +94,7 @@ async fn the_pile_is_something_said_rather_than_something_fallen_into() {
         &pool,
         NewTask {
             assignee: Some(Assignee::nobody()),
+            spare: Some("  needs a hardware owner and there is none  ".into()),
             ..filed("For whoever picks it up")
         },
         &Actor::Session("sess-1".into()),
@@ -100,12 +103,78 @@ async fn the_pile_is_something_said_rather_than_something_fallen_into() {
     .expect("filing");
     assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
 
-    // The history has to say it went to the pile, because that is now a
-    // decision. `create` only records an `assigned` event for a holder that is
-    // somebody, so this is the assertion that the silent case stays silent
-    // while the row itself is right.
+    // ⚠ **This asserted the OPPOSITE until 2026-09-03** — that the pile stays
+    // silent — and that silence is what made the misuse unmeasurable: the rate
+    // behind #1334 had to be inferred from which filings lacked this row. A
+    // decision that leaves no record is not one the tool can report on.
     let moves = kinds(&pool, task.id).await;
-    assert_eq!(moves, vec!["created"], "filing to the pile moves nobody");
+    assert_eq!(moves, vec!["created", "assigned"], "the pile is recorded");
+
+    let note = repo::get(&pool, task.id)
+        .await
+        .expect("reading")
+        .expect("a task")
+        .events
+        .into_iter()
+        .find(|e| e.kind == "assigned")
+        .expect("the assignment")
+        .detail;
+    assert_eq!(
+        note.as_deref(),
+        Some("→ nobody: needs a hardware owner and there is none"),
+        "the reason is stored, trimmed"
+    );
+}
+
+#[tokio::test]
+async fn the_pile_without_a_reason_is_refused_and_a_reason_without_the_pile_is_too() {
+    let pool = common::fresh_db().await;
+
+    let bare = repo::create(
+        &pool,
+        NewTask {
+            assignee: Some(Assignee::nobody()),
+            ..filed("Somebody else's problem")
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await;
+    assert!(bare.is_err(), "the pile has to be argued for");
+
+    // Whitespace would satisfy a presence check while arguing nothing, which is
+    // the shape a guard like this fails in.
+    let blank = repo::create(
+        &pool,
+        NewTask {
+            assignee: Some(Assignee::nobody()),
+            spare: Some("   ".into()),
+            ..filed("Somebody else's problem")
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await;
+    assert!(blank.is_err(), "whitespace is not a reason");
+
+    // The other direction: a reason recorded against a task somebody holds
+    // would say nothing true about it.
+    let held = repo::create(
+        &pool,
+        NewTask {
+            spare: Some("why would this be here".into()),
+            ..filed("Mine to do")
+        },
+        &Actor::Session("sess-1".into()),
+    )
+    .await;
+    assert!(held.is_err(), "a held task takes no pile reason");
+
+    assert!(
+        repo::list(&pool, &Filter::default())
+            .await
+            .expect("listing")
+            .is_empty(),
+        "a refused filing writes nothing"
+    );
 }
 
 #[tokio::test]
@@ -199,7 +268,14 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         .filter(|e| e.kind == "assigned")
         .filter_map(|e| e.detail.as_deref())
         .collect();
-    assert_eq!(moves, vec!["nobody → memview", "memview → pippijn"]);
+    assert_eq!(
+        moves,
+        vec![
+            "→ nobody: nobody's to take",
+            "nobody → memview",
+            "memview → pippijn"
+        ]
+    );
     // Who did it comes from the credential, so the two moves have two actors —
     // and the session is named, not printed as its id.
     let actors: Vec<&str> = detail
@@ -208,7 +284,10 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         .filter(|e| e.kind == "assigned")
         .map(|e| e.actor.as_str())
         .collect();
-    assert_eq!(actors, vec!["pippijn", "memview"]);
+    // Three, not two: the filing to the pile is itself an assignment now, and
+    // its actor is whoever filed. The two moves that follow are the pair this
+    // test is about.
+    assert_eq!(actors, vec!["pippijn", "pippijn", "memview"]);
 }
 
 #[tokio::test]
@@ -284,9 +363,17 @@ async fn a_change_that_changes_nothing_writes_no_history() {
         .await
         .expect("reading")
         .expect("a task");
+    // The filing's own two rows and nothing after them: `created`, and the
+    // `assigned` that says this went to the pile and why. Three no-op updates
+    // added none. Stated as kinds rather than a count so that a future event at
+    // filing time reads as a changed expectation instead of an off-by-one.
     assert_eq!(
-        detail.events.len(),
-        1,
+        detail
+            .events
+            .iter()
+            .map(|e| e.kind.as_str())
+            .collect::<Vec<_>>(),
+        vec!["created", "assigned"],
         "a client restating the object filled the history: {:?}",
         detail.events
     );
@@ -306,6 +393,7 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
     let task = repo::create(
         &pool,
         NewTask {
+            spare: None,
             subject: "Has prose".into(),
             // The check ran: these file through the service the way a session does.
             checked: true,
@@ -346,6 +434,7 @@ async fn a_session_rename_moves_no_task() {
     let task = repo::create(
         &pool,
         NewTask {
+            spare: None,
             subject: "Assigned to a session that will be renamed".into(),
             // The check ran: these file through the service the way a session does.
             checked: true,
@@ -403,6 +492,7 @@ async fn a_session_row_carries_how_much_it_is_holding() {
         repo::create(
             &pool,
             NewTask {
+                spare: None,
                 subject: format!("Task {n}"),
                 // The check ran: these file through the service the way a session does.
                 checked: true,
@@ -420,6 +510,7 @@ async fn a_session_row_carries_how_much_it_is_holding() {
     let finished = repo::create(
         &pool,
         NewTask {
+            spare: None,
             subject: "Already done".into(),
             // The check ran: these file through the service the way a session does.
             checked: true,
@@ -918,7 +1009,7 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
         .filter(|e| e.kind == "assigned")
         .filter_map(|e| e.detail.as_deref())
         .collect();
-    assert_eq!(moves, vec!["nobody → tasks"]);
+    assert_eq!(moves, vec!["→ nobody: nobody's to take", "nobody → tasks"]);
 
     // A second conversation running `start` on one already held takes nothing:
     // a holder is inferred only where there is none. Taking work off another
@@ -942,7 +1033,7 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
     );
     assert_eq!(
         kinds(&pool, task.id).await,
-        vec!["created", "status", "assigned"],
+        vec!["created", "assigned", "status", "assigned"],
         "starting a task twice wrote a second history"
     );
 
@@ -1042,7 +1133,9 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
     // the history says the work carried on rather than restarted.
     assert_eq!(
         kinds(&pool, task.id).await,
-        vec!["created", "status", "assigned", "assigned", "assigned"],
+        vec![
+            "created", "assigned", "status", "assigned", "assigned", "assigned"
+        ],
         "taking a doing task on wrote the wrong history"
     );
 }
@@ -1290,6 +1383,10 @@ async fn a_session_digest_carries_its_own_work_and_the_pile() {
         let task = repo::create(
             &pool,
             NewTask {
+                spare: holder
+                    .as_ref()
+                    .is_some_and(|h| h.kind == AssigneeKind::Nobody)
+                    .then(|| "left for whoever picks it up".to_string()),
                 assignee: holder,
                 ..filed(subject)
             },

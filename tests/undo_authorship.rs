@@ -48,6 +48,7 @@ async fn file(pool: &sqlx::MySqlPool, who: &Actor) -> u64 {
             due: None,
             blocked_on: Vec::new(),
             assignee: None,
+            spare: None,
         },
         who,
     )

@@ -262,6 +262,7 @@ async fn a_task(pool: &sqlx::MySqlPool, subject: &str) -> u64 {
             due: None,
             blocked_on: Vec::new(),
             assignee: None,
+            spare: None,
         },
         &Actor::Person("pippijn".into()),
     )

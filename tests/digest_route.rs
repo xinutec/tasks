@@ -151,6 +151,8 @@ async fn seed(pool: &MySqlPool) {
                 priority: Ranking::Unassessed,
                 due: None,
                 blocked_on: Vec::new(),
+                spare: (holder.kind == AssigneeKind::Nobody)
+                    .then(|| "left for whoever picks it up".to_string()),
                 assignee: Some(holder),
             },
             &Actor::Person("pippijn".into()),
@@ -366,6 +368,8 @@ mod handed_out {
                     priority: Ranking::Unassessed,
                     due: None,
                     blocked_on: Vec::new(),
+                    spare: (holder.kind == AssigneeKind::Nobody)
+                        .then(|| "left for whoever picks it up".to_string()),
                     assignee: Some(holder),
                 },
                 &filer,

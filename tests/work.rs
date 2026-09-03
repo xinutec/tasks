@@ -33,6 +33,10 @@ async fn file(pool: &MySqlPool, subject: &str, assignee: Option<Assignee>) -> u6
     repo::create(
         pool,
         NewTask {
+            spare: assignee
+                .as_ref()
+                .is_some_and(|a| a.kind == AssigneeKind::Nobody)
+                .then(|| "left for whoever picks it up".to_string()),
             subject: subject.into(),
             checked: true,
             body: String::new(),

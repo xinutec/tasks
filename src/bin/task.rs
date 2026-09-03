@@ -335,6 +335,14 @@ enum Command {
         /// `nobody` for the pile, or a session id.
         #[arg(long)]
         to: Option<To>,
+        /// Why this is nobody's — **required by `--to nobody`, and only by it**.
+        ///
+        /// ⚠ **The pile was corrected 47 times out of 47** (#1334, every real
+        /// filing scanned 2026-09-03), so it is now argued for rather than
+        /// typed. `--to me` is the default and needs no argument; this is the
+        /// one holder that does.
+        #[arg(long, value_name = "WHY")]
+        spare: Option<String>,
         /// How urgent: P0 to P4. Required, unless you say `--unassessed`.
         ///
         /// The levels are under `task --help`. Read them before picking: they
@@ -1718,6 +1726,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             subject,
             body: raw,
             to,
+            spare,
             priority,
             // Read by clap's group, not here: `--unassessed` is the absence of
             // `--priority` once one of the two is known to have been given.
@@ -1759,6 +1768,25 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     ));
                 }
             };
+            // ⚠ **Before `writing()` and before the duplicate check**, which is
+            // the whole reason this is repeated here at all: the check spends a
+            // model call of several seconds, and the service would refuse the
+            // filing afterwards anyway. The service still owns the rule — see
+            // `repo::spare_note`, which refuses both directions — so this is a
+            // faster no, never the only one.
+            match (matches!(to, Some(To::Nobody)), spare.is_some()) {
+                (true, false) => {
+                    return Err(commands::declined(
+                        "filing to the pile needs a reason: `--spare \"why this is nobody's\"`.                          Most work belongs to whoever files it, which is what `--to me` does                          by default. Nothing was filed.",
+                    ));
+                }
+                (false, true) => {
+                    return Err(commands::declined(
+                        "`--spare` says why a task is nobody's, so it only fits `--to nobody`.                          Nothing was filed.",
+                    ));
+                }
+                _ => {}
+            }
             client.writing()?;
             // The list comes first, and two separate questions are asked of it:
             // whether something open carries this exact subject, and whether a
@@ -1860,6 +1888,11 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             if let Some(to) = to {
                 let to = client.resolve(to).await?;
                 payload["assignee"] = assignee(&to, client.me()?);
+            }
+            // Sent as given: the pairing was refused above, and the service
+            // refuses it again from the type.
+            if let Some(spare) = spare {
+                payload["spare"] = json!(spare);
             }
             let req = client
                 .request(reqwest::Method::POST, "/api/tasks")

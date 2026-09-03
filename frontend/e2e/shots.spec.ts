@@ -154,6 +154,14 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('heading', { name: 'File a task' }).waitFor();
   await shot(page, 'new', true);
 
+  // The pile's reason field only exists once the pile is chosen, and a control
+  // that appears on a choice is the one that gets left broken — nothing renders
+  // it in the default state above.
+  await page.getByRole('combobox', { name: 'For' }).click();
+  await page.getByRole('option', { name: 'the pile' }).click();
+  await page.getByLabel("Why is this nobody's?").waitFor();
+  await shot(page, 'new-pile', true);
+
   // Empty is a state somebody sees on the first day and after the last task is
   // finished, and an empty screen is the easiest one to leave looking broken.
   await page.route('**/api/tasks**', (r) => r.fulfill({ json: [] }));

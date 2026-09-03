@@ -447,6 +447,7 @@ mod sprawl {
                 due: None,
                 blocked_on: Vec::new(),
                 assignee: None,
+                spare: None,
             },
             &Actor::Person("pippijn".into()),
         )

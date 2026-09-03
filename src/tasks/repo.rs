@@ -582,6 +582,16 @@ pub struct NewTask {
     /// Who it is for. Absent leaves it in the pile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
+    /// Why this belongs to nobody — **required when, and only when, it does**.
+    ///
+    /// ⚠ **Filing to the pile was corrected 47 times out of 47** (#1334, all
+    /// 726 real filings scanned 2026-09-03). It was never once the right final
+    /// holder, so it is now something argued for rather than something typed.
+    /// A holder needs no such argument: absent here with an assignee is fine,
+    /// present is refused, because a reason for the pile says nothing about a
+    /// task that is on somebody's plate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spare: Option<String>,
 }
 
 /// ⚠ **What the refusal SAYS, and nothing about whether there is one.** The
@@ -1210,6 +1220,30 @@ async fn record(
     Ok(done.last_insert_id())
 }
 
+/// The pile's stated reason, and the refusal when the two do not match.
+///
+/// ⚠ **Both directions, because enforcing only the first reads as the whole
+/// rule.** A missing reason for `nobody` is the case this exists for; a reason
+/// supplied *with* a holder is refused too, since it would be recorded against
+/// a task that is on somebody's plate and say nothing true about it.
+///
+/// Whitespace is not an answer: the guard exists so the pile is argued for, and
+/// `--spare " "` would satisfy a presence check while arguing nothing.
+fn spare_note(kind: AssigneeKind, spare: Option<&str>) -> Result<Option<String>> {
+    let said = spare.map(str::trim).filter(|why| !why.is_empty());
+    match (kind, said) {
+        (AssigneeKind::Nobody, Some(why)) => Ok(Some(why.to_string())),
+        (AssigneeKind::Nobody, None) => Err(AppError::BadRequest(
+            "filing to the pile needs a reason: say why this is nobody's, or file it to a holder"
+                .into(),
+        )),
+        (_, Some(_)) => Err(AppError::BadRequest(
+            "a reason for the pile does not fit a task that has a holder".into(),
+        )),
+        (_, None) => Ok(None),
+    }
+}
+
 pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Task> {
     let subject = check_subject(&new.subject)?;
     // Filing a task takes it on, unless the caller says where it goes.
@@ -1233,6 +1267,8 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     let assignee = new.assignee.unwrap_or_else(|| actor_holder(actor));
     check_assignee(&assignee)?;
     let (kind, person, session) = assignee_columns(&assignee);
+    // Before the transaction opens, so a refused filing costs no database work.
+    let spare = spare_note(kind, new.spare.as_deref())?;
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
     let done = sqlx::query(
@@ -1255,10 +1291,19 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
         record(&mut tx, id, actor, Moved::Blocked, Some(moved)).await?;
         blocking_is_consistent(&mut tx, id, new.priority.stored(), new.due).await?;
     }
-    if kind != AssigneeKind::Nobody {
-        let to = label_of(&mut tx, &assignee).await?;
-        record(&mut tx, id, actor, Moved::Assigned, Some(format!("→ {to}"))).await?;
-    }
+    // ⚠ **Recorded for the pile too, and that is the point of the row.** The
+    // rate this guard is set against had to be INFERRED from the absence of
+    // this event — a filing with a holder wrote `created` and `assigned` in one
+    // transaction, the pile wrote `created` alone, and the difference was the
+    // only evidence there was. A tool that cannot report its own misuse makes
+    // the next person re-derive it. ⚠ So the timestamp trick in #1334 stops
+    // working from here: `nobody` filings now carry an event, and re-running
+    // that method would report zero rather than the truth.
+    let note = match spare {
+        Some(why) => format!("→ nobody: {why}"),
+        None => format!("→ {}", label_of(&mut tx, &assignee).await?),
+    };
+    record(&mut tx, id, actor, Moved::Assigned, Some(note)).await?;
     tx.commit().await.context("committing a new task")?;
 
     list_one(pool, id).await

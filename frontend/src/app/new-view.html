@@ -42,6 +42,23 @@
     </mat-select>
   </mat-form-field>
 
+  <!-- Only for the pile, because it is the only holder that has to be argued
+       for: filing there was corrected 47 times out of 47 (#1334). Every other
+       holder is a statement already; this one is the one that needs a why. -->
+  @if (to() === 'nobody') {
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Why is this nobody's?</mat-label>
+      <input
+        matInput
+        name="spare"
+        [ngModel]="spare()"
+        (ngModelChange)="spare.set($event)"
+        placeholder="what has to be true before someone can own it"
+      />
+      <mat-hint>Required for the pile. Most work belongs to whoever files it.</mat-hint>
+    </mat-form-field>
+  }
+
   <!-- Last, and starting on NOTHING. Filing means answering this: either a
        level, or `unassessed` for work you are not the one to judge. The old
        control defaulted to unranked, which answered for the filer — the same
@@ -64,7 +81,12 @@
   <button
     mat-flat-button
     type="submit"
-    [disabled]="saving() || !subject().trim() || priority() === undefined"
+    [disabled]="
+      saving() ||
+      !subject().trim() ||
+      priority() === undefined ||
+      (to() === 'nobody' && !spare().trim())
+    "
   >
     <mat-icon>add</mat-icon>
     File it

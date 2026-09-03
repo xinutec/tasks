@@ -32,6 +32,7 @@ fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
         due: None,
         blocked_on: Vec::new(),
         assignee: None,
+        spare: None,
     }
 }
 
