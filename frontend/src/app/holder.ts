@@ -79,7 +79,7 @@ export function holderLabel(assignee: Assignee): string {
 
 /** The same rule for a session row, which has the fields loose rather than in
  *  an `Assignee`. */
-export function sessionLabel(session: { id: string; name?: string | null }): string {
+export function sessionLabel(session: { id: string; name?: string }): string {
   return holderLabel({ kind: 'session', id: session.id, name: session.name });
 }
 

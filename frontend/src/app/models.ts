@@ -35,9 +35,9 @@ export type Priority = 'P0' | 'P1' | 'P2' | 'P3' | 'P4';
 export interface Assignee {
   kind: AssigneeKind;
   /** The Nextcloud user id, or the CLI session id. Absent for `nobody`. */
-  id?: string | null;
+  id?: string;
   /** What to call them. A session may not have named itself yet. */
-  name?: string | null;
+  name?: string;
 }
 
 /** A task in a list. Deliberately has no `body` — see `TaskDetail`. */
@@ -46,7 +46,7 @@ export interface Task {
   subject: string;
   status: Status;
   /** Absent on almost everything — see `Priority`. */
-  priority?: Priority | null;
+  priority?: Priority;
   /**
    * The day it has to be done by, `YYYY-MM-DD`. Absent on almost everything.
    *
@@ -54,7 +54,7 @@ export interface Task {
    * is not part of that. A deadline is evidence for a rank, not a competing
    * answer to *what next*, so do not sort by it here either.
    */
-  due?: string | null;
+  due?: string;
   /**
    * What this sorts as instead, when a near deadline has raised it — always
    * `'P0'` when present, absent otherwise.
@@ -67,7 +67,7 @@ export interface Task {
    * ⚠ **`priority` still holds what somebody actually chose** — nothing is
    * written when a deadline comes close. This is derived on every read.
    */
-  escalated_to?: Priority | null;
+  escalated_to?: Priority;
   /** Whether `due` has passed, by the SERVER's clock. Absent means false — and
    *  do not recompute it from `due` here, or two clients in two timezones will
    *  disagree about which day it is. */
@@ -102,7 +102,7 @@ export interface Task {
    * or when the filing session had never named itself — both mean "not said",
    * which is why it is drawn only where there is no holder.
    */
-  filed_by?: string | null;
+  filed_by?: string;
   /**
    * How long this body was when a model last read it and had something to say.
    * Absent when nothing is outstanding, which is nearly every task.
@@ -111,10 +111,10 @@ export interface Task {
    * (`sprawl_said`) because a list must not carry prose — the same trade
    * `detailed` makes. Draw it as a mark, not as text.
    */
-  sprawl_chars?: number | null;
+  sprawl_chars?: number;
   created_at: string;
   updated_at: string;
-  closed_at?: string | null;
+  closed_at?: string;
 }
 
 /**
@@ -213,7 +213,7 @@ export interface Revision {
 
 export interface Session {
   id: string;
-  name?: string | null;
+  name?: string;
   first_seen: string;
   last_seen: string;
   open: number;
@@ -231,8 +231,8 @@ export interface Session {
 export interface Holder {
   /** The same closed vocabulary as an assignee's. */
   kind: 'session' | 'person' | 'nobody';
-  id?: string | null;
-  name?: string | null;
+  id?: string;
+  name?: string;
   open: number;
   total: number;
 }
@@ -290,7 +290,7 @@ export interface NewTask {
   priority: Priority | null;
   due?: string | null;
   blocked_on?: number[];
-  assignee?: Assignee | null;
+  assignee?: Assignee;
   /**
    * Why this is nobody's — **required when `assignee` is the pile, refused
    * otherwise**, so the two travel together or not at all.
@@ -302,7 +302,7 @@ export interface NewTask {
    * nothing true about a task on somebody's plate. Whitespace is not an
    * answer.
    */
-  spare?: string | null;
+  spare?: string;
 }
 
 /**
@@ -311,8 +311,8 @@ export interface NewTask {
  * never read.
  */
 export interface Change {
-  subject?: string | null;
-  body?: string | null;
+  subject?: string;
+  body?: string;
   /**
    * Text to put above the existing body, keeping all of it.
    *
@@ -324,24 +324,24 @@ export interface Change {
    * Sending this together with `body` is a **400** — one replaces the body and
    * the other keeps it.
    */
-  prepend?: string | null;
+  prepend?: string;
   /** Text to put below the existing body. The twin of `prepend`; both may be
    *  sent at once, and the same rules apply. */
-  append?: string | null;
-  status?: Status | null;
+  append?: string;
+  status?: Status;
   /** Absent means leave it alone, so this cannot UNRANK a task — the same rule
    *  every other field here follows. Ranking it again is the correction. */
-  priority?: Priority | null;
+  priority?: Priority;
   /** The blockers as they should now be — the whole set, not an addition. An
    *  empty array is how a task stops being blocked, which is why there is no
    *  separate unblock flag: `[]` is a value, not an absence. */
-  blocked_on?: number[] | null;
+  blocked_on?: number[];
   /** Set the day it has to be done by. */
-  due?: string | null;
+  due?: string;
   /** Take it off. A date has no "empty" value the way a blocker list does, so
    *  removing one needs its own field rather than a meaningful null. */
   clear_due?: boolean;
-  assignee?: Assignee | null;
+  assignee?: Assignee;
   /** Say that a `body` keeping almost nothing of the one it replaces is meant.
    *  Without it the server refuses that write, because it is far more often a
    *  mistake than an edit.
