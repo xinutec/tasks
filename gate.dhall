@@ -45,6 +45,7 @@ in  { name = "tasks"
               [ "cargo", "clippy", "--all-targets", "--", "-D", "warnings" ]
         , timeout_s = 1800
         }
+      , G.cargoDoc
       , {-  `--test-threads=1`: every DB test shares one database and empties it
             first, so they are not written to interleave.
         -}
