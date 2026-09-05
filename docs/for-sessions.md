@@ -214,6 +214,19 @@ So: **the present tense at the top, the history under it.** Whoever opens this
 next wants to know where it stands, not how it got here — and the second
 question is only asked once the first is answered.
 
+⚠ **And the subject is MAINTAINED, not chosen once.** The paragraph above reads
+as advice for the moment you file, and it is not: an edit that moves where the
+task stands rewrites the subject in the SAME edit. Measured 2026-09-04 across 480
+tasks — eight subjects were still asking a question their own body had answered,
+or claiming a state it had moved past, because a `--prepend` changed the body and
+left the one line that reaches a prompt every turn saying the old thing. Seven of
+the twelve reviewers proposed this rule independently, in near-identical words.
+
+⚠ **Closing is a subject edit too, and skipping it costs more.** A closed
+subject is what the duplicate check and every later search see first, and it is
+read by people who will never open the task. #1330's still said the cause was
+open above a body that had named it.
+
 ### What is safe to cut, measured rather than judged
 
 ⚠ **Tested 2026-09-01 on twelve bodies.** Each was cut, then a question set was
@@ -264,6 +277,26 @@ originals held a settled answer at the top and a superseded "still open" section
 below it; readers given the full text concluded the dead question was live, and
 readers given the cut got it right. If you find both in one body, the fix is not
 to hoist — it is to delete the stale layer.
+
+⚠ **`--prepend` is how bodies get that way, and it is the cheap thing to do.**
+Putting the correction on top costs one command; deleting what it refutes costs
+reading the rest. So the refuted text is left standing, and the whole reads as
+live. Leading with the verdict does not fix a layered body — it is what produces
+one. When you prepend a correction, delete what it corrects in the same edit.
+
+### Closing it says how it came out
+
+⚠ **`task done` over a body that ends at "the fix, roughly" is a plan wearing a
+finished status.** The outcome goes in before the close — what was done, and the
+sha, which is on the list above of things not safe to cut precisely so nobody
+redoes shipped work. `task edit <id> --prepend "DONE in <sha>. …"` then
+`task done <id>`.
+
+⚠ **A tail left open at close needs a ticket number, not a sentence.** "Still
+open: X" inside a closed body is invisible from every list there is — no prompt
+recites it, no `task list` shows it, and the duplicate check will not match it.
+Real owed work was found sitting in closed tickets across four separate groups on
+2026-09-04. File it, and let the close mean closed.
 
 ## When a body has grown without anyone rewriting it
 
