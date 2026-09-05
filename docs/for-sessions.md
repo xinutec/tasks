@@ -477,6 +477,29 @@ The link is kept when the blocker closes — it is a record of how the work went
 but it stops constraining anything and stops being drawn. `⛔#697` in your prompt
 means *still waiting*; nothing there means nothing is in the way.
 
+### When the blocker is not a ticket
+
+⚠ **Say it in the body, and that is correct rather than a workaround.** `hands on
+the hardware`, `Pippijn present for device signing`, `an external image rebuild`,
+`sweep after some weeks` — none of these is a task row, so `--blocked-on` has
+nothing to join to. Write them in prose.
+
+⚠ **The rule above is about a blocker that IS a ticket, and does not transfer.**
+What was measured is specific: of twelve tasks naming a blocker in prose, five
+named one that had **already closed**, so the body said *stuck* about work that
+was ready to start. That failure needs a row whose status can change behind the
+sentence's back. "Pippijn present for device signing" has no row and no status;
+it stays true until it is done, and cannot be quietly contradicted.
+
+⚠ **This is why there is no free-text blocker field, and it is not an omission.**
+`blocked` is derived — *any blocker still open* — so a free-text condition would
+either block for ever or need somebody to clear it by hand, which is a task
+wearing a different hat. A thing that looks structured and never resolves is
+worse than a sentence, because the `⛔` stops meaning anything.
+
+**So: if the thing you are waiting for could be a ticket, file it and link it. If
+it could not, write it down and move on.**
+
 ### Waiting for it, rather than checking back
 
 ⚠ **`⛔#697` is not a notification, and it cannot be one.** It is drawn when you
