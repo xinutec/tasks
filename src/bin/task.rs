@@ -544,10 +544,11 @@ enum Command {
     /// a blocker that was `drop`ped was overtaken, obsolete or decided against,
     /// so the problem this stopped for was not fixed.
     ///
-    /// ⚠ **The wait lives only as long as this process.** If Claude Code
-    /// restarts, the job dies and nothing brings the session back; the
-    /// `--blocked-on` edge and the `⛔` survive, so the work is not lost, but the
-    /// automatic wake is.
+    /// The wait lives in this process, so a Claude Code restart loses it: the
+    /// `--blocked-on` edge and the `⛔` survive and the work is not lost, but the
+    /// automatic wake goes with it. Not something to plan around — the
+    /// conversations on this machine run for days, which is the fact the top of
+    /// `--help` states as *a session never ends*.
     Wait {
         /// What to wait for. Several means all of them, not the first.
         #[arg(required = true)]

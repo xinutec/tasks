@@ -472,9 +472,11 @@ failure: it wakes you, names what is still open, and you can wait again. There i
 no way to wait for ever, because a wait nobody ever finds out about is worse than
 a bounded one.
 
-⚠ **The wait lives only as long as your process.** If Claude Code restarts, the
-job dies and nothing brings you back. The `--blocked-on` edge and the `⛔`
-survive, so the work is not lost — the automatic wake is.
+The wait lives in your own process, so a Claude Code restart loses it: the
+`--blocked-on` edge and the `⛔` survive and the work is not lost, but the
+automatic wake goes with the process. Not something to plan around — Pippijn,
+2026-09-05: *"Sessions are long lived on Mac, no need to worry about that."* It
+is the same fact `--help` opens with, that a session never ends.
 
 ## When it has to be done by
 
