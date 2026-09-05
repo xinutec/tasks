@@ -12,4 +12,5 @@ pub mod repo;
 pub mod selection;
 pub mod types;
 pub mod undo;
+pub mod wait;
 pub mod work;

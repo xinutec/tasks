@@ -49,6 +49,7 @@ fn own_name<'a>(viewer: &Viewer, called: &'a Option<String>) -> Option<&'a str> 
 /// Who the caller is, so the client can draw itself correctly.
 pub async fn me(Access(viewer): Access) -> Json<serde_json::Value> {
     Json(match viewer {
+        // dev-lint: allow-wire-untyped pre-standard debt (DL-WIRE-UNTYPED-RESPONSE landed 2026-09-03): give this handler a Serialize response struct when the route is next touched
         Viewer::Owner(user) => json!({
             "kind": "person",
             "id": user.user_id,

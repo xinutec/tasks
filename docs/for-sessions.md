@@ -444,6 +444,38 @@ The link is kept when the blocker closes — it is a record of how the work went
 but it stops constraining anything and stops being drawn. `⛔#697` in your prompt
 means *still waiting*; nothing there means nothing is in the way.
 
+### Waiting for it, rather than checking back
+
+⚠ **`⛔#697` is not a notification, and it cannot be one.** It is drawn when you
+take a turn, and a conversation that has stopped for a blocker is not taking
+turns. Nothing reaches a session that is not speaking.
+
+So if the blocker is genuinely what stops you, hold the wait open instead:
+
+```
+task wait 697 &        # in the BACKGROUND, then end your turn
+```
+
+Claude Code brings a session back when one of its background commands exits, so
+the command returning is the wake. Nothing is delivered to you and no
+conversation addresses another; you simply have an unfinished job, and it
+finishes when somebody closes the task.
+
+⚠ **Read the exit before continuing.** `0` means the blockers were *done*.
+Anything else means they were not, and the reason is on stderr — a blocker that
+was `drop`ped was overtaken, obsolete or decided against, so the thing you
+stopped for did not happen. Resuming as if it had is the one way this makes
+things worse than not waiting at all.
+
+⚠ **It gives up after a day** unless `--for` says otherwise, and giving up is not
+failure: it wakes you, names what is still open, and you can wait again. There is
+no way to wait for ever, because a wait nobody ever finds out about is worse than
+a bounded one.
+
+⚠ **The wait lives only as long as your process.** If Claude Code restarts, the
+job dies and nothing brings you back. The `--blocked-on` edge and the `⛔`
+survive, so the work is not lost — the automatic wake is.
+
 ## When it has to be done by
 
 ⚠ **Inside the last week, a deadline RAISES the rank to `P0`.** Pippijn's rule,

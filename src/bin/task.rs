@@ -52,10 +52,12 @@ use tasks::tasks::commands;
 use tasks::tasks::density;
 use tasks::tasks::duplicates;
 use tasks::tasks::fleetwatch;
+use tasks::tasks::focus;
 use tasks::tasks::holder::{self, Holder};
 use tasks::tasks::reference::TaskRef;
 use tasks::tasks::selection::{self, list_query};
 use tasks::tasks::types::{AssigneeKind, Priority, Status, Task};
+use tasks::tasks::wait;
 
 /// Where the service lives. The VPN name, because that is the only place it is.
 const DEFAULT_URL: &str = "https://tasks.xinutec.org";
@@ -520,6 +522,46 @@ enum Command {
     /// still there" — the pile is a handover channel, not a lost-property
     /// office, and it costs every session's prompt rather than one.
     Move { id: TaskRef, to: To },
+    /// Block until somebody else has closed a task, then return.
+    ///
+    ///     task wait 1350
+    ///
+    /// ⚠ **Meant to be run in the BACKGROUND, and it is useless in the
+    /// foreground.** A session that hits a problem somebody else has to fix
+    /// files it, records the edge with `task edit <mine> --blocked-on <theirs>`,
+    /// starts this detached, and goes quiet. Claude Code brings a session back
+    /// when one of its background commands exits, so this returning IS the
+    /// notification — nothing is delivered to the session and no conversation
+    /// addresses another.
+    ///
+    /// ⚠ **Because the thing that already knows is a channel that cannot
+    /// reach.** The digest marks a waiting task `⛔#1350` and drops the mark the
+    /// moment the blocker closes, but a digest is rendered when the session
+    /// takes a turn, and a blocked session is not taking turns.
+    ///
+    /// It ends when EVERY named task is closed. Exit `0` means they were done;
+    /// anything else means carry on at your peril, and the reason is on stderr —
+    /// a blocker that was `drop`ped was overtaken, obsolete or decided against,
+    /// so the problem this stopped for was not fixed.
+    ///
+    /// ⚠ **The wait lives only as long as this process.** If Claude Code
+    /// restarts, the job dies and nothing brings the session back; the
+    /// `--blocked-on` edge and the `⛔` survive, so the work is not lost, but the
+    /// automatic wake is.
+    Wait {
+        /// What to wait for. Several means all of them, not the first.
+        #[arg(required = true)]
+        ids: Vec<TaskRef>,
+        /// How long to wait before giving up: `4h`, `90m`, `2h30m`. A bare
+        /// number is minutes.
+        ///
+        /// ⚠ **There is a bound and it cannot be removed**, because a wait that
+        /// can hang for ever is one nobody ever finds out about. Giving up is
+        /// not failure: it wakes the session, says what is still open, and the
+        /// session can start another wait.
+        #[arg(long = "for", default_value = "24h")]
+        period: String,
+    },
     /// Change a task's words.
     ///
     /// `update` is the same command, on the evidence of #958: seven sessions
@@ -1440,6 +1482,7 @@ impl Command {
             Command::Drop { .. } => "drop",
             Command::Reopen { .. } => "reopen",
             Command::Move { .. } => "move",
+            Command::Wait { .. } => "wait",
             Command::Edit { .. } => "edit",
             Command::Digest => "digest",
             Command::Sessions { .. } => "sessions",
@@ -1965,6 +2008,39 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             .await?;
         }
 
+        Command::Wait { ids, period } => {
+            // Bounded before the first request, so a mistyped period is a
+            // refusal rather than something discovered a day later.
+            let bound = focus::parse(&period)?
+                .to_std()
+                .context("a wait cannot be negative")?;
+            let asked: Vec<u64> = ids.iter().map(TaskRef::id).collect();
+            // A task that does not exist is a refusal on the FIRST pass, not a
+            // day of polling that gives up saying it is still open — which is
+            // true of nothing and reads as somebody being slow. That falls out
+            // of `statuses` erroring rather than needing a check of its own.
+            let started = std::time::Instant::now();
+            let verdict = loop {
+                let verdict = wait::verdict(&statuses(&client, &ids).await?);
+                if !matches!(verdict, wait::Verdict::Waiting(_)) {
+                    break verdict;
+                }
+                let waited = started.elapsed();
+                if waited >= bound {
+                    break verdict;
+                }
+                // Never sleep past the bound: a wait told to give up after 90
+                // seconds must not spend half a minute more asleep first.
+                tokio::time::sleep(wait::interval(waited).min(bound - waited)).await;
+            };
+            let said = wait::said(&verdict, &asked);
+            if verdict == wait::Verdict::Done {
+                println!("{said}");
+            } else {
+                bail!(said);
+            }
+        }
+
         Command::Edit {
             id,
             subject,
@@ -2059,7 +2135,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     "how long? `--for 4h`. There is no default: the expiry is what makes \
                      hiding an open task safe.",
                 )?;
-                let period = tasks::tasks::focus::parse(&period)?;
+                let period = focus::parse(&period)?;
                 let body = json!({
                     "tasks": ids.iter().map(|id| id.id()).collect::<Vec<_>>(),
                     "minutes": period.num_minutes(),
@@ -2201,6 +2277,29 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// What the service currently says about each of these tasks.
+///
+/// ⚠ **One request per task, deliberately.** The list endpoint would answer in
+/// one, but it answers about a HOLDER's tasks, and what a wait names is a set of
+/// blockers held by whoever is fixing them — several sessions, in the ordinary
+/// case. Waits are counted in hours and the poll in seconds, so the round trips
+/// are free; a query shaped to make them one would have to be about the waiting
+/// task's own edges, which is a different feature.
+async fn statuses(client: &Client, ids: &[TaskRef]) -> Result<Vec<(u64, Status)>> {
+    let mut said = Vec::with_capacity(ids.len());
+    for id in ids {
+        let req = client.request(reqwest::Method::GET, &id.path());
+        let task = client
+            .send(req)
+            .await?
+            .with_context(|| format!("no such task: {id}"))?;
+        let task: Task = serde_json::from_value(task)
+            .context("the service answered with a task this CLI could not read")?;
+        said.push((task.id, task.status));
+    }
+    Ok(said)
 }
 
 /// The task as it stood before its last edit, or why there is no such thing.

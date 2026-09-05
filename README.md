@@ -325,6 +325,8 @@ task start <id> / task done <id> [--to W] # move it along
 task drop <id>                            # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
 task move <id> me|pippijn|<session>|nobody  # hand it over
+task wait <id>… [--for 4h] &              # in the BACKGROUND: block until they close it,
+                                          # and the command returning wakes this session
 task edit <id> [--subject S] [--body -] [--priority P0]   # change the words, rank it
 task edit <id> --prepend "DONE in <sha>."                 # put text ABOVE the body, keeping it
 task edit <id> --append -                                 # and BELOW; `-` reads stdin
