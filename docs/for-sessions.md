@@ -295,8 +295,19 @@ redoes shipped work. `task edit <id> --prepend "DONE in <sha>. …"` then
 ⚠ **A tail left open at close needs a ticket number, not a sentence.** "Still
 open: X" inside a closed body is invisible from every list there is — no prompt
 recites it, no `task list` shows it, and the duplicate check will not match it.
-Real owed work was found sitting in closed tickets across four separate groups on
-2026-09-04. File it, and let the close mean closed.
+
+**Counted 2026-09-05 over every closed body:** of 701 closed tasks with prose
+(the 2026-08-08 seeding import excluded), **120 contain a phrase like *still
+open*, *what is left*, *left open***. Twelve of those were read in full: **seven
+were genuinely owed work with no ticket anywhere** — nine sign-offs waiting on
+Pippijn in #662, `amun still lacks replicas: 1` in #1262, an undecided design
+call in #1191. Four were fine, and what made them fine is the whole rule: #1060,
+#818 and #971 name the ticket the work moved to, and #655 says in the same
+sentence why the remainder is deliberate.
+
+So the test is not whether you mention it. It is whether a reader who never opens
+this task can find it. File it, or say why it is deliberate — and let the close
+mean closed.
 
 ## When a body has grown without anyone rewriting it
 
