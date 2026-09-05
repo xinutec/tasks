@@ -298,12 +298,22 @@ recites it, no `task list` shows it, and the duplicate check will not match it.
 
 **Counted 2026-09-05 over every closed body:** of 701 closed tasks with prose
 (the 2026-08-08 seeding import excluded), **120 contain a phrase like *still
-open*, *what is left*, *left open***. Twelve of those were read in full: **seven
-were genuinely owed work with no ticket anywhere** — nine sign-offs waiting on
-Pippijn in #662, `amun still lacks replicas: 1` in #1262, an undecided design
-call in #1191. Four were fine, and what made them fine is the whole rule: #1060,
-#818 and #971 name the ticket the work moved to, and #655 says in the same
-sentence why the remainder is deliberate.
+open*, *what is left*, *left open***. Twelve were then read: **five were
+genuinely owed work with no ticket** — `amun still lacks replicas: 1` in #1262,
+two unmeasured checks in #958, a capture-format change in #676 that says in the
+same breath it is "worth its own task" and names none.
+
+⚠ **The other seven are why this needs reading and not grepping, and the first
+count of them was WRONG.** Two were scored as defects off the matching line and
+are not: #662's nine sign-offs are answered by its own "SIGNED OFF 2026-08-11"
+section further down, and #1191 says *"reopen this if that trade is worth
+taking"* — a deliberate park naming its own condition. #862 is the same shape.
+**A later section can answer an earlier one, so the phrase is a place to look and
+the body is the evidence.** Getting this wrong invents work for somebody.
+
+The five that were fine show the rule working: #1060, #818 and #971 name the
+ticket the work moved to, and #655 says in the same sentence why the remainder is
+deliberate.
 
 So the test is not whether you mention it. It is whether a reader who never opens
 this task can find it. File it, or say why it is deliberate — and let the close
