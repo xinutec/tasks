@@ -8,3 +8,7 @@
 # build stamp, which is a fact about a build and not about the source.
 frontend/src/app/build-info.ts
 /result
+.review-groups.json
+.findings-*.json
+.review-routing.json
+.verify-findings.py

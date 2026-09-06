@@ -1238,16 +1238,13 @@ async fn record(
 /// `--spare " "` would satisfy a presence check while arguing nothing.
 fn spare_note(kind: AssigneeKind, spare: Option<&str>) -> Result<Option<String>> {
     let said = spare.map(str::trim).filter(|why| !why.is_empty());
-    match (kind, said) {
-        (AssigneeKind::Nobody, Some(why)) => Ok(Some(why.to_string())),
-        (AssigneeKind::Nobody, None) => Err(AppError::BadRequest(
-            "filing to the pile needs a reason: say why this is nobody's, or file it to a holder"
-                .into(),
-        )),
-        (_, Some(_)) => Err(AppError::BadRequest(
-            "a reason for the pile does not fit a task that has a holder".into(),
-        )),
-        (_, None) => Ok(None),
+    // The verdict is `holder::pile_verdict`'s, shared with the CLI so the two
+    // cannot drift; only the WORDS are this side's, because a web form and an
+    // API caller must not be told to type a flag they do not have.
+    let nobody = matches!(kind, AssigneeKind::Nobody);
+    match crate::tasks::holder::pile_verdict(nobody, said.is_some()) {
+        crate::tasks::holder::PileVerdict::Fits => Ok(said.map(str::to_string)),
+        refused => Err(AppError::BadRequest(refused.said_to_api().into())),
     }
 }
 

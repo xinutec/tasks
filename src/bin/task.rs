@@ -1824,18 +1824,16 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             // filing afterwards anyway. The service still owns the rule — see
             // `repo::spare_note`, which refuses both directions — so this is a
             // faster no, never the only one.
-            match (matches!(to, Some(To::Nobody)), spare.is_some()) {
-                (true, false) => {
-                    return Err(commands::declined(
-                        "filing to the pile needs a reason: `--spare \"why this is nobody's\"`. Most work belongs to whoever files it, which is what `--to me` does by default. Nothing was filed.",
-                    ));
-                }
-                (false, true) => {
-                    return Err(commands::declined(
-                        "`--spare` says why a task is nobody's, so it only fits `--to nobody`. Nothing was filed.",
-                    ));
-                }
-                _ => {}
+            // ⚠ **Blank-trimmed to match the service.** `--spare ""` is
+            // `is_some()` here and is trimmed away by `spare_note` there, so
+            // testing presence alone made the two disagree about one input.
+            let reason = spare
+                .as_deref()
+                .map(str::trim)
+                .filter(|why| !why.is_empty());
+            match holder::pile_verdict(matches!(to, Some(To::Nobody)), reason.is_some()) {
+                holder::PileVerdict::Fits => {}
+                refused => return Err(commands::declined(refused.said_to_cli())),
             }
             client.writing()?;
             // The list comes first, and two separate questions are asked of it:
