@@ -25,7 +25,8 @@ unimplemented = "deny"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
-tower-http = { version = "0.7", features = ["fs", "trace"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["fs", "set-header", "trace"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
 sqlx = { version = "0.9", default-features = false, features = [
     "runtime-tokio",
