@@ -52,8 +52,9 @@ in  { name = "tasks"
         G.Check::{
         , name = "tests (against a real MariaDB)"
         , argv =
-              G.inDevShell [ "nix", "run", "../dev-lint#with-test-db", "--" ]
-            # [ "--database"
+            G.withTestDb
+              "../"
+              [ "--database"
               , "tasks"
               , "--user"
               , "tasks"
