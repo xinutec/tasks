@@ -11,6 +11,7 @@
         "--all",
         "--check"
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {},
       "name": "formatting",
@@ -29,6 +30,7 @@
         "-D",
         "warnings"
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {},
       "name": "clippy",
@@ -45,6 +47,7 @@
         "--no-deps",
         "--workspace"
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {
         "RUSTDOCFLAGS": "-D rustdoc::broken_intra_doc_links"
@@ -78,6 +81,7 @@
         "--",
         "--test-threads=1"
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {},
       "name": "tests (against a real MariaDB)",
@@ -93,6 +97,7 @@
         "install",
         "--frozen-lockfile"
       ],
+      "artifacts": [],
       "cwd": "frontend",
       "env": {
         "CI": "true"
@@ -110,6 +115,7 @@
         "run",
         "lint"
       ],
+      "artifacts": [],
       "cwd": "frontend",
       "env": {
         "CI": "true"
@@ -127,6 +133,7 @@
         "run",
         "typecheck"
       ],
+      "artifacts": [],
       "cwd": "frontend",
       "env": {
         "CI": "true"
@@ -143,6 +150,7 @@
         "pnpm",
         "test"
       ],
+      "artifacts": [],
       "cwd": "frontend",
       "env": {
         "CI": "true",
@@ -168,6 +176,7 @@
         "run",
         "build"
       ],
+      "artifacts": [],
       "cwd": "frontend",
       "env": {
         "CI": "true"
@@ -185,6 +194,9 @@
         "run",
         "ui-check"
       ],
+      "artifacts": [
+        "test-results"
+      ],
       "cwd": "frontend",
       "env": {
         "CI": "true",
@@ -200,6 +212,7 @@
         ".#task",
         "--no-link"
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {},
       "name": "the CLI still packages",
@@ -215,6 +228,7 @@
         "gate.dhall",
         "gate.json"
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {},
       "name": "the table matches its Dhall",
@@ -228,6 +242,7 @@
         "--",
         "."
       ],
+      "artifacts": [],
       "cwd": ".",
       "env": {},
       "name": "dev-lint",
