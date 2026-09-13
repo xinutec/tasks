@@ -1,6 +1,7 @@
 import {
   ApplicationConfig,
   LOCALE_ID,
+  isDevMode,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
@@ -9,6 +10,8 @@ import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { registerLocaleData } from '@angular/common';
 import localeEnGb from '@angular/common/locales/en-GB';
+
+import { provideServiceWorker } from '@angular/service-worker';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './auth';
@@ -30,5 +33,9 @@ export const appConfig: ApplicationConfig = {
     // Route params bind to component inputs (:id → TaskView.id), so the URL is
     // the source of truth for which task is open.
     provideRouter(routes, withComponentInputBinding()),
+    provideServiceWorker('ngsw-worker.js', {
+      enabled: !isDevMode(),
+      registrationStrategy: 'registerWhenStable:30000',
+    }),
   ],
 };

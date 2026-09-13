@@ -10,6 +10,7 @@ import { AuthStore } from './auth';
 import { BUILD_INFO } from './build-info';
 import { Me } from './models';
 import { TasksApi } from './tasks-api';
+import { SwUpdates } from './sw-updates';
 import { Telemetry } from './telemetry';
 
 @Component({
@@ -36,6 +37,7 @@ export class App {
   private router = inject(Router);
   readonly auth = inject(AuthStore);
   private telemetry = inject(Telemetry);
+  private readonly swUpdates = inject(SwUpdates);
 
   readonly me = signal<Me | null>(null);
   readonly loading = signal(true);
@@ -45,6 +47,9 @@ export class App {
     // capture-phase click listener), so no view knows this exists and no new
     // control can be missed by forgetting to annotate it.
     this.telemetry.init();
+    // Same seam, same argument: wired once here so no view has to know a
+    // service worker exists.
+    this.swUpdates.start();
     this.api.me().subscribe({
       next: (me) => {
         this.me.set(me);
