@@ -47,6 +47,9 @@
           # MariaDB, which the build sandbox has no way to supply, and it fails
           # rather than skips *on purpose*. The gate (`nix run ../dev-lint#gate`)
           # supplies one and is what actually gates this repo.
+          # The gate's "tests (against a real MariaDB)" row runs this suite where a
+          # database exists; the sandbox cannot supply one.
+          # dev-lint: allow-docheck-false tests/tasks_db.rs needs a real MariaDB
           doCheck = false;
           meta.mainProgram = "task";
         };
