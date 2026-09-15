@@ -31,9 +31,8 @@
 //! including why the pile may not be dropped.
 //!
 //! **A fifth rule arrived with the ranks: `P4` is counted and never recited.**
-//! It is defined as *"kept as a record rather than a plan; it may never
-//! happen"*, and putting that in front of a session on every turn contradicts
-//! its own definition. Measured 2026-08-17, the `life` session's entire
+//! It is the level where nothing is being paid today, so it is the one a
+//! session gains least from being shown every turn. Measured 2026-08-17, the `life` session's entire
 //! 1112-byte digest was its P3/P4 tail: 12 of 13 open tasks were `P4`, so it
 //! paid for a parked wishlist every turn and for nothing else. See `parked`,
 //! which also records why `P3` is not treated the same way.
@@ -114,12 +113,16 @@ pub const PILE_LINES: usize = 5;
 /// doing, and it has no way of knowing which two tasks matter.
 pub const FOCUS_HINT_LINES: usize = 12;
 
-/// Whether a task is kept as a record rather than recited as a plan.
+/// Whether a task is counted rather than recited.
 ///
-/// `P4` is defined in `task --help` as *"kept as a record rather than a plan;
-/// it may never happen"*. Putting that in front of a session on every turn
-/// contradicts the definition: it is the one rank whose filer has said it is
-/// not work, pushed at the holder more often than anything they chose to do.
+/// `P4` is the level where nothing is being paid today, so it is the one a
+/// session gains least from carrying on every turn.
+///
+/// ⚠ **Counted is not closed, and the notice must not say otherwise.** This
+/// said "kept as a record", which reads as a finished thing being shelved —
+/// an open task is work, and a record is a CLOSED task, which `task list
+/// --done` still searches. A session read the old wording and left two
+/// decided questions open because of it (2026-09-15).
 /// Measured before this existed, the `life` session's whole 1112-byte digest
 /// was its P3/P4 tail — 12 of 13 open tasks were P4.
 ///
@@ -285,7 +288,7 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // pays on every turn.
     if parked_hidden > 0 {
         out.push(format!(
-            "⚠ {parked_hidden} at P4 not shown — kept as a record; `task list`."
+            "⚠ {parked_hidden} at P4 not shown — still open, just not recited; `task list`."
         ));
     }
     if pile_hidden > 0 {

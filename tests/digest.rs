@@ -353,15 +353,14 @@ fn the_order_is_the_one_render_was_handed() {
     assert_eq!(ids, vec![1, 9], "render reordered by priority:\n{out}");
 }
 
-/// `P4` is *"kept as a record rather than a plan; it may never happen"* — the
-/// CLI's own definition. Reciting it on every turn contradicts it: it is the
-/// one rank the filer has said is not a plan, pushed at the holder more often
-/// than anything they chose to do.
+/// `P4` is the level where nothing is being paid today, so it is the one a
+/// session gains least from being shown every turn. It stays OPEN and stays
+/// in `task list` — counted, not shelved.
 ///
 /// Measured 2026-08-17, before this: the `life` session's digest was 1112 bytes
 /// of which **100%** was its P3/P4 tail — 12 of its 13 open tasks were P4.
 #[test]
-fn a_task_kept_as_a_record_is_counted_and_not_recited() {
+fn a_p4_is_counted_and_not_recited() {
     let mut parked = held(2, "whole-house inventory, some day", "life");
     parked.priority = Some(Priority::P4);
     let out = render(&[held(1, "the actual work", "life"), parked]);

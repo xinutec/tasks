@@ -256,8 +256,8 @@ impl Priority {
     ///
     /// So these are five distinct SITUATIONS, applied as a cascade — the first
     /// test that passes is the rank. *Is damage accruing?* *Is something else
-    /// waiting?* *Is there a workaround in use?* *Would this be kept only as a
-    /// record?* Each is answerable about a ticket rather than felt about it,
+    /// waiting?* *Is there a workaround in use?* *Is anything being paid
+    /// for it today?* Each is answerable about a ticket rather than felt about it,
     /// which is what lets two conversations reach the same answer.
     ///
     /// ⚠ **A full range is a check on the RANKING, never a quota on the
@@ -273,7 +273,7 @@ impl Priority {
             Priority::P1 => "nothing is accruing, but other work is waiting on this",
             Priority::P2 => "ordinary work, nothing waiting on it — where UNRANKED sits",
             Priority::P3 => "a workaround exists and is in use; what it costs is friction",
-            Priority::P4 => "kept as a record rather than a plan; not recited in your prompt",
+            Priority::P4 => "nothing is being paid for it today; not recited in your prompt",
         }
     }
 

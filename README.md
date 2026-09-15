@@ -89,10 +89,9 @@ it files for others are, by construction, the ones it never sees again. So the
 filer is the fifth question — what did I hand out, and is any of it still open —
 answered by the `created` event's actor rather than by `assignee`.
 
-⚠ **`P4` is counted in the digest and never listed.** The rank means *kept as a
-record rather than a plan; it may never happen*, so reciting it on every turn
-contradicts what filing it said: it is the one level whose filer has stated it is
-not work, pushed at the holder more often than anything they chose to do.
+⚠ **`P4` is counted in the digest and never listed.** The rank means *nothing is
+being paid for it today*, so it is the one level a session gains least from
+carrying on every turn. It is still open work — counted, not shelved.
 Measured 2026-08-17, the `life` session's whole 1112-byte digest was its P3/P4
 tail — 12 of its 13 open tasks were `P4`. The head still counts them and a notice
 names `task list`, which is the same rule the pile cap and focus follow. `P3` is

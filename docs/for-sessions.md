@@ -454,12 +454,17 @@ marking a task *when there is room* would have lifted it above four hundred
 tickets nobody had read.
 
 ⚠ **`P4` has a consequence the other levels do not: it leaves your prompt.** A
-task ranked `P4` is counted in the digest and never listed, because the level
-says it is a record rather than a plan and reciting it every turn would say the
-opposite. It is still open, still in `task list`, and a deadline or an
-escalation brings it straight back. So `P4` is the right answer for work that
-may never happen, and the wrong one for work you simply are not doing this week
-— that is `P3`, which is still recited.
+task ranked `P4` is counted in the digest and never listed, because nothing is
+being paid for it today. It is still open, still in `task list`, and a deadline
+or an escalation brings it straight back. So `P4` is the right answer for real
+work that costs nothing to defer, and the wrong one for work you simply are not
+doing this week — that is `P3`, which is still recited.
+
+⚠ **`P4` is not a shelf for decided questions.** A settled ticket is CLOSED —
+`done` if it answered what it asked, `drop` if it was decided against — and
+`task list --done` still finds it. An open task is work. The old gloss said
+"kept as a record" and a session duly left two finished questions open on the
+strength of it.
 
 ⚠ **Do not rank things to tidy up.** There were 700-odd tasks the day the column
 was added and none of them were ranked; that is the correct state, and it is why
