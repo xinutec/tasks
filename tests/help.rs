@@ -136,8 +136,23 @@ fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
 /// `--project` after migration 0004 removed the concept.
 #[test]
 fn a_field_that_was_removed_is_refused_by_name() {
+    // ⚠ `--session` because the identity check runs BEFORE this refusal, so
+    // without one the CLI answers "a token but no session id" and never reaches
+    // the field at all. In a session $CLAUDE_CODE_SESSION_ID is set and the test
+    // passed; the nightly verify runs under launchd, which sets no such thing,
+    // and this was the only test in the file that reached past clap into main.
+    // It had been red since 2026-09-14 and passed by hand every time.
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
-        .args(["add", "anything", "--priority", "P2", "--repo", "tumor"])
+        .args([
+            "add",
+            "anything",
+            "--priority",
+            "P2",
+            "--repo",
+            "tumor",
+            "--session",
+            "help-rs-test",
+        ])
         .output()
         .expect("running the CLI");
     let said = String::from_utf8_lossy(&out.stderr);
@@ -147,8 +162,19 @@ fn a_field_that_was_removed_is_refused_by_name() {
 
 #[test]
 fn the_subject_is_not_a_flag_and_the_refusal_says_where_it_goes() {
+    // `--session` for the reason the test above gives: this refusal also lives
+    // past the identity check, so without one the CLI answers about the session
+    // instead of the flag.
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
-        .args(["add", "--priority", "P2", "--subject", "a title"])
+        .args([
+            "add",
+            "--priority",
+            "P2",
+            "--subject",
+            "a title",
+            "--session",
+            "help-rs-test",
+        ])
         .output()
         .expect("running the CLI");
     let said = String::from_utf8_lossy(&out.stderr);
