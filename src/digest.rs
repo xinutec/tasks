@@ -113,10 +113,7 @@ pub const PILE_LINES: usize = 5;
 /// doing, and it has no way of knowing which two tasks matter.
 pub const FOCUS_HINT_LINES: usize = 12;
 
-/// Whether a task is counted rather than recited.
-///
-/// `P4` is the level where nothing is being paid today, so it is the one a
-/// session gains least from carrying on every turn.
+/// Whether a task is counted rather than recited — the module's fifth rule.
 ///
 /// ⚠ **Counted is not closed, and the notice must not say otherwise.** This
 /// said "kept as a record", which reads as a finished thing being shelved —
@@ -126,12 +123,8 @@ pub const FOCUS_HINT_LINES: usize = 12;
 /// Measured before this existed, the `life` session's whole 1112-byte digest
 /// was its P3/P4 tail — 12 of 13 open tasks were P4.
 ///
-/// ⚠ **The effective rank, not the chosen one**, for the reason
-/// [`focus::breaks_through`] gives: a deadline inside the week raises a task
-/// without anything being written, and reading `priority` here would bury
-/// exactly the task the escalation exists to raise. Overdue is its own arm for
-/// the same reason it is one there — a date that has already passed must not go
-/// quiet, whatever rank it was filed at.
+/// ⚠ **The effective rank, not the chosen one**, and overdue is its own arm —
+/// both for the reasons [`focus::breaks_through`] gives.
 ///
 /// ⚠ **P3 is deliberately not here.** It means a workaround exists and is in
 /// use, which is still a plan, and the eleven P3s the `home` session was
@@ -305,7 +298,8 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // has the notice above telling it how to *end* the thing this would be
     // recommending, and saying both is noise that contradicts itself.
     //
-    // This is the one place the digest advertises a feature, and it is here
+    // This is the one place the digest advertises a feature, and the reason is
+    // the one the notice above gives.
     // because a doc cannot win an argument with a per-turn reminder — the same
     // ground the TaskCreate/TaskUpdate line in the header stands on. `focus`
     // was reachable only from `task focus --help`, and across every transcript

@@ -44,9 +44,8 @@ pub struct Tally {
     /// Past its deadline by the DATABASE's clock, which is the one clock the
     /// digest, the app and the CLI already share.
     pub overdue: u64,
-    /// `P0` or `P1` by EFFECTIVE rank — a deadline inside the week raises a task,
-    /// and this counts what the list actually sorts by rather than what somebody
-    /// typed. The mirror of `repo::list`'s ORDER BY.
+    /// `P0` or `P1` by EFFECTIVE rank, the mirror of `repo::list`'s ORDER BY:
+    /// what the list sorts by rather than what somebody typed.
     pub urgent: u64,
     /// Waiting on something still open. Not the same as HAVING a blocker: the
     /// link is kept after a blocker closes, and what ends is its effect.

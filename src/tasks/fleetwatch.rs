@@ -116,12 +116,9 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
-        // ⚠ **The line above is the MIX; this one is the service.** A checked
-        // run spends orders of magnitude more time in the model than the service
-        // spends on the whole request, so `{verb} latency` on a verb that can
-        // trip a check reports what fraction crossed the sampler, in
-        // milliseconds — it moves when the check rate moves AND when the model
-        // slows, and cannot say which. This one moves only for the service.
+        // ⚠ **The line above is the MIX; this one is the service.** See
+        // `commands::Tally::unchecked_p90_ms` for why the mix cannot be read as
+        // a latency. This one moves only for the service.
         //
         // ⚠ **Emitted only where the client said**, so an older CLI's rows do
         // not quietly become a second copy of the number above. A figure that
@@ -173,11 +170,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "",
             "pass",
         ));
-        // ⚠ **Its own line, because it is not a fault.** Most of what `add`
-        // "fails" on is the CLI declining a malformed invocation — returning
-        // before any round trip — or the duplicate check refusing. Both are the
-        // tool working, and folded into one figure a real fault would have to
-        // double the total before it showed.
+        // ⚠ **Its own line, because it is not a fault** — `commands::Ended`
+        // carries why declining and failing must not share a figure.
         //
         // ⚠ **Both series move while old rows age out**, because rows written
         // before the split said `error` for both and are not re-attributed. Say

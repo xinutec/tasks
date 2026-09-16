@@ -241,11 +241,10 @@ macro_rules! select {
             ") - LENGTH(REPLACE(",
             body_shown!("t.body"),
             ", CHAR(10), '')) + 1) AS SIGNED) AS body_lines, ",
-            // Correlated rather than joined: a task has one `created` event, but
-            // a join that ever saw two would silently DUPLICATE the task in
-            // every list — a list is the one thing here that must not gain rows.
-            // `LIMIT 1` makes that impossible to reach rather than unlikely.
-            // Covered by `idx_task_events_task (task_id, at)`, so no migration.
+            // Correlated rather than joined, for the reason the blocker
+            // subqueries above are: a list must not gain rows. `LIMIT 1` makes
+            // that impossible rather than unlikely. Covered by
+            // `idx_task_events_task (task_id, at)`, so no migration.
             "(SELECT f.name FROM task_events c JOIN sessions f ON f.id = c.actor_id ",
             "WHERE c.task_id = t.id AND c.kind = 'created' AND c.actor_kind = 'session' ",
             "ORDER BY c.id LIMIT 1) AS filed_by, ",
@@ -615,10 +614,8 @@ pub struct Change {
     /// a replacement. Skip the read half and the paragraph lands as the entire
     /// body — sometimes caught by `collapses`, sometimes just under it.
     ///
-    /// ⚠ **Above rather than below is the ordinary case, and deliberately.** A
-    /// body grows in the order things happened, so what is still true sinks to
-    /// the bottom where nobody reads it. `task edit --help` says *lead with
-    /// where it stands*; this is the field that makes doing so cheap.
+    /// ⚠ **Above rather than below is the ordinary case** — a body grows in the
+    /// order things happened, so what is still true sinks out of sight.
     ///
     /// **Resolved against the body inside the same transaction that reads it**,
     /// so two conversations adding to one task cannot lose each other's text —
@@ -628,9 +625,7 @@ pub struct Change {
     pub prepend: Option<String>,
     /// Text to put BELOW the body there already is, keeping all of it.
     ///
-    /// The twin of [`prepend`](Self::prepend), for the case where what is being
-    /// added really is the next thing that happened rather than the conclusion.
-    /// Both may be sent at once.
+    /// The twin of [`prepend`](Self::prepend). Both may be sent at once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub append: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1487,12 +1482,11 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             .await
             .context("changing a body")?;
         // ⚠ **An edit that makes the body SMALLER clears the sprawl flag, and
-        // nothing else does.** This is the same step that resets [`accreted`] —
-        // the first one backwards that removed text — so the flag and the
-        // sampler cannot disagree about what counts as having consolidated
-        // something. Deliberately not "a model looked again and approved": a
-        // clear you can ask for is a clear that gets asked for, and the whole
-        // finding behind this flag is that the cheap action wins.
+        // nothing else does.** The same step resets [`accreted`], so the flag
+        // and the sampler cannot disagree about what counts as consolidating.
+        // Deliberately not "a model looked again and approved": a clear you can
+        // ask for is a clear that gets asked for, and the finding behind this
+        // flag is that the cheap action wins.
         //
         // In the same transaction as the write it describes: a critique left
         // standing over a body that no longer exists is the failure this

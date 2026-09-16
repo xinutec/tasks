@@ -114,12 +114,9 @@ way — the rank stops carrying information."
 
 /// What `task edit --help` says under the flags.
 ///
-/// ⚠ **Assembled, because [`density::RUBRIC`] is graded against.** The same
-/// three rules are put to the model that reads a body which has grown without
-/// being consolidated, and a second copy here is the copy that drifts — leaving
-/// sessions written to one standard and marked against another. A standard
-/// stated only to the judge arrives after the writing; here it arrives before,
-/// which is the only place it can prevent anything.
+/// ⚠ **Assembled from [`density::RUBRIC`], never restated.** A second copy here
+/// is the copy that drifts, leaving sessions written to one standard and marked
+/// against another.
 fn edit_about() -> String {
     format!(
         "Change a task's words.
@@ -323,10 +320,9 @@ enum Command {
     /// refused before anything reaches the service.
     #[command(group(clap::ArgGroup::new("rank").required(true).args(["priority", "unassessed"])))]
     Add {
-        /// Optional only so that leaving it out can be answered in a sentence:
-        /// two sessions passed the subject as `--subject` and were told
-        /// `unexpected argument`, which reads as a quoting mistake rather than
-        /// as the wrong shape. Absent here is refused below, never defaulted.
+        /// Optional only so that leaving it out can be answered in a sentence
+        /// rather than by clap — see `--subject` below. Refused, never
+        /// defaulted.
         subject: Option<String>,
         /// The body. `-` reads stdin, which is how a session writes a long one
         /// without fighting shell quoting.
@@ -645,10 +641,8 @@ enum Command {
     /// How long the commands themselves have been taking, from real use.
     ///
     /// ⚠ **Every row here is a command somebody actually ran.** Nothing polls
-    /// and nothing is sampled on a timer: the first version of this measurement
-    /// was a 15-minute launchd probe timing `task list --all`, which is a
-    /// command no session runs, from a process with no session and a cold cache.
-    /// What a session waits for is only visible from what sessions do.
+    /// and nothing is sampled on a timer, so a quiet day reads as quiet rather
+    /// than as a tool nobody waits for.
     Timings {
         /// How far back to look.
         #[arg(long, default_value_t = 7)]
@@ -809,9 +803,8 @@ impl Client {
 
     /// Turn what somebody typed after `move` into a session id.
     ///
-    /// ⚠ **Every place this tool PRINTS a holder, it prints the name** — so a
-    /// name has to be accepted here, or its own output is not valid input to it
-    /// and every handover starts with a `task sessions | grep` to translate.
+    /// The rule and the reason are [`holder::resolve`]'s; this fetches the list
+    /// it needs and renders its refusals.
     ///
     /// ⚠ **It refuses rather than falling through to "probably an id".** The
     /// write itself would not land — a foreign key stands behind
@@ -1183,9 +1176,8 @@ async fn already_filed(
 
 /// Report one run, and never let reporting it cost anything.
 ///
-/// Silent on every failure, for the same reason the checks themselves are: this
-/// runs after the call it describes, so there is nothing left to protect and a
-/// session that cannot reach the service has a worse problem than a missing row.
+/// Silent on every failure, for the reason [`tasks::tasks::commands`] gives:
+/// this runs after the call it describes, so there is nothing left to protect.
 async fn recorded(client: &Client, run: checks::Run) {
     let req = client
         .request(reqwest::Method::POST, "/api/checks")
@@ -1447,8 +1439,7 @@ impl Command {
 /// Report what a command did, and never let reporting it cost anything.
 ///
 /// ⚠ **After the work and after the printing**, so the round trip is not in what
-/// anybody waits for — and silent on every failure: a session that cannot reach
-/// the service has a worse problem than a missing row.
+/// anybody waits for, and silent on every failure — `commands` carries why.
 ///
 /// ⚠ **`timings` and `checks` are not recorded.** Reading the measurements is
 /// not use of the tool, and recording it would show a command whose whole

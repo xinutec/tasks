@@ -210,7 +210,9 @@ pub fn refusal(found: &[Match]) -> String {
 pub struct Settled {
     pub id: u64,
     pub subject: String,
-    /// Closed WITHOUT being done: overtaken, obsolete, or decided against.
+    /// Closed without being done — see [`Status::Dropped`].
+    ///
+    /// [`Status::Dropped`]: crate::tasks::types::Status::Dropped
     pub dropped: bool,
 }
 

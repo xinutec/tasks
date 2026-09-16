@@ -599,10 +599,9 @@ pub struct Task {
     /// reason: otherwise every row crosses the wire carrying a paragraph nobody
     /// asked to read.
     ///
-    /// ⚠ **Present means the LAST read spoke, not that it ever did.** It is
-    /// cleared by an edit that makes the body smaller, which is exactly the step
-    /// that resets `repo::accreted`, so the flag and the sampler cannot disagree
-    /// about what counts as having consolidated something.
+    /// ⚠ **Present means the LAST read spoke, not that it ever did.** Cleared
+    /// only by an edit that makes the body smaller — see `repo::update`, which
+    /// keeps this and the sampler agreeing on what counts as consolidating.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sprawl_chars: Option<u32>,
     pub created_at: DateTime<Utc>,

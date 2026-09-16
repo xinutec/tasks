@@ -6,12 +6,12 @@
 //! Restoring it reverts *their* edit while reading, to whoever typed it, as
 //! undoing their own mistake — and one more write from anyone loses it.
 //!
-//! **Why this gates where editing does not.** A gate on a frequent correct
-//! operation teaches everyone to pass it, which is why overwriting another
-//! session's text is only warned about: it is ordinary and done often.
-//! Reverting another session's edit is neither, so the flag stays rare enough to
-//! mean something. The warning this replaces was accurate and got piped to
-//! `/dev/null`; a louder one would have gone the same way.
+//! **Why this gates where editing does not.** [`crate::tasks::duplicates`]
+//! argues that gating a frequent correct operation only teaches everyone to pass
+//! the gate — which is why overwriting another session's text is merely warned
+//! about. Reverting another session's edit is neither frequent nor ordinary, so
+//! the flag stays rare enough to mean something. The warning this replaces was
+//! accurate and got piped to `/dev/null`; a louder one would have gone too.
 
 use crate::tasks::types::Revision;
 
