@@ -5,14 +5,12 @@
 //! `show`, `edit` and the rest actually took for the session that ran them.
 //!
 //! ⚠ **Real invocations only. There is no prober and there must not be one.**
-//! The first version of this was a launchd timer that ran `task list --all`
-//! every 15 minutes and reported the result as latency. Two things were wrong
-//! with it and both are worth keeping written down, because the shape is
-//! tempting: it timed a command **no session runs**, from a process with no
-//! session id and a cold cache, so the numbers described the probe rather than
-//! the tool; and a fixed cadence samples the clock, not the usage — one reading
-//! per 900 seconds whether the tool was used a hundred times in that window or
-//! never. What a session waits for is only visible from what sessions do.
+//! The first version was a timer running `task list --all` on a fixed cadence.
+//! Two things were wrong and the shape is tempting enough to keep written down:
+//! it timed a command **no session runs**, from a process with no session id and
+//! a cold cache, so the numbers described the probe; and a fixed cadence samples
+//! the clock rather than the usage. What a session waits for is only visible
+//! from what sessions do.
 //!
 //! ⚠ **Recording must never cost the command anything.** The write goes out
 //! after the work is finished and its answer is already printed, and every
@@ -34,13 +32,11 @@ type Result<T> = std::result::Result<T, AppError>;
 /// fast one — a refusal prints and returns without a round trip — so a median
 /// over both reports the tool as quicker than any session experiences it.
 ///
-/// ⚠ **`Refused` was inside `Error` until 2026-08-29, and that made the failure
-/// rate unreadable.** `add` failed on 149 of 272 runs, which reads as a broken
-/// command; split by how long they took, 76 of them ended in **0-14 ms** — a
-/// round trip costs ~200 ms, so those never reached the service at all. They are
-/// the CLI declining a malformed invocation, which is it working. The other half
-/// took 5-20 s and is the duplicate check refusing, which is also it working.
-/// One number was carrying two findings and neither could be read.
+/// ⚠ **Folding a refusal into `Error` makes the failure rate unreadable.** `add`
+/// then looks like a broken command, when most of what it counts is either the
+/// CLI declining a malformed invocation — returning before any round trip — or
+/// the duplicate check refusing. Both are the tool working, and one number
+/// carrying both findings shows neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ended {
@@ -62,8 +58,8 @@ impl Ended {
     }
 
     /// ⚠ **An older client sends `error` for both**, and those rows stay
-    /// `Error`. They are not re-attributed: nothing recorded which they were,
-    /// and guessing would invent the split this exists to measure.
+    /// `Error` rather than being re-attributed: nothing recorded which they
+    /// were, and guessing would invent the split this exists to measure.
     fn read(word: &str) -> Option<Ended> {
         match word {
             "ok" => Some(Ended::Ok),
@@ -119,14 +115,11 @@ fn was_refused(why: &anyhow::Error) -> bool {
 /// four lines whose last three were a blank, `Caused by:` and `the tool
 /// declined`. Piped to `tail -3` that is the trailer with the cause cut off.
 ///
-/// ⚠ **It cost a session a wrong story it told Pippijn twice.** 2026-09-01: a
-/// filing was refused three times, each output read through `tail -3`, each
-/// time yielding only `the tool declined`. From that the session concluded the
-/// permission layer had tightened since its last successful filing, said so,
-/// and stopped retrying. The actual cause was one line above the cut and named
-/// the remedy outright — a `--no-duplicate-check` carried over out of habit.
-/// **A truncated error does not read as truncated; it reads as the whole
-/// answer**, and an explanation gets built on it.
+/// ⚠ **A truncated error does not read as truncated; it reads as the whole
+/// answer**, and a session builds an explanation on it. One read `the tool
+/// declined` three times through `tail -3`, concluded the permission layer had
+/// tightened, said so, and stopped retrying — while the line above the cut named
+/// the remedy outright.
 ///
 /// ⚠ **The chain STAYS for anything that actually went wrong.** A transport
 /// failure is diagnosed from its causes, so this is a branch and not a blanket
@@ -152,10 +145,10 @@ pub struct Run {
     /// Whether this invocation waited for a model check.
     ///
     /// ⚠ **The variable that explains the whole `edit` distribution.** A checked
-    /// edit runs 39s at the median and an unchecked one 235 ms; the service's
-    /// own share is ~337 ms either way. Without this the reported p90 is the
-    /// MIX, which moves when the check rate moves and when the model slows down,
-    /// and cannot say which happened.
+    /// edit waits on a model and an unchecked one does not, while the service's
+    /// own share is the same either way. Without this the reported percentile is
+    /// the MIX, which moves when the check rate moves AND when the model slows
+    /// down, and cannot say which happened.
     ///
     /// Absent from an older client, and stored as NULL rather than `false`: not
     /// knowing is a third answer, and folding it into the fast population would
@@ -259,9 +252,9 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
 pub struct Tally {
     pub verb: String,
     pub runs: usize,
-    /// Went wrong. ⚠ **No longer includes a refusal** — see [`Ended`]. Rows from
-    /// before 2026-08-29 could not tell them apart and are all counted here, so
-    /// this figure falls as the old window ages out rather than because anything
+    /// Went wrong. ⚠ **No longer includes a refusal** — see [`Ended`]. Rows
+    /// written before the split could not tell them apart and are all counted
+    /// here, so this figure falls as they age out rather than because anything
     /// improved.
     pub failed: usize,
     /// The tool declined: a guard fired, or a check refused.
@@ -277,25 +270,21 @@ pub struct Tally {
     pub worst_ms: u32,
     /// The same percentiles over only the runs that did NOT wait for a model.
     ///
-    /// ⚠ **This is the service's latency; the fields above are the mix.**
-    /// Measured over the 4 days to 2026-08-29, an unchecked edit ran 235 ms at
-    /// the median and a checked one 39,351 ms — and the service's share of the
-    /// checked one was ~337 ms, the same flat cost. So `p90_ms` on `edit` was
-    /// reporting what fraction of edits crossed the sampler, expressed in
-    /// milliseconds, and a genuine 3x service regression would have been
-    /// invisible underneath a term a hundred times larger.
+    /// ⚠ **This is the service's latency; the fields above are the mix.** A
+    /// checked edit spends orders of magnitude more time in the model than the
+    /// service spends on the whole request, so a percentile over both reports
+    /// what fraction of edits crossed the sampler, expressed in milliseconds — a
+    /// real service regression hides underneath a far larger term.
     ///
-    /// `None` when no run in the window said either way — every row written
-    /// before `0015`. Absent rather than equal to the mix, because a figure that
-    /// silently falls back to the number it is meant to correct is worse than no
-    /// figure: it looks like the fix working.
+    /// `None` when no run in the window said either way. Absent rather than
+    /// equal to the mix: a figure that silently falls back to the number it is
+    /// meant to correct looks like the fix working.
     pub unchecked_p90_ms: Option<u32>,
     /// How many runs waited for a model, and how many said nothing.
     ///
-    /// ⚠ **`unknown` is carried rather than folded into either side.** Rows from
-    /// before `0015` know nothing, and counting them as unchecked would file two
-    /// days of 39-second edits into the fast population — inventing exactly the
-    /// number this exists to measure.
+    /// ⚠ **`unknown` is carried rather than folded into either side.** Older
+    /// rows know nothing, and counting them as unchecked files slow edits into
+    /// the fast population — inventing the number this exists to measure.
     pub waited: usize,
     pub unknown: usize,
 }
@@ -366,21 +355,19 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
 /// ⚠ **This is the PUSH window, and it is not what fleetwatch grades.** The
 /// staleness bands come from the `interval_s` the report declares — see
 /// [`REPORTING_INTERVAL_S`] — and the two answer different questions: this is
-/// how often a fresh point lands on the chart, that is how long silence is
-/// tolerated before it is called a fault. Confusing them is how `claude-disk`
-/// spent weeks declaring six hours while running every ten minutes, and a dead
-/// collector had six hours of silence before anything said so.
+/// how often a fresh point lands, that is how long silence is tolerated before
+/// it is a fault. Declare one and run at the other and a dead collector goes
+/// unreported for as long as the gap between them.
 const REPORT_EVERY: chrono::TimeDelta = chrono::TimeDelta::hours(1);
 
 /// The cadence the report declares to fleetwatch, in seconds.
 ///
 /// ⚠ **Worked back from fleetwatch's own bands, not chosen.** It grades a report
-/// `Fresh` within 1.5× this, `Overdue` to 3×, and `Silent` — rendered as a
-/// FAILURE — beyond. Pippijn's requirement on 2026-08-25 was that five days of
-/// nothing is a problem and anything short of that is not, so 3× must land on
-/// five days: 40 hours. That puts a normal quiet night and weekend inside
-/// `Fresh` (2.5 days), the gap between at a warning, and the failure exactly
-/// where he put it.
+/// `Fresh` within 1.5× this, `Overdue` to 3×, and `Silent` — a FAILURE — beyond.
+/// The requirement was that several days of nothing is a problem and anything
+/// short of that is not, so this is whatever makes 3× land there: a quiet night
+/// and weekend stay `Fresh`, the gap after is a warning, and the failure is
+/// where somebody actually wants it.
 ///
 /// ⚠ **Silence here means NOBODY USED THE TRACKER, which is not the same as the
 /// tracker being broken**, and with no prober the two cannot be told apart. That

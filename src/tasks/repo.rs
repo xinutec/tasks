@@ -45,11 +45,9 @@ pub struct Filter {
     ///
     /// ⚠ **The narrow twin of [`or_unheld`](Self::or_unheld), and not the same
     /// question.** That one widens a session's own plate to include the pile;
-    /// this one asks what is going spare. Both existed as ideas from the start
-    /// and only the widening one was built, so "what is in the pile" had to be
-    /// answered by filtering `--all` by hand — which on 2026-08-10 reported 137
-    /// unheld tasks when there were 5, because the guesser invented a `session`
-    /// field that does not exist and matched every row without one.
+    /// this one asks what is going spare. Without it, "what is in the pile" gets
+    /// answered by hand-filtering `--all` — which invents fields that do not
+    /// exist and reports a pile size wildly wrong.
     ///
     /// Wins over the other two when set: a caller asking for the pile is not
     /// asking about a holder, so a session id alongside it is ignored rather
@@ -57,40 +55,33 @@ pub struct Filter {
     pub unheld: bool,
     /// Tasks this session FILED and does not hold — what it handed out.
     ///
-    /// ⚠ **The one question here that is not about the holder.** Every other
-    /// field narrows by who is carrying a task; this one narrows by who *wrote*
-    /// it and then subtracts that writer's own plate. A session that routes work
-    /// to others could see what each of them carries, one holder at a time, and
-    /// could see its own list — but nothing answered "what did I hand out, and
-    /// is any of it still open", which is the whole of a routing session's job.
+    /// ⚠ **The one question here that is not about the holder.** It narrows by
+    /// who *wrote* a task and subtracts that writer's own plate — "what did I
+    /// hand out, and is any of it still open", which is the whole of a routing
+    /// session's job and what nothing else answers.
     ///
-    /// Held by *anybody else* rather than by a named holder, the pile included:
-    /// a task filed here and left for whoever picks it up is out of this
-    /// session's hands exactly as one assigned to `memview` is. The digest does
-    /// not and must not use this — a prompt showing what another conversation
-    /// holds is the cost `digest.rs` exists to refuse.
+    /// Held by *anybody else*, the pile included: a task left for whoever picks
+    /// it up is out of this session's hands too. The digest must not use this —
+    /// a prompt showing what another conversation holds is the cost `digest.rs`
+    /// refuses.
     ///
-    /// Wins over the three above, for the reason [`unheld`](Self::unheld) does:
-    /// it already says what the holder must NOT be, so a holder clause alongside
-    /// would narrow a question that has answered that half itself.
+    /// Wins over the three above for the reason [`unheld`](Self::unheld) does:
+    /// it has already answered the holder half itself.
     pub handed_out_by: Option<String>,
 }
 
 impl Filter {
     /// What a session's digest asks for: its own open tasks and the pile.
     ///
-    /// There is nothing else to narrow by. The repository used to be the second
-    /// half of this and was dropped in `0004`: a session spans checkouts, and
-    /// selecting on a *claimed* set meant a session that had claimed nothing saw
-    /// an empty digest that looked exactly like a broken service.
+    /// There is nothing else to narrow by. The repository was the second half of
+    /// this and was dropped: a session spans checkouts, and selecting on a
+    /// *claimed* set gave a session that had claimed nothing an empty digest
+    /// indistinguishable from a broken service.
     ///
-    /// ⚠ **`or_unheld` is the half that must not be dropped.** Narrowing to
-    /// strictly *mine* is smaller again and breaks the handover — a task left
-    /// for whichever conversation is around would go invisible to all of them at
-    /// once. The objection that stalled this for a day, that a session which
-    /// cannot see work already in hand will re-file it, is answered by the pile
-    /// and not by showing everything. Looking across holders is something to ask
-    /// for: `task list --all`, `task sessions`.
+    /// ⚠ **`or_unheld` is the half that must not be dropped.** Strictly *mine*
+    /// breaks the handover — a task left for whichever conversation is around
+    /// goes invisible to all of them at once. Looking across holders is
+    /// something to ask for: `task list --all`.
     pub fn digest_for(session: &str) -> Self {
         Self {
             session: Some(session.to_string()),
@@ -267,24 +258,20 @@ macro_rules! select {
 
 /// Tasks matching a filter: by priority, then oldest id first.
 ///
-/// ⚠ **Ordered by id and NOT by status.** A list that re-sorts as work starts on
-/// an item moves the line somebody was reading; the client groups when it wants
-/// to. Id order is oldest first, and that is the point rather than an accident —
-/// old tickets belong at the top so they get fixed rather than buried under
-/// whatever was filed this morning. Pippijn refused two proposals to reorder by
-/// anything else on 2026-08-10 (`#704`, `#723`).
+/// ⚠ **Ordered by id and NOT by status.** A list that re-sorts as work starts
+/// moves the line somebody was reading; the client groups when it wants to.
+/// Oldest first is the point rather than an accident — old tickets belong at the
+/// top so they get fixed rather than buried under this morning's.
 ///
 /// ⚠ **Priority is the one thing that reorders, because it is the one order
-/// somebody stated.** `COALESCE(t.priority, 'P2')` is the whole of it: an
-/// unranked task sorts exactly where an ordinary one does, so `P0` and `P1` rise
-/// above the untriaged and `P3`/`P4` sink below, and everything nobody has
-/// touched keeps its id order untouched. The mirror of
-/// [`Priority::rank`](crate::tasks::types::Priority::rank), which
-/// `tests/priority.rs` checks against a real database rather than by inspection.
+/// somebody stated.** `COALESCE(t.priority, 'P2')` is the whole of it, so `P0`
+/// and `P1` rise above the untriaged and `P3`/`P4` sink below while everything
+/// untouched keeps its id order. The mirror of
+/// [`Priority::rank`](crate::tasks::types::Priority::rank).
 ///
-/// ⚠ **This is the only sort in the service**, deliberately: `digest::render`
-/// preserves the order it is handed, so a second ordering for the prompt would
-/// be a second thing to keep true.
+/// ⚠ **The only sort in the service**, deliberately: `digest::render` preserves
+/// the order it is handed, so a second ordering would be a second thing to keep
+/// true.
 pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     let mut query = QueryBuilder::<MySql>::new(select!(""));
     query.push(" WHERE 1 = 1");
@@ -453,19 +440,16 @@ struct RevisionRow {
 
 /// The task as it stood before its most recent edit.
 ///
-/// `None` for a task nothing has overwritten — a task filed and never edited,
-/// and every task that existed before `0008_revision`, which is not a state
-/// worth distinguishing from "no previous version" because in both there is
-/// nothing to put back.
+/// `None` for a task nothing has overwritten, and for one predating revisions —
+/// not worth distinguishing, since in both there is nothing to put back.
 ///
-/// ⚠ **Newest by `event_id`, not by `at`.** `task_events.at` is a `DATETIME` at
-/// one-second resolution and a session doing a subject sweep writes several
-/// edits inside one second; ordering by time would then pick an arbitrary one
-/// of them as "the last". The id is the only total order there is.
+/// ⚠ **Newest by `event_id`, not by `at`.** `task_events.at` is `DATETIME` at
+/// one-second resolution and a subject sweep writes several edits inside one
+/// second, so ordering by time picks an arbitrary one as "the last". The id is
+/// the only total order there is.
 ///
-/// ⚠ **Takes the asker**, because the one thing a caller needs before restoring
-/// is whether the edit it would revert is its own — see [`Revision::mine`]. A
-/// read that could not say would push the comparison onto every client, and the
+/// ⚠ **Takes the asker**, because what a caller needs before restoring is
+/// whether the edit it would revert is its own — see [`Revision::mine`]. The
 /// only identity a client has is the rendered label.
 pub async fn previous(pool: &MySqlPool, id: u64, who: &Actor) -> Result<Option<Revision>> {
     let row: Option<RevisionRow> = sqlx::query_as(
@@ -560,18 +544,13 @@ pub struct NewTask {
     /// * `"priority": "P2"` — a level, judged.
     /// * `"priority": null` — **unassessed**: nobody has judged this yet.
     ///
-    /// `null` still sorts exactly where `P2` does (`COALESCE(priority, 'P2')`),
-    /// so this costs no ordering and buys one thing: `P2` now means *somebody
-    /// looked and called it ordinary*, where before it was indistinguishable
-    /// from *nobody looked*. Asked for by Pippijn 2026-08-11 — "I want
-    /// everything to have a priority" — with the explicit escape kept, because
-    /// a filer working outside their own domain genuinely cannot judge, and
-    /// forcing a number out of them would buy false precision rather than
-    /// triage.
+    /// `null` sorts exactly where `P2` does, so this costs no ordering and buys
+    /// one thing: `P2` means *somebody looked and called it ordinary* rather
+    /// than being indistinguishable from *nobody looked*. The escape is kept
+    /// because a filer outside their own domain genuinely cannot judge.
     ///
-    /// Carrying no attributes at all is what states this to the mirror check:
-    /// `models.ts` must declare the key as always present and nullable, not
-    /// optional.
+    /// Carrying no attributes is what states this to the mirror check:
+    /// `models.ts` declares the key present and nullable, not optional.
     pub priority: Ranking,
     /// The day it has to be done by, if something outside already decides it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -581,22 +560,20 @@ pub struct NewTask {
     pub blocked_on: Vec<u64>,
     /// Who it is for. **Absent means the filer**, not the pile.
     ///
-    /// ⚠ **This said "absent leaves it in the pile" until 2026-09-03, and that
-    /// had been false since the default was inverted** — see `create`, which
-    /// takes the task on unless told otherwise. A client trusting this line
-    /// would have omitted the key to reach the pile and quietly filed to
-    /// itself; since [`spare`](Self::spare) it would instead have been refused,
-    /// which is the better failure and still not the documented one.
+    /// ⚠ **Absent means the filer** — see `create`, which takes the task on
+    /// unless told otherwise. A client that reads this as "leaves it in the
+    /// pile" omits the key and quietly files to itself; [`spare`](Self::spare)
+    /// turns that into a refusal, which is the better failure and still not what
+    /// the caller meant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
     /// Why this belongs to nobody — **required when, and only when, it does**.
     ///
-    /// ⚠ **Filing to the pile was corrected 47 times out of 47** (#1334, all
-    /// 726 real filings scanned 2026-09-03). It was never once the right final
-    /// holder, so it is now something argued for rather than something typed.
-    /// A holder needs no such argument: absent here with an assignee is fine,
-    /// present is refused, because a reason for the pile says nothing about a
-    /// task that is on somebody's plate.
+    /// ⚠ **Every filing to the pile in the corpus was later corrected.** It was
+    /// never once the right final holder, so it is something argued for rather
+    /// than something typed. A holder needs no such argument: absent here with
+    /// an assignee is fine, present is refused, because a reason for the pile
+    /// says nothing about a task on somebody's plate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spare: Option<String>,
 }
@@ -633,17 +610,15 @@ pub struct Change {
     ///
     /// ⚠ **This is the field that stops the mistake `body` invites.** Recording
     /// an outcome on a task means writing a paragraph and keeping thousands of
-    /// characters of filing, and the only way to say that was to read the body
-    /// out, concatenate by hand, and send the whole thing back as a
-    /// replacement. Twice on 2026-08-15 the read half was skipped and the
-    /// paragraph landed as the entire body — once caught by `collapses`, once
-    /// under its threshold at 52% kept, which nothing catches.
+    /// characters of filing, and without this the only way to say that is to
+    /// read the body out, concatenate by hand, and send the whole thing back as
+    /// a replacement. Skip the read half and the paragraph lands as the entire
+    /// body — sometimes caught by `collapses`, sometimes just under it.
     ///
     /// ⚠ **Above rather than below is the ordinary case, and deliberately.** A
-    /// body grows in the order things happened, so what is still true sinks:
-    /// measured across every task with prose, #704's verdict sat 98% down its
-    /// 132 lines. `task edit --help` has said *lead with where it stands* since
-    /// before this existed; this is the field that makes doing so cheap.
+    /// body grows in the order things happened, so what is still true sinks to
+    /// the bottom where nobody reads it. `task edit --help` says *lead with
+    /// where it stands*; this is the field that makes doing so cheap.
     ///
     /// **Resolved against the body inside the same transaction that reads it**,
     /// so two conversations adding to one task cannot lose each other's text —
@@ -740,16 +715,14 @@ fn check_subject(subject: &str) -> Result<String> {
 ///
 /// ⚠ **Deliberately far from anything a real rewrite does**, as is
 /// [`KEEPS_AT_LEAST`]. The point is not to catch every loss — it is to catch the
-/// writes that were never edits at all, and to do it without asking anybody
-/// about the ordinary ones. Measured 2026-08-16: 95 real sized edits, 89
-/// guarded, zero false positives.
+/// writes that were never edits at all, without asking anybody about the
+/// ordinary ones.
 const WORTH_GUARDING: usize = 500;
 
 /// The share of a guarded body an edit has to leave standing — a quarter.
 ///
-/// ⚠ **A rewrite that keeps half is NOT caught**, and one at 52% is the loss
-/// nothing catches; this is a backstop against truncation, not against a
-/// confident overwrite. `task undo` is what covers the rest.
+/// ⚠ **A rewrite that keeps half is NOT caught.** This is a backstop against
+/// truncation, not against a confident overwrite; `task undo` covers the rest.
 const KEEPS_AT_LEAST: usize = 4;
 
 /// Whether a new body keeps so little of the old one that it is more likely a
@@ -758,24 +731,20 @@ const KEEPS_AT_LEAST: usize = 4;
 /// ⚠ **This gates edits, which [`crate::tasks::duplicates`] argues against — and that
 /// argument does not reach this.** That one is about whose words and how old:
 /// overwriting another session's recent text is frequent and legitimate, and gating a
-/// frequent correct operation only teaches everyone to pass gates. A 3,109-character
-/// body becoming 4 characters is neither frequent nor legitimate. That is #900 on
-/// 2026-08-15, when a session read `--json`, took `detailed` for the prose, and wrote
-/// `True` over the lot.
+/// frequent correct operation only teaches everyone to pass gates. A long body
+/// becoming a single word is neither frequent nor legitimate — which is what happens
+/// when a session reads `--json`, takes `detailed` for the prose, and writes the
+/// boolean over the lot.
 ///
-/// ⚠ **Measured over every edit the history records with sizes — 95 real edits, 89 of
-/// them over [`WORTH_GUARDING`]. This fires on ZERO of them, and must NOT be
-/// tightened.** Raising the share was considered, since slips on #921 and #923 kept
-/// 34% and 53%. The distribution says no: NO edit kept under 25%, and all eight that
-/// kept 33–53% were read — every one a conclusion-on-top rewrite, by four different
-/// conversations, which is precisely what `task edit --help` instructs. Putting the
-/// verdict above a history halves a body by construction, so a cut at 55% would fire
-/// on nine correct edits to catch two mistakes.
+/// ⚠ **This fires on no real edit in the history, and must NOT be tightened.** The
+/// tempting change is to raise the share, because genuine rewrites sometimes keep only
+/// a third. The distribution refuses it: every edit in that band was read and every one
+/// was a conclusion-on-top rewrite, which is precisely what `task edit --help`
+/// instructs. Putting a verdict above a history halves a body by construction, so a
+/// higher cut fires on more correct edits than mistakes.
 ///
-/// So 25% stays, and the 25–60% band is answered by removing the NEED to rewrite
-/// rather than policing it: `Change::prepend` puts a conclusion on top while keeping
-/// every word. That predicts the band empties as sessions adopt it, which is what to
-/// look at when this is measured again.
+/// The middle band is answered by removing the NEED to rewrite rather than policing
+/// it: `Change::prepend` puts a conclusion on top while keeping every word.
 ///
 /// ⚠ **The window is one day wide.** 779 earlier body edits predate sizes being written
 /// into `task_events.detail`, so they are unmeasurable and unrecoverable — only one
@@ -882,11 +851,11 @@ fn parse_ids(joined: Option<&str>) -> Vec<u64> {
         .collect()
 }
 
-/// Pippijn's rule on a blocked task, checked at both ends.
+/// A blocked task may be ranked the same as what blocks it, never higher.
+/// Checked at both ends.
 ///
-/// *"It can be the same, but not higher priority than the thing it's blocked on."*
-/// (2026-08-11.) A task you cannot start must not claim to be the next thing anybody
-/// does — the single move that inflates a scale, and the one shape a machine can catch.
+/// A task you cannot start must not claim to be the next thing anybody does — the
+/// single move that inflates a scale, and the one shape a machine can catch.
 ///
 /// ⚠ **The bound is the LEAST urgent open blocker**, since that is what decides when
 /// this can actually start: blocked on a `P1` and a `P3`, a task waits for the `P3`.
@@ -905,16 +874,12 @@ fn parse_ids(joined: Option<&str>) -> Vec<u64> {
 /// ever.
 ///
 /// ⚠ **The rule binds a CLAIM, so an unranked task is never in violation** — the one
-/// deliberate asymmetry. Unranked sorts as [`Priority::P2`], but it asserts nothing,
-/// and the rule is about asserting *do this next* for work you cannot start. Applying
-/// it to untriaged tasks would refuse to record *"#726 waits for #697"* until #726 was
-/// ranked, turning writing down a fact into making a decision — the pressure that ends
-/// with everything ranked to satisfy a field, and a scale whose values were satisfied
-/// rather than chosen says nothing.
+/// deliberate asymmetry. Unranked sorts as [`Priority::P2`] but asserts nothing, and
+/// applying the rule to it would refuse to record *"this waits for that"* until the
+/// waiting task was ranked, turning writing down a fact into making a decision.
 ///
-/// So the blocked task is checked only once somebody has ranked it, while a BLOCKER's
-/// absent rank still counts as `P2`: that is genuinely where it sits, and the claim
-/// above it has to clear something.
+/// So a blocked task is checked only once somebody has ranked it, while a BLOCKER's
+/// absent rank still counts as `P2`: the claim above it has to clear something.
 async fn blocking_is_consistent(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
@@ -1141,24 +1106,22 @@ fn unknown_blocker(e: sqlx::Error, blocker: u64) -> AppError {
 /// The assignee foreign key's refusal, turned into an answer the caller can act
 /// on. Any other failure keeps `doing` as its context and stays a 500.
 ///
-/// ⚠ **`fk_tasks_session` was always doing the refusing.** What was wrong was
-/// the answer: the violation arrived as `AppError::Other`, which is a 500 logged
-/// as an internal error and reaching the caller as the anyhow context — the
-/// words `moving a task`, which name the operation they already know they asked
-/// for. The service knows exactly which id has no row and can say so.
+/// ⚠ **The constraint was always doing the refusing** — what was wrong was the
+/// answer: it arrives as `AppError::Other`, a 500 whose whole message names the
+/// operation the caller already knows they asked for. The service knows exactly
+/// which id has no row and can say so.
 ///
-/// ⚠ **Discriminated by KIND rather than by the constraint's name**, which is
-/// not the obvious way round and is forced: sqlx 0.9's MySQL driver answers
-/// `DatabaseError::constraint()` with `None`, so `fk_tasks_session` reaches Rust
-/// only inside the message text, and matching on that is a parse of an English
-/// sentence MariaDB is free to reword. `ErrorKind::ForeignKeyViolation` is
-/// typed — and on a statement writing `assignee_session` there is exactly one
-/// key it can be, this schema's other one belonging to `task_events`.
+/// ⚠ **Discriminated by KIND rather than by the constraint's NAME**, which is
+/// forced: sqlx's MySQL driver answers `DatabaseError::constraint()` with
+/// `None`, so the name reaches Rust only inside the message text, and matching
+/// that is a parse of an English sentence MariaDB is free to reword.
+/// `ErrorKind::ForeignKeyViolation` is typed, and on a statement writing
+/// `assignee_session` there is exactly one key it can be.
 ///
-/// ⚠ **Reading the constraint's answer rather than checking the row first.**
-/// A `SELECT` before the write spends a query on every move to learn what the
-/// constraint is about to enforce anyway, and still races a session deleted
-/// between the two. This cannot: the write already happened.
+/// ⚠ **Reading the constraint's answer rather than checking the row first.** A
+/// `SELECT` before the write spends a query on every move to learn what the
+/// constraint enforces anyway, and still races a session deleted between the
+/// two. This cannot: the write already happened.
 fn unknown_holder(e: sqlx::Error, session: Option<&str>, doing: &'static str) -> AppError {
     let violated = e
         .as_database_error()
@@ -1300,9 +1263,9 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     // this event — a filing with a holder wrote `created` and `assigned` in one
     // transaction, the pile wrote `created` alone, and the difference was the
     // only evidence there was. A tool that cannot report its own misuse makes
-    // the next person re-derive it. ⚠ So the timestamp trick in #1334 stops
-    // working from here: `nobody` filings now carry an event, and re-running
-    // that method would report zero rather than the truth.
+    // the next person re-derive it. ⚠ And that inference stops working from
+    // here: `nobody` filings carry an event now, so re-running it reports zero
+    // rather than the truth.
     let note = match spare {
         Some(why) => format!("→ nobody: {why}"),
         None => format!("→ {}", label_of(&mut tx, &assignee).await?),
@@ -1342,29 +1305,20 @@ pub fn inferred_holder(before: &Task, change: &Change, actor: &Actor) -> Option<
     // showed its in-flight work as belonging to nobody. `task start` was already
     // documented as the way a session takes a task on, and it did not do it.
     //
-    // ⚠ **Out of the PILE only, which is narrower than it first shipped.** The
-    // guard was on the status — claim unless the task was already `doing` — and
-    // that read as safe while being wrong: a task Pippijn had handed to one
-    // conversation, which had not got to it yet, was taken off it by any other
-    // session running `start`, silently. `starting_a_task_assigned_to_another_
-    // session_takes_nothing` is that case, and it failed against the rule the
-    // comment here originally claimed to implement.
+    // ⚠ **Out of the PILE only.** Guarding on the STATUS instead — claim unless
+    // already `doing` — reads as safe and is wrong: a task handed to one
+    // conversation that has not got to it yet is then taken off it, silently, by
+    // any other session running `start`. So a holder is inferred only where
+    // there is none; taking somebody else's is a handover, and `move` is the
+    // word for that.
     //
-    // So: a holder is inferred only where there is none. If the task is already
-    // yours there is nothing to move; if it is somebody else's, taking it is a
-    // handover and `move` is the word for that.
-    //
-    // ⚠ **And it does not read the status, which was the last thing keeping this
-    // from firing where it was most needed.** A `&& before.status != Doing`
-    // clause survived that narrowing, on the argument that starting an
-    // already-started task should write no history — true of every task that is
-    // `doing` *because somebody is doing it*, and false of the one state where
-    // the status says nothing about the holder. A session that stops work
-    // deliberately hands the task back without closing it, leaving it `doing`
-    // and in the pile (#19), and `start` — the documented way to pick something
-    // up — then reported success and moved nobody. The no-history property was
-    // never this clause's to keep: `moved` below compares the holders and
-    // suppresses a write when they already match.
+    // ⚠ **And it does not read the status at all.** A `&& status != Doing`
+    // clause looks like it preserves the no-history property, and it is false of
+    // the one state where the status says nothing about the holder: a session
+    // that stops work hands the task back without closing it, leaving it `doing`
+    // and in the pile, and `start` then reports success and moves nobody. The
+    // no-history property was never that clause's to keep — `moved` below
+    // compares the holders and suppresses a write when they match.
     let starter = (change.status == Some(Status::Doing)
         && before.assignee.kind == AssigneeKind::Nobody
         && change.assignee.is_none())
@@ -1385,11 +1339,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // ⚠ **A closed task may not be left in the pile.** The pile means *for
     // whoever picks it up*, and nobody picks up a finished task; what it
     // actually produces is a list saying a thing was done by nobody, which is
-    // the one question `assignee` exists to answer. Three tasks reached that
-    // state before the rule existed — #106 closed in the 1h37m between this
-    // service going live and `eaf64c4` adding the finisher, and #629/#630
-    // imported already `done` from a file scheme that recorded no owner. All
-    // three were attributed by hand on 2026-08-09.
+    // the one question `assignee` exists to answer.
     //
     // **Only an EXPLICIT `nobody` needs refusing**, which is narrower than it
     // looks. Closing without naming anybody is already covered: the finisher
@@ -1423,30 +1373,22 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // axis was added.
     let mut changed: Vec<Moved> = Vec::new();
 
-    // ⚠ **The prior text is read ONCE, inside the transaction, whether or not
-    // it is about to change.** Two things need it and both need the same
-    // answer: the comparisons below, which is what keeps an edit that alters
-    // nothing out of the history, and the revision snapshot, which has to hold
-    // the *whole* previous task even when only one of the two moved. Reading it
-    // per-branch gave the body branch its own SELECT and left the subject
-    // branch with nothing to snapshot.
-    //
-    // This is on the write path only; it never touches the digest, which is the
-    // one query charged per turn.
+    // ⚠ **Read ONCE, inside the transaction, whether or not it is about to
+    // change.** The comparisons below need it, to keep an edit that alters
+    // nothing out of the history, and so does the revision snapshot, which holds
+    // the *whole* previous task even when one column moved. Reading per-branch
+    // leaves the subject branch with nothing to snapshot.
     //
     // ⚠ **`FOR UPDATE`, and a transaction alone is NOT enough.** `prepend` and
-    // `append` build the new body out of this read, so the row has to be held
-    // from here until the write. Under InnoDB's REPEATABLE READ a plain
-    // `SELECT` is a non-locking snapshot: two conversations adding to one task
-    // would both read the body as it was, and whichever committed second would
-    // store a version the other's text had never been in. The `UPDATE` below
-    // does take a lock and does not save it — by then the losing body has
-    // already been built.
+    // `append` build the new body out of this read, so the row must be held from
+    // here until the write. Under REPEATABLE READ a plain `SELECT` is a
+    // non-locking snapshot: two conversations adding to one task both read the
+    // body as it was, and whichever commits second stores a version the other's
+    // text was never in. The `UPDATE` takes a lock too late — by then the losing
+    // body is already built.
     //
-    // The lock is held for the rest of this transaction, which is a handful of
-    // statements against one row on a path that runs when somebody types a
-    // command. `tests/body_add.rs` drives the interleaving by hand, because two
-    // gentler versions of that test passed against the unlocked read.
+    // `tests/body_add.rs` drives the interleaving by hand, because two gentler
+    // versions of that test passed against the unlocked read.
     let (was_subject, was_body): (String, String) =
         sqlx::query_as("SELECT subject, body FROM tasks WHERE id = ? FOR UPDATE")
             .bind(id)
@@ -1482,8 +1424,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // the transaction.** Doing it in the client — GET the body, concatenate,
     // PATCH the result — is a read-modify-write across two round trips, and two
     // conversations adding to one task would silently drop one of the two
-    // additions. That is not hypothetical here: #921 took an edit from another
-    // session eleven seconds after its own.
+    // additions. That is not hypothetical here: sessions edit the same task
+    // seconds apart.
     //
     // Resolving it into `body` also means everything downstream is unchanged
     // and stays correct for free: the collapse guard (which can never fire on
@@ -1563,10 +1505,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 .context("clearing a body's sprawl flag")?;
         }
         // ⚠ **The size of the change belongs in the row, not only in the reply.**
-        // The reply says `3109 → 4 chars` to whoever made the edit and is then
-        // gone with their scrollback; stored, it is what tells the next reader
-        // that a body was once emptied. It was `body` alone until 2026-08-15,
-        // and #900's history gave no sign of what had happened to it.
+        // The reply goes with the scrollback of whoever made the edit; stored,
+        // it is what tells the next reader that a body was once emptied.
         let detail = format!(
             "body {} → {} chars",
             was_body.chars().count(),
@@ -1736,14 +1676,12 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     // `now` is measured off the RESOLVED body rather than re-read: the body
     // branch above has already established they differ.
     //
-    // ⚠ **It read `change.body`, and that was the before-size on every
-    // `--prepend`/`--append`.** Those two leave `change.body` at None — the text
-    // they produce is `body`, assembled from `joined` — so the `map_or` fallback
-    // fired and the line said `1619 → 1619 chars` over an addition of two
-    // thousand. Correct while `--body` was the only spelling, wrong from
-    // `346120c`, and wrong in the reassuring direction: [`displaced`] exists to
-    // make a session look twice at what it just overwrote, and it was reporting
-    // that nothing had been overwritten at all.
+    // ⚠ **Reading `change.body` here gives the BEFORE size on every
+    // `--prepend`/`--append`.** Those leave `change.body` at None — the text
+    // they produce is `body`, assembled from `joined` — so the fallback fires
+    // and the line reports no change at all over a large addition. Wrong in the
+    // reassuring direction: [`displaced`] exists to make a session look twice at
+    // what it overwrote.
     let now = body
         .as_deref()
         .map_or(was_body.chars().count(), |body| body.chars().count());
@@ -1768,11 +1706,10 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 /// How much this body has grown since anything last made it smaller.
 ///
 /// ⚠ **Read out of `task_revision`, not parsed out of the history.**
-/// `task_events.detail` holds one rendered line — `body 4807 → 6019 chars` —
-/// and reading a number back out of a sentence written for a person would make
-/// that sentence a wire format. The revisions hold the text itself, so the
-/// sizes are `CHAR_LENGTH` in SQL and only integers cross the wire; a
-/// hundred-kilobyte body is never loaded to be measured.
+/// `task_events.detail` holds a line rendered for a person, and reading a number
+/// back out of it would make that sentence a wire format. The revisions hold the
+/// text itself, so sizes are `CHAR_LENGTH` in SQL and only integers cross the
+/// wire — a large body is never loaded to be measured.
 ///
 /// The oldest revision's body is the task as it was FILED, which is where the
 /// count starts: a body somebody wrote in one go is not accretion, however long

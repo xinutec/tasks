@@ -1,29 +1,25 @@
 //! Pushing the tool's own timings to fleetwatch.
 //!
-//! **In the library rather than the binary so it can be tested against.** It
-//! lived inside `src/bin/task.rs` until 2026-08-26, where nothing in `tests/`
-//! could reach it — and the id it minted was not a valid ULID, so its pushes
-//! were refused with a 422 while every green test in the repo stayed green. A
-//! private module in a binary is a module with no seam.
+//! **In the library rather than the binary so it can be tested against.** As a
+//! private module inside the binary nothing in `tests/` could reach it, and it
+//! spent its whole life pushing an id the receiver rejected while every test in
+//! the repo stayed green. A private module in a binary is a module with no seam.
 //!
 //! ⚠ **It WORKED before it shipped, which is the part worth remembering.** One
-//! report is stored in fleetwatch — 2026-08-25T18:00:55Z, five checks, all
-//! passing — pushed by a development build whose id happened to be 26
-//! characters. `minted()` was widened to `{:016X}{:016X}` (32) before the
-//! commit, and every push after that was refused. The evidence of success was a
-//! row in somebody else's database that nobody re-read, so the last edit before
-//! shipping went unchecked.
+//! report landed, pushed by a development build; the id format was widened just
+//! before the commit and every push after that was refused. The evidence of
+//! success was a row in somebody else's database that nobody re-read, so the
+//! last edit before shipping went unchecked.
 //!
-//! ⚠ **No timer, and no prober.** Every number here came from a command
-//! somebody actually ran. The service hands exactly one caller an hour the job
-//! of forwarding them — see [`crate::tasks::commands::due_to_report`] — so
-//! nothing happens on a day nobody uses the tracker, and fleetwatch's own
-//! staleness is what says so.
+//! ⚠ **No timer, and no prober.** Every number here came from a command somebody
+//! actually ran, and the service hands one caller at a time the job of
+//! forwarding them — see [`crate::tasks::commands::due_to_report`]. Nothing
+//! happens on a day nobody uses the tracker, and fleetwatch's own staleness
+//! reporting is what says so.
 //!
 //! ⚠ **The token is read ONLY when the job is handed over.** It is a fleet
 //! credential this CLI otherwise never touches, and reading it on every `task
-//! list` would put it in the reach of every command for no reason. Once an hour
-//! of active use is the whole exposure.
+//! list` would put it in reach of every command for no reason.
 
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -62,14 +58,12 @@ fn token() -> Option<String> {
 
 /// A ULID, which fleetwatch dedupes on.
 ///
-/// ⚠ **Minted with the crate the RECEIVER parses it with, and hand-rolling
-/// it cost this whole series.** This returned `format!("{:016X}{:016X}")`
-/// until 2026-08-26 — 32 hex characters, described in its own comment as
-/// "ULID-shaped". A ULID is 26 characters of Crockford base32, so it never
-/// was one, and `ingest` rejects a bad id with 422 before storing anything.
-/// Every hourly push since the feature shipped was refused, and the local
-/// recording, the carrier selection and the ablation all passed throughout
-/// — none of them look at what the receiver said.
+/// ⚠ **Minted with the crate the RECEIVER parses it with, and hand-rolling it
+/// cost this whole series.** A hex string described in its own comment as
+/// "ULID-shaped" is not a ULID, and `ingest` rejects a bad id before storing
+/// anything. Every push was refused while the local recording, the carrier
+/// selection and the ablation all passed — none of them look at what the
+/// receiver said.
 ///
 /// ⚠ **Random rather than derived from the numbers.** Two reports a minute
 /// apart can carry identical tallies — nothing was recorded between them —
@@ -122,12 +116,11 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
-        // ⚠ **The line above is the MIX; this one is the service.** Measured
-        // over the 4 days to 2026-08-29, `edit` ran 235 ms at the median
-        // unchecked and 39,351 ms checked, while the service's share of the
-        // checked run was ~337 ms either way. So `{verb} latency` on a verb that
-        // can trip a check reports what fraction crossed the sampler, in
-        // milliseconds — it moves when the check rate moves and when the model
+        // ⚠ **The line above is the MIX; this one is the service.** A checked
+        // run spends orders of magnitude more time in the model than the service
+        // spends on the whole request, so `{verb} latency` on a verb that can
+        // trip a check reports what fraction crossed the sampler, in
+        // milliseconds — it moves when the check rate moves AND when the model
         // slows, and cannot say which. This one moves only for the service.
         //
         // ⚠ **Emitted only where the client said**, so an older CLI's rows do
@@ -157,15 +150,11 @@ pub fn checks(report: &Value) -> Vec<Value> {
     // One aggregate rather than a line per verb: eight more series to say a
     // number that is almost always zero would crowd out the ones that move.
     //
-    // ⚠ **No verdict, deliberately** — and the reason CHANGED on 2026-09-01
-    // without the decision changing. It used to be that a refusal landed here:
-    // the model arm of the duplicate check `bail!`d, so declining a filing was
-    // counted as breakage. It now returns `commands::declined` like every other
-    // refusal and lands in the line below instead, which is what the `Refused`
-    // split was for. So this figure is finally only faults — but nobody has
-    // measured what a normal day's fault count is, and a threshold picked
-    // without that is the kind of bound that fires on ordinary noise and trains
-    // everyone to ignore the one line that is supposed to mean something.
+    // ⚠ **No verdict, deliberately.** This figure is faults alone — refusals
+    // land in the line below, which is what the `Refused` split is for — but
+    // nobody has measured what a normal day's fault count is, and a threshold
+    // picked without that fires on ordinary noise and trains everyone to ignore
+    // the one line that is supposed to mean something.
     if !report["commands"]
         .as_array()
         .unwrap_or(&Vec::new())
@@ -184,19 +173,15 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "",
             "pass",
         ));
-        // ⚠ **Its own line, because it is not a fault and the two moved
-        // together.** `add` ended badly on 149 of 272 runs, which reads as a
-        // broken command; 76 of those ended in 0-14 ms — under a round trip —
-        // so they are the CLI declining a malformed invocation, and the rest are
-        // the duplicate check refusing. Both are the tool working. Folded into
-        // one figure, a real fault would have to double the total before it
-        // showed.
+        // ⚠ **Its own line, because it is not a fault.** Most of what `add`
+        // "fails" on is the CLI declining a malformed invocation — returning
+        // before any round trip — or the duplicate check refusing. Both are the
+        // tool working, and folded into one figure a real fault would have to
+        // double the total before it showed.
         //
-        // ⚠ **This number is LOW for a fortnight and that is not an
-        // improvement.** Rows written before 2026-08-29 said `error` for both
-        // and are not re-attributed, so `refused` climbs and `failed` falls as
-        // the old window ages out. Say so on the graph rather than in a comment
-        // nobody reading it will see.
+        // ⚠ **Both series move while old rows age out**, because rows written
+        // before the split said `error` for both and are not re-attributed. Say
+        // so on the graph rather than in a comment nobody reading it will see.
         out.push(check(
             "commands the tool declined",
             format!("{refused_total} of {run_total} runs"),
@@ -227,10 +212,9 @@ pub fn checks(report: &Value) -> Vec<Value> {
         // quiet, timeout and error sum to `runs` — so the series can be read
         // against each other.
         //
-        // This is the number that decided #1251: 229 of 268 density reads spoke
-        // over the 5.6 days to 2026-08-29, which is what refuted turning the
-        // advice into a refusal. It was measured by hand out of `check_run`,
-        // because nothing charted it.
+        // This is the number that refutes turning the density advice into a
+        // refusal: it speaks on most of what it reads. Measured by hand out of
+        // `check_run` the first time, because nothing charted it.
         out.push(check(
             &format!("{kind} checks that spoke"),
             format!("{spoke} of {runs}"),
@@ -238,10 +222,9 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "",
             "pass",
         ));
-        // ⚠ **Every kind, and it used to be `filing` alone.** 37 of those same
-        // 268 density reads never answered — 14% — and appeared on no line at
-        // all, so the one number saying how often this check simply does not
-        // happen was invisible for the kind that runs most.
+        // ⚠ **Every kind, and it used to be `filing` alone**, so the one number
+        // saying how often a check simply does not happen was invisible for the
+        // kind that runs most.
         //
         // ⚠ **A timeout and an error are summed HERE and nowhere else.** They
         // have different causes and the tally keeps them apart, but both mean
@@ -251,9 +234,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
         //
         // ⚠ **Only `filing` gets a verdict, and the asymmetry is deliberate.**
         // Zero is defensible there: an unchecked filing is how a duplicate gets
-        // in. A density read is advisory, its measured baseline is 14%, and no
-        // bound has been derived — so warning on it would publish a guess as a
-        // finding, which is the mistake this module's header warns about.
+        // in. A density read is advisory and no bound has been derived for it,
+        // so warning would publish a guess as a finding.
         let unanswered = timeout + errored;
         out.push(check(
             &format!("{kind} checks that never answered"),
@@ -270,8 +252,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
             },
         ));
     }
-    // ⚠ **The WORK, which no line here described until 2026-08-29.** Everything
-    // above measures the tracker's machinery; this measures what it is holding.
+    // ⚠ **The WORK.** Everything above measures the tracker's machinery; this
+    // measures what it is holding.
     // Absent when the service could not count — a section that reported zeros on
     // a failed query would publish "the backlog is clear" as a finding.
     if let Some(work) = report.get("work").filter(|w| w.is_object()) {
@@ -280,8 +262,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
             ("tasks in the pile", "unheld"),
             ("tasks at P0 or P1", "urgent"),
             ("tasks blocked on open work", "blocked"),
-            // The number `0014` exists to move. Nothing charted it, so whether
-            // the digest mark changes behaviour was unanswerable — see #1252.
+            // The number the digest mark exists to move. Uncharted, whether the
+            // mark changes any behaviour is unanswerable.
             ("bodies carrying an unaddressed finding", "sprawling"),
         ] {
             let Some(count) = work[key].as_u64() else {

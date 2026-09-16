@@ -7,12 +7,11 @@
 //! transcript — so until this table, a check that ran left nothing behind
 //! except, on the filing side, a line on the caller's stderr.
 //!
-//! ⚠ **The questions this exists to answer are already open.** Whether the
-//! density read fires at the rate it was calibrated for, and whether
-//! `PATIENCE` abandons calls that would have answered, are both questions about
-//! a distribution — and a distribution cannot be read out of the transcripts
-//! that happen to survive. The row is written on every path, including the ones
-//! that failed, because a check that did not run is the finding.
+//! ⚠ **Written on every path, including the ones that failed**, because a check
+//! that did not run is the finding. Whether the density read fires at the rate
+//! it was calibrated for, and whether `PATIENCE` abandons calls that would have
+//! answered, are questions about a distribution — and a distribution cannot be
+//! read out of the transcripts that happen to survive.
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -165,10 +164,9 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
 /// Keep what a density read said, on the task it was about.
 ///
 /// ⚠ **Only `spoke` and `quiet` touch the flag; a timeout or an error must
-/// not.** Those two mean the body was never judged — 37 of 268 reads timed out
-/// over the 5.6 days to 2026-08-29 — and clearing on them would let a slow model
-/// retire a finding nobody has addressed. Silence from a checker that never ran
-/// is not a verdict, which is the distinction [`Outcome`] exists to preserve.
+/// not.** Those two mean the body was never judged, and clearing on them lets a
+/// slow model retire a finding nobody has addressed. Silence from a checker that
+/// never ran is not a verdict — the distinction [`Outcome`] exists to preserve.
 async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
     let (Kind::Density, Some(id)) = (run.kind, run.task_id) else {
         return Ok(());
@@ -187,8 +185,8 @@ async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
         }
         // `DENSE` is a verdict about the body as it stands now, and a later
         // verdict outranks an earlier one. It cannot be summoned to clear a
-        // flag: the read only fires on 3,000 characters of fresh accretion, so
-        // the cheapest way to reach it is to make the body worse.
+        // flag: the read fires only on fresh accretion, so the cheapest way to
+        // reach it is to make the body worse.
         Outcome::Quiet => {
             sqlx::query("UPDATE tasks SET sprawl_said = NULL, sprawl_chars = NULL WHERE id = ?")
                 .bind(id)
@@ -368,21 +366,18 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
 /// How long a refusal licenses an override for.
 ///
 /// ⚠ **Long enough to re-run, short enough not to become the habit.** The
-/// intended sequence is: the filing is refused, the caller reads it, and re-runs
-/// the same command with `--no-duplicate-check` — seconds, sometimes a minute if
-/// they open the task it named first. Half an hour is generous for that and far
-/// too short to let a session collect a licence in the morning and skip checks
-/// all afternoon.
+/// sequence is: refused, read, re-run with `--no-duplicate-check` — seconds,
+/// or a minute if the caller opens the task it named. Generous for that, and far
+/// too short to collect a licence in the morning and skip checks all afternoon.
 const LICENCE: i64 = 1800;
 
 /// Whether this session has been refused this exact subject, recently.
 ///
-/// ⚠ **This is what makes `--no-duplicate-check` cost a re-run.** Measured over
-/// every transcript, 63 of 644 filings passed that flag on the way in and only
-/// 16 followed a refusal — so for 47 sessions the check never ran at all, and
-/// the trade the whole module rests on never happened. The flag stays, because
-/// roughly one refusal in six is wrong and removing the escape would turn every
-/// false positive into a lost body; it just cannot be used FIRST any more.
+/// ⚠ **This is what makes `--no-duplicate-check` cost a re-run.** Most filings
+/// that passed the flag had never been refused anything, so the check never ran
+/// and the trade the whole module rests on never happened. The flag stays —
+/// removing the escape would turn every false positive into a lost body — it
+/// just cannot be used FIRST.
 ///
 /// Keyed on the subject, not merely the session: one refusal licenses re-filing
 /// the thing that was refused, and nothing else.

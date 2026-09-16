@@ -1,29 +1,25 @@
 //! Falsifying what a review said about a task body.
 //!
 //! A model asked to review prose returns findings that all read alike: the true
-//! ones and the invented ones arrive in the same confident shape. On 2026-09-06,
-//! fifty agents over all 712 closed bodies returned 235 findings and **81 did
-//! not survive the checks below** — 27 quoting text that appears in no task they
-//! were given, 28 claiming a supersession that runs backwards.
+//! ones and the invented ones arrive in the same confident shape. A large share
+//! of them quote text that appears in no task they were given, or claim a
+//! supersession that runs backwards.
 //!
-//! ⚠ **The requirement that did the work is quoting the LATER text.** Saying
+//! ⚠ **The requirement that does the work is quoting the LATER text.** Saying
 //! "this paragraph is stale" costs nothing and cannot be checked. Saying "this
-//! paragraph is stale AND here is the verbatim text further down that
-//! supersedes it" is falsifiable by string position, and it rejected **51 of 56**
-//! stale-layer claims. Nothing about the model changed; the shape of the answer
-//! did.
+//! paragraph is stale AND here is the verbatim text further down that supersedes
+//! it" is falsifiable by string position, and it rejects most such claims.
+//! Nothing about the model changes; the shape of the answer does.
 //!
-//! ⚠ **This module holds the decision and none of the IO**, so its tests are
-//! the past mistakes rather than a fixture: no database, no network, no task
-//! store. `tests/findings.rs` pins both ways the first instrument was wrong.
+//! ⚠ **This module holds the decision and none of the IO**, so its tests are the
+//! past mistakes rather than a fixture: no database, no network, no task store.
 //!
-//! ⚠ **A finding is checkable only against the text it was made about, and that
-//! is why the body is passed in rather than fetched.** Re-running the 2026-09-06
-//! findings after their 130 subject rewrites refused 225 of 235 — correctly, and
-//! uselessly: the quoted text no longer existed because it had been repaired.
-//! The same run before the edits refused 81. Neither number is wrong; they are
-//! answers about different corpora. Check a review while its corpus still
-//! stands, or keep the revision it was made against.
+//! ⚠ **A finding is checkable only against the text it was made about, which is
+//! why the body is passed in rather than fetched.** Re-run a review after its
+//! findings have been applied and almost everything refuses — correctly, and
+//! uselessly, because the quoted text is gone precisely because it was repaired.
+//! Check a review while its corpus stands, or keep the revision it was made
+//! against.
 
 /// What a finding claims about a body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,11 +56,10 @@ pub struct Finding {
     pub quote_resolving: Option<String>,
     /// For a repetition claim: the SECOND occurrence.
     ///
-    /// ⚠ **Required, and that is instrument failure 2.** Counting occurrences
-    /// of `quote_problem` alone called all 14 repetition findings false, because
-    /// a model quotes one instance together with a lead-in that appears once.
-    /// #684 really does carry the same `scp`/`ssh` pair twice; the check said it
-    /// did not.
+    /// ⚠ **Required, and skipping it was instrument failure 2.** Counting
+    /// occurrences of `quote_problem` alone calls every repetition finding
+    /// false, because a model quotes one instance together with a lead-in that
+    /// appears once.
     pub quote_second: Option<String>,
 }
 
@@ -102,11 +97,10 @@ impl Verdict {
 
 /// Try to refute a finding from the task's own text.
 ///
-/// ⚠ **The subject is searched too, and that is instrument failure 1.** The
-/// first version looked in the body alone and rejected 130 correct
-/// `subject-stale` findings, because `task show --body` does not include the
-/// subject. A quote is checked against subject AND body, always — cheaper than
-/// deciding per kind which one it should have been.
+/// ⚠ **The subject is searched too, and skipping it was instrument failure 1.**
+/// Looking in the body alone rejects every correct `subject-stale` finding,
+/// because the body does not contain the subject. A quote is checked against
+/// both, always — cheaper than deciding per kind which it should have been.
 pub fn falsify(finding: &Finding, subject: &str, body: &str) -> Verdict {
     let hay = format!("{subject}\n{body}");
     let mut refused = Vec::new();

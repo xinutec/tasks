@@ -1,15 +1,10 @@
 //! What one conversation is working on right now.
 //!
-//! A session with fifty open tasks pays for all fifty on every turn, and on any
-//! given afternoon it is working on two of them. [`digest`](crate::digest) is
-//! already the module that refuses per-turn cost; this is the one that lets a
-//! session say which cost is worth paying at all:
-//!
-//! ```text
-//! task focus 849 850 --for 4h
-//! ```
-//!
-//! For four hours its digest recites those two and **counts** the rest.
+//! A session pays for every open task it holds on every turn, and on any given
+//! afternoon it is working on one or two. [`digest`](crate::digest) is the
+//! module that refuses per-turn cost; this is the one that lets a session say
+//! which cost is worth paying at all. For the period named, its digest recites
+//! the chosen tasks and **counts** the rest.
 //!
 //! ⚠ **This is the only thing in the service that hides an open task, so three
 //! rules hold and a change that breaks one is a regression however convenient
@@ -24,20 +19,14 @@
 //!    each kind it left out and how to end the focus. The pile cap already
 //!    works this way, and for the same reason: the party paying for a trim is
 //!    the one who has to be told it happened.
-//! 3. **The urgent breaks through** — see [`breaks_through`]. Without it a
-//!    four-hour focus buries a P0 that Pippijn files five minutes into it, and a
-//!    P0 from Pippijn is the drop-everything signal.
+//! 3. **The urgent breaks through** — see [`breaks_through`]. Without it a focus
+//!    buries a P0 filed minutes into it, and a P0 is the drop-everything signal.
 //!
-//! **It applies to the digest and to nothing else.** `task list` keeps showing
-//! everything, unmarked and unchanged: the digest is the channel nobody asked
-//! for and is re-serialised every turn, where a list somebody typed is one they
-//! wanted — and a focused session running `task list` is asking what to pick up
-//! next, which is the one question focus must not answer with silence.
-//!
-//! It is also why `list` costs no extra request. Marking the focused rows there
-//! would mean asking this module on the most-used command in the tool, to tell
-//! a session something it typed a moment ago; bare `task focus` answers it on
-//! demand instead.
+//! **It applies to the digest and to nothing else.** The digest is the channel
+//! nobody asked for and is re-serialised every turn; a list somebody typed is
+//! one they wanted. A focused session running `task list` is asking what to pick
+//! up next, which is the question focus must not answer with silence — and it is
+//! why `list` costs no extra request to mark anything.
 
 use std::collections::BTreeSet;
 
@@ -60,12 +49,11 @@ pub const MIN: Duration = Duration::minutes(15);
 
 /// The longest.
 ///
-/// ⚠ **A day, and it is refused rather than clamped past that.** fleetwatch
-/// clamps an over-long mute silently, which means the caller believes a number
-/// that was never applied; here the bound is named in the refusal. A week-long
-/// focus is not a statement about this afternoon — it is a claim that the other
-/// forty-eight tasks are somebody else's, and the honest way to say that is to
-/// move them.
+/// ⚠ **Refused past this rather than clamped.** Clamping silently leaves the
+/// caller believing a number that was never applied, so the bound is named in
+/// the refusal. A focus longer than a day is not a statement about this
+/// afternoon — it is a claim that the rest is somebody else's, and the honest
+/// way to say that is `task move`.
 pub const MAX: Duration = Duration::hours(24);
 
 /// A session's focus period: what it is on, and when it lapses.
@@ -90,9 +78,9 @@ impl Focus {
     /// The rule itself, before there is a [`Focus`] to ask.
     ///
     /// ⚠ **One spelling, for the reason `still_open!` and `due_soon!` exist.**
-    /// [`current`] has to decide this from a bare timestamp, before it has read
-    /// the task ids — and the inline `until <= Utc::now()` that used to sit
-    /// there was a second copy of a rule with no test on it.
+    /// [`current`] decides this from a bare timestamp before it has read the
+    /// task ids, and an inline comparison there is a second copy of a rule with
+    /// no test on it.
     pub fn live_at(until: DateTime<Utc>, now: DateTime<Utc>) -> bool {
         until > now
     }
@@ -175,8 +163,8 @@ pub async fn enter(
     }
     if period < MIN || period > MAX {
         // ⚠ **Two bounds, two different mistakes, and the advice for one is
-        // nonsense for the other.** A single sentence about handovers told a
-        // caller who had asked for five minutes that their focus was too long.
+        // nonsense for the other.** A single sentence about handovers tells a
+        // caller who asked for five minutes that their focus is too long.
         let why = if period > MAX {
             "Longer than a day is not a focus but a handover — `task move <id> <who>` is \
              how work changes hands where everybody can see it."
@@ -263,10 +251,9 @@ pub fn spell(period: Duration) -> String {
 /// Read a period the way somebody types one: `4h`, `90m`, `2h30m`, `45`.
 ///
 /// ⚠ **A bare number is minutes**, because the unit somebody omits is the small
-/// one — `--for 30` is half an hour and not thirty hours, and reading it the
-/// other way would silently grant thirty times what was asked for. It is inside
-/// [`MAX`] either way, which is what makes the wrong reading a quiet one rather
-/// than a refusal.
+/// one: `--for 30` is half an hour, and reading it as hours silently grants far
+/// more than was asked for. Both readings sit inside [`MAX`], which is what
+/// makes the wrong one quiet rather than a refusal.
 pub fn parse(text: &str) -> anyhow::Result<Duration> {
     let text = text.trim().to_ascii_lowercase();
     anyhow::ensure!(!text.is_empty(), "a focus needs a period: --for 4h");

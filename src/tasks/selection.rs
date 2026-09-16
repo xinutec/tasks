@@ -1,11 +1,10 @@
 //! What `task list` asks the service for.
 //!
 //! ⚠ **The default is the caller, not the fleet.** A bare `task list` used to
-//! mean *every open task there is*: 135 lines and 12,804 bytes when that was
-//! measured, against one line for this session's own plate. Every one of those
-//! lines lands in a conversation's context, and almost none of it is work that
-//! conversation can act on — the same cost `digest.rs` exists to refuse, reached
-//! through the one command a session runs when it wants to know what to do next.
+//! mean *every open task there is*, most of a screen against one line for this
+//! session's own plate. All of it lands in a conversation's context and almost
+//! none is work that conversation can act on — the cost `digest.rs` exists to
+//! refuse, reached through the command a session runs to find out what to do.
 //!
 //! So the three questions are named:
 //!
@@ -17,42 +16,31 @@
 //! | `--all` | what is going on | every holder |
 //! | `--handed-out` | what did I hand out | filed by me, held by anyone else |
 //!
-//! ⚠ **`--pile` is here because its absence was answered by guesswork.** It was
-//! the one question with no name, so a session hand-filtered `--all --json`,
-//! invented a `session` field that does not exist, and reported **137** tasks in
-//! the pile when there were **5** — a number that reached Pippijn before anybody
-//! caught it. A missing view is not neutral: it is answered anyway, by whoever
-//! needs it, without the tests this file has.
+//! ⚠ **A missing view is not neutral — it gets answered anyway, by guesswork.**
+//! `--pile` had no name, so a session hand-filtered `--all --json`, invented a
+//! field that does not exist, and reported a pile size off by a wide margin
+//! before anybody caught it. Every question worth asking gets a flag and the
+//! tests that come with one.
 //!
-//! ⚠ **`--handed-out` is the fifth, and the only one not about the holder.** A
-//! session that routes work rather than doing it could ask what each holder
-//! carries, one at a time, and could ask for its own plate — but "what did I
-//! hand out, and is any of it still open" had no name, and the tasks it asks
-//! about are by construction the ones a routing session never sees again: the
-//! digest shows a session its own work and the pile, never another
-//! conversation's. So the one view that session most needs was the one the
-//! prompt is designed not to give it.
+//! ⚠ **`--handed-out` is the only one not about the holder**, and a routing
+//! session needs it most: the digest shows a session its own work and the pile,
+//! never another conversation's, so work it handed out is by construction what
+//! it never sees again.
 //!
-//! The bare form deliberately matches [`Filter::digest_for`](super::repo::Filter)
-//! rather than `--mine`: the pile is the handover channel, and a session that
-//! cannot see it cannot take work left for whichever conversation is around.
-//! `--mine` is the narrower question and stays available for asking it.
+//! The bare form matches [`Filter::digest_for`](super::repo::Filter) rather than
+//! `--mine`: the pile is the handover channel, and a session that cannot see it
+//! cannot take work left for whichever conversation is around.
 //!
-//! This lives in the library rather than in the CLI for the reason
-//! [`reference`](super::reference) does: the parameters it emits are defined by
-//! `ListQuery` in `routes::api`, and having the two beside each other is what
-//! stops them drifting. It is also what lets `tests/selection.rs` exercise it as
-//! public API rather than through an inline test module.
+//! In the library rather than the CLI because the parameters it emits are
+//! defined by `ListQuery` in `routes::api`, and keeping the two beside each
+//! other stops them drifting.
 
 use anyhow::{Context, Result};
 
 /// Whose list is being asked for, once a name has been resolved.
 ///
 /// ⚠ **A person and a session are different columns**, which is why this is not
-/// a string: `person=hardware` would silently match nothing, because `hardware`
-/// is a session and Pippijn is the only person. Three attempts in the
-/// transcripts got that wrong from the outside — `--to pippijn`,
-/// `--assignee hardware`, `--pippijn` — and the tool answered none of them.
+/// a string: naming a session in the person column silently matches nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Holder<'a> {
     Person(&'a str),

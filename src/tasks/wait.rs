@@ -1,22 +1,18 @@
 //! Ending a wait, and saying how it ended.
 //!
 //! A session that hits a problem somebody else has to fix files the task,
-//! records the edge with `--blocked-on`, and then has nothing to do. The edge is
-//! already visible — the digest marks the waiting task `⛔#1350` and stops the
-//! moment the blocker closes — but a digest is rendered when the session takes a
-//! turn, and a blocked session is not taking turns. Nothing reaches a
-//! conversation that is not speaking.
+//! records the edge with `--blocked-on`, and then has nothing to do. The digest
+//! already marks the waiting task and clears the mark when the blocker closes,
+//! but a digest renders when the session takes a turn and a blocked session is
+//! not taking turns.
 //!
-//! So the wake cannot be delivered; it has to be something the session is
-//! already holding. `task wait` is that: a command run in the background, which
-//! returns when the blockers close, and whose returning is what brings the
-//! session back. Pippijn, 2026-09-05: *"It's not about direct communication. The
-//! session should just wait, and I'll make sure the task is done when I think
-//! it's time."*
+//! So the wake cannot be delivered; it has to be something the session already
+//! holds. `task wait` is that — a background command whose returning is what
+//! brings the session back.
 //!
 //! ⚠ **The sleeping is not the interesting part and is not here.** What is here
-//! is the decision — whether the wait is over, and what the returning session is
-//! told — because those are the two things a hand-rolled shell loop gets wrong.
+//! is the decision: whether the wait is over, and what the returning session is
+//! told. Those are the two things a hand-rolled shell loop gets wrong.
 
 use std::time::Duration;
 
@@ -43,10 +39,9 @@ pub enum Verdict {
 /// Read the blockers' statuses into an ending.
 ///
 /// ⚠ **Through [`Status::is_open`], never `== Status::Open`.** A blocker
-/// somebody has picked up is `doing`, and is still a blocker; the obvious
+/// somebody has picked up is `doing` and is still a blocker; the obvious
 /// comparison ends the wait the moment the fix STARTS. That predicate exists
-/// because the same mistake was already made once in SQL, and this is the
-/// second place that would have made it.
+/// because the same mistake was already made once in SQL.
 pub fn verdict(blockers: &[(u64, Status)]) -> Verdict {
     let open: Vec<u64> = blockers
         .iter()
@@ -76,14 +71,14 @@ const KEENLY: Duration = Duration::from_secs(120);
 
 /// How long to sleep before asking again.
 ///
-/// ⚠ **Two rates rather than one, because the two cases are minutes and days
-/// apart.** A blocker closed while somebody is still at the keyboard should wake
-/// the session in seconds; one closed tomorrow morning can afford half a minute,
-/// and paying five-second polls for a day to shave that would be twelve thousand
-/// requests for nothing. It is a ceiling and not a ramp: a wait that has run for
-/// a week still answers within [`LAZY`], because a backoff that keeps growing
-/// makes the longest waits — the ones most likely to be forgotten — the slowest
-/// to come back.
+/// ⚠ **Two rates, because the two cases are minutes and days apart.** A blocker
+/// closed while somebody is at the keyboard should wake the session promptly;
+/// one closed tomorrow morning can afford a slower poll, and paying the eager
+/// rate all day to shave that is a lot of requests for nothing.
+///
+/// ⚠ **A ceiling, not a ramp.** A wait that has run for a week still answers
+/// within [`LAZY`]: a backoff that keeps growing makes the longest waits — the
+/// ones most likely to be forgotten — the slowest to come back.
 pub fn interval(waited: Duration) -> Duration {
     if waited < KEENLY { EAGER } else { LAZY }
 }
@@ -97,10 +92,9 @@ pub fn interval(waited: Duration) -> Duration {
 pub fn said(verdict: &Verdict, asked: &[u64]) -> String {
     match verdict {
         Verdict::Done => format!("{} closed — carry on.", list(asked)),
-        // ⚠ **Said once when there is one.** `#1432 closed, but #1432 was
-        // dropped` is what naming both ends of the same fact reads like, and the
-        // sentence a woken session reads first is not the place to make it work
-        // out that those are the same task.
+        // ⚠ **Said once when there is one.** Naming both ends of the same fact
+        // reads as two tasks, and the sentence a woken session reads first is
+        // not the place to work out that they are one.
         Verdict::Dropped(ids) if ids == asked => format!(
             "{} was dropped rather than done — overtaken, obsolete, or decided \
              against. Whatever this was waiting for did NOT happen; read it \
@@ -122,7 +116,7 @@ pub fn said(verdict: &Verdict, asked: &[u64]) -> String {
     }
 }
 
-/// Task numbers as somebody would say them: `#884`, `#884 and #1350`.
+/// Task numbers as somebody would say them: one, or `a, b and c`.
 fn list(ids: &[u64]) -> String {
     let said: Vec<String> = ids.iter().map(|id| format!("#{id}")).collect();
     match said.split_last() {

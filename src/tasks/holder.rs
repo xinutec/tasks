@@ -1,24 +1,20 @@
 //! Turning what somebody typed after `move` into a conversation.
 //!
-//! ⚠ **Every place this tool prints a holder, it prints the NAME** — `(coach)`,
-//! `(observe)` — and until 2026-08-10 the only thing it accepted was a
-//! 36-character id, so its own output was not valid input to it. Assigning five
-//! tasks meant first running `task sessions | grep` to translate three names
-//! into uuids and pasting them back; the round trip existed only because the two
-//! directions disagreed.
+//! ⚠ **Every place this tool prints a holder it prints the NAME**, so a name
+//! has to be accepted as input — otherwise the tool's own output is not valid
+//! input to it, and every handover starts with a `task sessions | grep` to
+//! translate.
 //!
 //! ⚠ **What is NOT resolved is refused, and that is the important half.** Not
-//! because the write would land — `fk_tasks_session` in `0001_init.sql` refuses
-//! an assignee that has no `sessions` row, which was checked rather than assumed
-//! — but because of *how* it is refused: the constraint surfaces as
-//! `AppError::Other`, which is a 500 logged as "internal error" and reaching the
-//! caller as `moving a task`. A typo deserves "no session called `helth`, did
-//! you mean health", and that answer is free here, where the list of names has
-//! just been fetched to decide the question anyway.
+//! because the write would land — `fk_tasks_session` refuses an assignee with no
+//! `sessions` row — but because of *how*: the constraint surfaces as
+//! `AppError::Other`, a 500 logged as "internal error" and reaching the caller
+//! as `moving a task`. A typo deserves "no session called that, did you mean …",
+//! and the list of names has just been fetched anyway.
 //!
-//! This lives in the library rather than in the CLI for the reason
-//! [`selection`](super::selection) does: it is a decision rather than plumbing,
-//! and `tests/holder.rs` exercises it as public API instead of through a binary.
+//! In the library rather than the CLI for the reason
+//! [`selection`](super::selection) gives: a decision rather than plumbing, and
+//! testable as public API instead of through a binary.
 
 /// What a typed holder turned out to be.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,10 +24,9 @@ pub enum Holder {
     Session(String),
     /// The name belongs to more than one conversation.
     ///
-    /// ⚠ **Not hypothetical: names are reused.** Two distinct sessions have both
-    /// been called `memview`, and one of them is `dev-lint` now. Guessing here
-    /// would hand work to whichever conversation happened to hold the name
-    /// first, so both ids are returned and the caller is asked to choose.
+    /// ⚠ **Not hypothetical: names are reused, and sessions get renamed.**
+    /// Guessing would hand work to whichever conversation held the name first,
+    /// so every id is returned and the caller chooses.
     Ambiguous(Vec<String>),
     /// Nothing answers to it. Carries the names that do exist, because the
     /// reader's next question is always "what should I have typed".
@@ -73,11 +68,9 @@ pub fn resolve<'a>(
 /// Whether a filing's holder and its `--spare` reason fit each other.
 ///
 /// ⚠ **The rule is issued twice on purpose, and that is why it is decided
-/// once.** The CLI refuses BEFORE the duplicate check, because that check
-/// spends a model call of several seconds and a filing that cannot land should
-/// not pay for it; the service refuses from the type, so the web form and any
-/// API caller are covered by the same rule. #1389 recorded that the duplication
-/// was deliberate and that nothing held the two copies level.
+/// once.** The CLI refuses BEFORE the duplicate check, which spends a model call
+/// a filing that cannot land should not pay for; the service refuses from the
+/// type, so the web form and any API caller get the same rule.
 ///
 /// ⚠ **Drift here is one-directional.** A CLI LOOSER than the service is
 /// harmless — the service refuses and the caller sees a 400. A CLI STRICTER

@@ -1,32 +1,23 @@
 //! What is standing in the tracker, as numbers — the half fleetwatch never saw.
 //!
-//! ⚠ **Every line the `task-timings` collector sent was about the TOOL.**
-//! Command latency, check latency, how often a check spoke or never answered —
-//! all of it describes the tracker's machinery and none of it describes the work
-//! the tracker exists to hold. So the one question a graph could not answer was
-//! *is the backlog getting better or worse*, which is the question somebody
-//! looking at a task tracker's dashboard is actually asking.
+//! ⚠ **The timings collector only ever reported on the TOOL** — command and
+//! check latency, how often a check spoke. None of that describes the work the
+//! tracker exists to hold, so the one question a graph could not answer was *is
+//! the backlog getting better or worse*.
 //!
-//! ⚠ **The sprawl count is why this was built when it was.** `0014` put a
-//! density read's critique on the task and a `[sprawl N]` mark in every holder's
-//! digest, on the argument that a per-turn reminder is the one channel that
-//! cannot be scrolled past. Whether that WORKS is exactly one number — does the
-//! flagged count fall — and the only way to ask it was a hand-filtered
-//! `task list --all --json`, which is the shape that once reported **137** tasks
-//! in the pile against a real **5**. A fix nobody can chart is a fix nobody can
-//! defend keeping.
+//! ⚠ **A fix nobody can chart is a fix nobody can defend keeping.** The sprawl
+//! mark is the case in point: whether it works is exactly one number — does the
+//! flagged count fall — and asking it meant hand-filtering `task list --json`,
+//! which is the shape that reports the pile wrong when the filter is wrong.
 //!
-//! ⚠ **One query, and only for the caller that was handed the reporting job.**
-//! This rides `POST /api/commands`, which every single command hits; a tally
-//! computed on every one of them would put six aggregates on the hot path of
-//! `task list`. `commands::due_to_report` gates it to one caller an hour — see
-//! `routes::api`, where the same gate already guards the other two tallies.
+//! ⚠ **One query, and only for the caller handed the reporting job.** This rides
+//! `POST /api/commands`, which every command hits; computing the tally on all of
+//! them would put six aggregates on the hot path of `task list`.
+//! `commands::due_to_report` gates it, as it does the other tallies.
 //!
 //! ⚠ **Counted with the SAME macros the lists sort by.** `still_open!` and
 //! `due_soon!` are shared rather than re-spelled, so a graph and a digest cannot
-//! disagree about what is open or about which day it is. Three copies of a date
-//! comparison are three chances to be wrong, which is what those macros exist to
-//! say.
+//! disagree about what is open or about which day it is.
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -39,10 +30,8 @@ type Result<T> = std::result::Result<T, AppError>;
 
 /// What is standing, over every open task there is.
 ///
-/// ⚠ **Fleet-wide and not per holder**, deliberately. A series per session is a
-/// series that churns as conversations come and go, and the report already runs
-/// to fifteen lines — see `#1253`, which is where that decision belongs rather
-/// than here.
+/// ⚠ **Fleet-wide and not per holder**, deliberately: a series per session
+/// churns as conversations come and go, and the report is long already.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tally {
     /// Open and doing alike: `still_open!`, so this is the same population every
@@ -62,18 +51,17 @@ pub struct Tally {
     /// Waiting on something still open. Not the same as HAVING a blocker: the
     /// link is kept after a blocker closes, and what ends is its effect.
     pub blocked: u64,
-    /// Carrying a density finding nobody has addressed — see `0014`. The number
-    /// this module was built to make chartable.
+    /// Carrying a density finding nobody has addressed. The number this module
+    /// was built to make chartable.
     pub sprawling: u64,
 }
 
 /// Count it, in one pass.
 pub async fn standing(pool: &MySqlPool) -> Result<Tally> {
     // ⚠ **Every `SUM` is CAST to SIGNED, and this is not decoration.** MariaDB
-    // types `SUM()` as DECIMAL, and sqlx refuses to decode a DECIMAL into `i64`
-    // — at RUNTIME, on a real row, so a type that compiles cleanly fails the
-    // first time it meets a database. `COUNT(*)` is already BIGINT and needs no
-    // cast; the five conditional aggregates all do.
+    // types `SUM()` as DECIMAL and sqlx refuses to decode that into `i64` — at
+    // RUNTIME, on a real row, so it compiles cleanly and fails the first time it
+    // meets a database. `COUNT(*)` is already BIGINT and needs no cast.
     //
     // dev-lint: allow-sqlx — a `concat!`ed literal; the macros expand at compile
     // time and nothing here is built from a runtime string.

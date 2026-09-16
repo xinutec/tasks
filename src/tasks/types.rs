@@ -133,17 +133,16 @@ impl FromStr for Status {
 
 /// SQL for *a deadline close enough to raise the rank*, in exactly one place.
 ///
-/// Pippijn's rule, 2026-08-11: **less than one week**. Seven days is his number
-/// rather than a guess, which is why it is a constant here and not a setting —
-/// a threshold somebody can change from a UI is one nobody can reason about.
+/// **Less than one week.** A constant here and not a setting: a threshold
+/// somebody can change from a UI is one nobody can reason about.
 ///
-/// Spelled once because it appears three times: the sort key, the projection
-/// that reports the raise, and the guard that stops a task already at `P0`
-/// claiming to have been raised. Three copies of a date comparison are three
-/// chances to disagree about what day it is.
+/// Spelled once because it appears in the sort key, the projection that reports
+/// the raise, and the guard that stops a task already at `P0` claiming to have
+/// been raised. Three copies of a date comparison are three chances to disagree
+/// about what day it is.
 ///
-/// `<` rather than `<=`: *less than* a week. A task due exactly seven days out
-/// is not yet inside it, and `tests/blocking.rs` pins that boundary.
+/// `<` rather than `<=`: *less than*. A task due exactly on the boundary is not
+/// yet inside it, and `tests/blocking.rs` pins that.
 #[macro_export]
 macro_rules! due_soon {
     ($column:literal) => {
@@ -159,13 +158,11 @@ macro_rules! due_soon {
 /// SQL for *the body as a reader actually sees it*: trimmed at both ends, the
 /// way `task show` trims it before printing.
 ///
-/// ⚠⚠ **`TRIM()` IS NOT `trim()` — it removes SPACES AND NOTHING ELSE.** This
-/// macro exists because that difference was live in `detailed` and silently
-/// wrong: a body of three blank lines has `LENGTH(TRIM(body)) = 3`, so the
-/// service reported prose behind a task that prints as nothing, and the app
-/// offered to open an empty sheet — the exact thing `detailed`'s own doc says it
-/// exists to prevent. It surfaced only when a second expression over the same
-/// column had to agree with it.
+/// ⚠⚠ **`TRIM()` IS NOT `trim()` — it removes SPACES AND NOTHING ELSE.** A body
+/// of nothing but newlines therefore has a non-zero trimmed length, so the
+/// service reports prose behind a task that prints as nothing and the app offers
+/// to open an empty sheet — the exact thing `detailed` exists to prevent. It
+/// surfaced only when a second expression over the same column had to agree.
 ///
 /// `[[:space:]]` rather than `\s` deliberately: a backslash in a SQL literal is
 /// an escape that `NO_BACKSLASH_ESCAPES` turns off, and this would then trim
@@ -187,16 +184,15 @@ macro_rules! body_shown {
 
 /// SQL for *this task is still work*, spelled in exactly one place.
 ///
-/// ⚠ **The obvious spelling is the wrong one.** Six queries said `status <>
-/// 'done'` and meant "open", which was true while there were three states and
-/// false the moment [`Status::Dropped`] existed — a dropped task would have gone
-/// on being counted as open in the list, the digest's counts and all three
-/// of the `/who` tallies, none of which would have failed loudly.
+/// ⚠ **The obvious spelling is the wrong one.** `status <> 'done'` means "open"
+/// only while `done` is the only closed state, and stops being true the moment
+/// [`Status::Dropped`] exists — after which a dropped task goes on being counted
+/// as open everywhere, none of it failing loudly.
 ///
-/// A macro rather than a `const` because sqlx 0.9 takes only `&'static str`:
-/// this expands inside `concat!` and the compiler assembles the literal, so
-/// there is still nothing built at runtime for anybody to audit. The column is
-/// an argument because half these queries join and have to qualify it.
+/// A macro rather than a `const` because sqlx takes only `&'static str`: this
+/// expands inside `concat!` and the compiler assembles the literal, so nothing
+/// is built at runtime. The column is an argument because half these queries
+/// join and have to qualify it.
 ///
 /// `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere` is what ties this to
 /// [`Status::is_open`]: nothing else can compare a match arm against a string
@@ -213,17 +209,15 @@ varchar_enum!(Status);
 /// How urgent a task is, when somebody has said.
 ///
 /// ⚠ **Absence is not a level, and every list depends on that.** Most tasks have
-/// no priority and always will: there were 700-odd rows the day this was added
-/// and none of them were going to be triaged. A default of `P2` would have all
-/// of them assert something nobody said, so the column is nullable and this type
-/// only ever describes a task somebody ranked. `Option<Priority>` throughout.
+/// no priority and always will — nobody is going back to triage the backlog. A
+/// default of `P2` would have all of them assert something nobody said, so the
+/// column is nullable and this type only describes a task somebody ranked.
 ///
-/// ⚠ **Untriaged sorts as [`Priority::P2`] all the same** — [`Priority::rank`],
-/// and `COALESCE(priority, 'P2')` in the SQL. That is the one decision the
-/// whole feature turns on: it puts `P0`/`P1` above the untriaged pile and `P3`/
-/// `P4` *below* it, where "sort the ranked first, the rest after" would have
-/// lifted a task marked *when there is room* above four hundred nobody had read.
-/// Within a rank it stays id order, oldest first.
+/// ⚠ **Untriaged sorts as [`Priority::P2`] all the same** — [`Priority::rank`]
+/// and `COALESCE(priority, 'P2')`. That is the decision the whole feature turns
+/// on: `P0`/`P1` go above the untriaged pile and `P3`/`P4` *below* it, where
+/// "ranked first, the rest after" would lift a task marked *when there is room*
+/// above everything nobody has read. Within a rank, id order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Priority {
     P0,
@@ -251,8 +245,7 @@ impl Priority {
     /// axis — most important, quite important, less so — has no anchor, so every
     /// filer argues their own item is above the line, the line drifts up, and
     /// the end state is a spreadsheet where everything is `P0` and somebody
-    /// invents `P-1`. Pippijn has watched that happen and asked for it not to
-    /// happen here (2026-08-11).
+    /// invents `P-1`.
     ///
     /// So these are five distinct SITUATIONS, applied as a cascade — the first
     /// test that passes is the rank. *Is damage accruing?* *Is something else
@@ -306,12 +299,11 @@ impl Priority {
 /// entirely, and then `None` means two different things: *nobody has judged
 /// this* and *nobody was asked*. This says which.
 ///
-/// Asked for by Pippijn 2026-08-11: "I want everything to have a priority",
-/// with [`Ranking::Unassessed`] kept deliberately as the second answer rather
-/// than removed. A required field whose safe answer is obvious gets filled in
+/// [`Ranking::Unassessed`] is kept deliberately as the second answer rather than
+/// removed. A required field whose safe answer is obvious gets filled in
 /// reflexively — that is how everything ends up `P2` and the rank stops meaning
-/// anything, which is the same failure as everything ending up `P0`. An honest
-/// *I am not judging this* is worth more than a number nobody stood behind.
+/// anything, the same failure as everything ending up `P0`. An honest *I am not
+/// judging this* is worth more than a number nobody stood behind.
 ///
 /// ⚠ **It changes no ordering.** Both answers still sort at `Priority::P2` via
 /// [`Priority::rank`] and the SQL's `COALESCE(priority, 'P2')`. What it buys is
@@ -320,9 +312,8 @@ impl Priority {
 /// The wire form is `Priority` or `null`, and the ABSENCE of the key is a
 /// deserialisation error — which is the whole mechanism. A non-`Option` field
 /// is required by serde's derive; an `Option` one is not, whatever attributes it
-/// carries. That surprise cost a wrong first attempt here: `#[serde(default)]`
-/// was removed from `NewTask::priority` on the belief it made the field
-/// mandatory, and `tests/priority.rs::filing` caught that it did not.
+/// carries. Removing `#[serde(default)]` does NOT make an `Option` field
+/// mandatory, which is the wrong first attempt this type invites.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ranking {
     /// Judged, at this level.
@@ -345,19 +336,15 @@ impl<'de> Deserialize<'de> for Ranking {
     /// `null` is [`Ranking::Unassessed`]; a string must be a level; **absent is
     /// an error**, which is the entire point of this impl.
     ///
-    /// ⚠ **`deserialize_any`, and NOT `Option::<Priority>::deserialize`.** That
-    /// obvious spelling is what this was written as first, and it silently
-    /// accepted a filing with no `priority` key at all. Serde fills a missing
-    /// field through `missing_field`, whose deserialiser rejects everything
-    /// EXCEPT `deserialize_option` — which it answers with `visit_none`. So
-    /// delegating to `Option` opts straight into the fallback this type exists
-    /// to refuse, and the field reads as `Unassessed` when nobody was asked.
-    /// Going through `deserialize_any` takes the path `missing_field` errors on.
+    /// ⚠ **`deserialize_any`, and NOT `Option::<Priority>::deserialize`.** The
+    /// obvious spelling silently accepts a filing with no `priority` key: serde
+    /// fills a missing field through `missing_field`, whose deserialiser rejects
+    /// everything EXCEPT `deserialize_option`, which it answers with
+    /// `visit_none`. Delegating to `Option` opts straight into the fallback this
+    /// type exists to refuse. `deserialize_any` takes the path it errors on.
     ///
-    /// `tests/priority.rs::filing::omitting_priority_is_refused` is the guard,
-    /// and it caught this. It is worth keeping precisely because the two impls
-    /// differ by one line and behave identically on every input except the one
-    /// that matters.
+    /// The two impls differ by one line and behave identically on every input
+    /// except the one that matters, so the test is worth keeping.
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct Stated;
 
@@ -398,10 +385,8 @@ impl FromStr for Priority {
         // Case-folded for the CLI's sake — `p0` is what a hand types — and the
         // stored spelling is the upper one, which is what the SQL sorts on.
         match s.to_ascii_uppercase().as_str() {
-            // The bare digit is accepted for one reason: five filings across
-            // the transcripts typed `--priority 3` and were refused (#958).
-            // There is no other meaning `3` could carry here, and the stored
-            // spelling is still `P3`.
+            // The bare digit is accepted because people type it and there is
+            // no other meaning it could carry. The stored spelling is `P<n>`.
             "P0" | "0" => Ok(Priority::P0),
             "P1" | "1" => Ok(Priority::P1),
             "P2" | "2" => Ok(Priority::P2),
@@ -489,10 +474,9 @@ impl Assignee {
 /// A task as it appears in any list: everything except the prose.
 ///
 /// ⚠ **The body is deliberately not here.** This struct is what a list
-/// serialises, and one list is what a hook injects; the whole reason this
-/// service exists is that a list carrying bodies cost 86 kB to render 3.9 kB.
-/// [`TaskDetail`] is the one that carries prose, and it is fetched for one task
-/// at a time.
+/// serialises and a hook injects, and a list carrying bodies costs an order of
+/// magnitude more than the lines it renders. [`TaskDetail`] carries prose, one
+/// task at a time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: u64,
@@ -517,10 +501,9 @@ pub struct Task {
     /// What this sorts as instead, when a near deadline has raised it.
     ///
     /// ⚠ **Absent is the ordinary case, and present always means
-    /// [`Priority::P0`].** Pippijn, 2026-08-11: *"can we make it P0 only when
-    /// there's less than 1 week until deadline?"* — so inside that week a task
-    /// sorts as `P0` whatever it was set to, and [`priority`](Self::priority)
-    /// still holds what somebody actually chose.
+    /// [`Priority::P0`].** Inside the deadline window a task sorts as `P0`
+    /// whatever it was set to, and [`priority`](Self::priority) still holds what
+    /// somebody actually chose.
     ///
     /// ⚠ **Derived at read time, never written.** A job that stamped `P0` into
     /// the row when the week arrived would edit history nobody asked for and
@@ -548,11 +531,11 @@ pub struct Task {
     pub overdue: bool,
     /// The tasks this one is waiting for, oldest id first. Usually empty.
     ///
-    /// ⚠ **A LIST, and the first cut of this was a single id.** The measurement
-    /// said no open task named more than one blocker, which is not evidence:
-    /// there was nowhere to record even one, so it counted the absence of the
-    /// feature. Pippijn caught it (2026-08-11). With one slot the workaround for
-    /// a second blocker is the body, which is the staleness this replaced.
+    /// ⚠ **A LIST, and the first cut was a single id.** "No task names more
+    /// than one blocker" is not evidence when there is nowhere to record even
+    /// one — that measures the absence of the feature. With one slot the
+    /// workaround for a second blocker is the body, which is the staleness this
+    /// replaced.
     ///
     /// ⚠ **It carries a rule about [`priority`](Self::priority), not just a
     /// link.** A task may not be ranked more urgently than the thing blocking
@@ -581,39 +564,30 @@ pub struct Task {
     ///
     /// ⚠ **So a reader that truncates knows what it truncated.**
     /// [`detailed`](Self::detailed) answers *is there prose*; this answers *how
-    /// much*, which is the question anyone piping to `head` is actually asking
-    /// and the one the output could not answer. Measured 2026-08-30 over the
-    /// 160 open tasks: median 42 lines, p90 136, max 509 — half the corpus was
-    /// longer than a `head -40`, and `head -40` over all of it dropped 4,997 of
-    /// 9,491 lines while printing nothing to say so. A truncated read that
-    /// looks exactly like a complete one is the failure this exists to stop.
+    /// much*, which is what anyone piping to `head` is asking. Bodies routinely
+    /// run longer than a screen, and a truncated read that looks exactly like a
+    /// complete one is the failure this exists to stop.
     ///
-    /// ⚠ **A count, not a flag, and unconditional.** A threshold would put the
-    /// number only on bodies already known to be long, which is the one case a
-    /// reader can already see coming; the reader who needs it is the one who
-    /// does not yet know. Cheap enough to always carry — it is a `u32`, against
-    /// the prose it is describing.
+    /// ⚠ **A count, not a flag, and unconditional.** A threshold would carry the
+    /// number only on bodies already known to be long — the one case a reader
+    /// can see coming. The reader who needs it is the one who cannot.
     pub body_lines: u32,
     /// What the session that filed it calls itself — `observe`, `health`,
     /// `dev-lint`. Absent when Pippijn filed it, or when the filing session had
     /// not named itself.
     ///
     /// ⚠ **A hint about where the work lives, and deliberately not a filter.**
-    /// The repo column was retired in `0004` because a session spans checkouts
-    /// and *which repo is this in* had no single answer. That removed two
-    /// different things at once, and only one of them was wrong: *which sessions
-    /// should be shown this* was a filter and it hid work, while *where does
-    /// this work live* is a hint, and without it a session scanning the pile
-    /// pays to open a task before it can learn the answer is no — 548 bytes to
-    /// see the whole pile against 2,732 to read one line of it (#19, measured
-    /// 2026-08-09).
+    /// The repo column was retired because a session spans checkouts and *which
+    /// repo is this in* had no single answer. That removed two things at once
+    /// and only one was wrong: *which sessions should be shown this* was a
+    /// filter and it hid work; *where does this work live* is a hint, and
+    /// without it a session scanning the pile must open a task to learn the
+    /// answer is no.
     ///
     /// **A fact rather than a field**: `task_events` already records who filed
-    /// every task, so there is nothing to set and nothing to keep true. It was
-    /// known for 112 of the 139 open tasks the day this was added, and the names
-    /// really are the project words. Resolved through the join like a holder's,
-    /// so a session that renames itself is called the same thing everywhere at
-    /// once.
+    /// every task, so there is nothing to set and nothing to keep true.
+    /// Resolved through the join like a holder's, so a session that renames
+    /// itself is called the same thing everywhere at once.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filed_by: Option<String>,
     /// How long this body was when a model last read it and had something to
@@ -622,8 +596,8 @@ pub struct Task {
     /// ⚠ **The number, not the words.** The critique itself is on
     /// [`TaskDetail::sprawl_said`], because a list must not carry prose: this is
     /// the same trade [`detailed`](Self::detailed) makes, and for the same
-    /// reason — forty rows would otherwise cross the wire carrying forty
-    /// paragraphs nobody asked to read.
+    /// reason: otherwise every row crosses the wire carrying a paragraph nobody
+    /// asked to read.
     ///
     /// ⚠ **Present means the LAST read spoke, not that it ever did.** It is
     /// cleared by an edit that makes the body smaller, which is exactly the step
@@ -660,15 +634,12 @@ impl Task {
 ///
 /// ⚠⚠ **One vocabulary, because there were two and they had already drifted.**
 /// `task_events.kind` and the `changed` list on a write's response name the same
-/// seven facts, and were spelled by hand at every site: adjacent lines in
-/// `repo::update` recorded `ranked` into the history while pushing `priority`
-/// into the response, and `blocked` against `blocked_on`. Nothing linked them,
-/// so a client keying off one and a reader of the other disagreed about what had
-/// happened — and the frontend's own doc asserted they were the same list.
+/// facts, and spelled by hand at every site they diverged within one function —
+/// `ranked` into the history against `priority` into the response. A client
+/// keying off one and a reader of the other then disagree about what happened.
 ///
-/// This is the [`Status`] lesson at one remove: six queries once said
-/// `status <> 'done'` and meant *open*, which is why `still_open!` exists. A
-/// vocabulary spelled by hand at N sites drifts at the first addition.
+/// The [`Status`] lesson at one remove: a vocabulary spelled by hand at N sites
+/// drifts at the first addition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Moved {
@@ -698,11 +669,9 @@ impl Moved {
 /// A task after a write, and what the write actually moved.
 ///
 /// ⚠ **An empty `changed` means the call did nothing, and saying so is the whole
-/// point.** Three defects in one day were writes that answered exactly like a
-/// write that had worked: `start` on a task already `doing` in the pile, a
-/// rename to a blank name, and closing into the pile. Each was found by
-/// reproducing it against a scratch task, because success and no-op were
-/// indistinguishable to the caller.
+/// point.** A write that changes nothing otherwise answers exactly like one that
+/// worked — `start` on a task already `doing`, a rename to a blank name, closing
+/// into the pile — and each such defect is only findable by reproducing it.
 ///
 /// **Reported rather than refused.** A no-op is often correct — `start` on a
 /// task already yours is meant to be quiet, and refusing it would trade a silent
@@ -727,13 +696,11 @@ pub struct Updated {
 /// What an edit overwrote, told to whoever made it.
 ///
 /// ⚠ **This is the whole of the prevention, and it refuses nothing.** The loss
-/// on 2026-08-14 was a session writing a body from a three-day-old snapshot it
-/// had never re-read; a gate on that would have to refuse an ordinary,
-/// permitted operation — sessions rewrite each other's task words by standing
-/// permission — and the duplicate check in `duplicates.rs` records what
-/// refusing a frequent correct operation costs. So the write goes through and
-/// says what it landed on. A writer who believes a body is three days old, told
-/// it was rewritten yesterday by somebody else, has everything needed to stop.
+/// it addresses is a session writing a body from a stale snapshot it never
+/// re-read, and gating that would mean refusing an ordinary permitted operation:
+/// sessions rewrite each other's task words by standing permission. So the write
+/// goes through and says what it landed on — a writer who believes a body is
+/// days old, told it was rewritten yesterday by somebody else, can stop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Replaced {
     /// When the text this edit replaced was last written.
@@ -750,11 +717,9 @@ pub struct Replaced {
     /// ⚠ **Characters since the last consolidation, which is neither a size nor
     /// a count of edits.** An absolute size cannot tell a long body somebody has
     /// just rewritten from a short one that has doubled since anyone read it,
-    /// and a count of edits cannot tell three typo fixes from three
-    /// two-thousand-character dumps. What is being measured is the text nobody
-    /// has read as a whole, which is exactly the text that goes stale in place:
-    /// #749 was 76% superseded when it was finally read end to end, including a
-    /// section headed "read this before the 08-12 table below, which is stale".
+    /// and a count of edits cannot tell typo fixes from wholesale dumps. What is
+    /// measured is the text nobody has read as a whole, which is exactly the
+    /// text that goes stale in place.
     ///
     /// Zero on the edit that consolidates, because that edit is the answer.
     pub accreted: usize,
@@ -808,10 +773,10 @@ pub struct TaskDetail {
     /// What a model last said about this body, verbatim, when it had something
     /// to say.
     ///
-    /// ⚠ **Stored because it used to evaporate.** It was printed once, as the
-    /// tail of a successful edit, to a session that was recording a finding
-    /// rather than judging a document — and then it was gone. Kept here it is
-    /// read by whoever opens the task next, which is who it was always about.
+    /// ⚠ **Stored because it used to evaporate.** Printed once as the tail of a
+    /// successful edit, to a session recording a finding rather than judging a
+    /// document, and then gone. Kept here it reaches whoever opens the task
+    /// next, who it was always about.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sprawl_said: Option<String>,
 }
