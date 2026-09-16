@@ -136,25 +136,7 @@ fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
 /// `--project` after migration 0004 removed the concept.
 #[test]
 fn a_field_that_was_removed_is_refused_by_name() {
-    // ⚠ `--session` because the identity check runs BEFORE this refusal, so
-    // without one the CLI answers "a token but no session id" and never reaches
-    // the field at all. In a session $CLAUDE_CODE_SESSION_ID is set and the test
-    // passed; the nightly verify runs under launchd, which sets no such thing,
-    // and this was the only test in the file that reached past clap into main.
-    // It had been red since 2026-09-14 and passed by hand every time.
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
-        .args([
-            "add",
-            "anything",
-            "--priority",
-            "P2",
-            "--repo",
-            "tumor",
-            "--session",
-            "help-rs-test",
-        ])
-        .output()
-        .expect("running the CLI");
+    let out = nameless(&["add", "anything", "--priority", "P2", "--repo", "tumor"]);
     let said = String::from_utf8_lossy(&out.stderr);
     assert!(said.contains("migration 0004"), "{said}");
     assert!(!out.status.success());
@@ -162,23 +144,32 @@ fn a_field_that_was_removed_is_refused_by_name() {
 
 #[test]
 fn the_subject_is_not_a_flag_and_the_refusal_says_where_it_goes() {
-    // `--session` for the reason the test above gives: this refusal also lives
-    // past the identity check, so without one the CLI answers about the session
-    // instead of the flag.
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
-        .args([
-            "add",
-            "--priority",
-            "P2",
-            "--subject",
-            "a title",
-            "--session",
-            "help-rs-test",
-        ])
-        .output()
-        .expect("running the CLI");
+    let out = nameless(&["add", "--priority", "P2", "--subject", "a title"]);
     let said = String::from_utf8_lossy(&out.stderr);
     assert!(said.contains("first argument"), "{said}");
+}
+
+/// The CLI run by something that is not a conversation.
+///
+/// ⚠ **Clearing the two variables is the whole point, and passing `--session`
+/// was the bug.** These two tests reach past clap into `main`, where the
+/// identity guard used to run before any argument was looked at — so without a
+/// session id the CLI answered *"a token but no session id"* and never reached
+/// the field being asserted on. Both were written with a `--session` to get
+/// past that, which made them green in a session and red under launchd, which
+/// sets nothing. They were red in the nightly from 2026-09-14 and passed by
+/// hand every time anybody checked. #1548.
+///
+/// The guard moved to the request path on 2026-09-16, so a refusal that needs
+/// no identity no longer waits on one — and this helper is what proves it:
+/// supply a `--session` here again and the test stops testing anything.
+fn nameless(args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_task"))
+        .args(args)
+        .env_remove("CLAUDE_CODE_SESSION_ID")
+        .env_remove("TASKS_SESSION")
+        .output()
+        .expect("running the CLI")
 }
 
 /// ⚠ **Five closes in the transcripts passed a note to `done` and were

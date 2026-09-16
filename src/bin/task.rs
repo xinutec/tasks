@@ -772,6 +772,7 @@ impl Client {
     }
 
     async fn send(&self, req: reqwest::RequestBuilder) -> Result<Option<Value>> {
+        self.identified()?;
         // Built rather than sent, so the method can be read: anything that is
         // not a GET has changed the list, and the prompt hook is holding an
         // answer from before it. Central here rather than in each command,
@@ -819,6 +820,7 @@ impl Client {
     }
 
     async fn text(&self, req: reqwest::RequestBuilder) -> Result<String> {
+        self.identified()?;
         let res = req.send().await.context("reaching the tasks service")?;
         let status = res.status();
         let body = res.text().await.unwrap_or_default();
@@ -905,6 +907,20 @@ impl Client {
     /// Holding **neither** is left to the service, which is the only thing that
     /// knows whether it is guarded: a dev server with no `AGENT_TOKEN` answers
     /// everybody as the owner, and refusing here would break that loop.
+    ///
+    /// ⚠ **Called from [`send`](Self::send) and [`text`](Self::text), and it ran
+    /// in `main` until 2026-09-16.** This is a statement about what a REQUEST
+    /// would get back, so it has no business ending a command that never makes
+    /// one. At startup it refused every argument mistake with a sentence about
+    /// the session: `task add --repo tumor` is answered by the field that went
+    /// in migration 0004 and needs to know nobody's identity to say so.
+    ///
+    /// ⚠ **It was found by the nightly, not by a test.** `tests/help.rs` had
+    /// two tests past this guard and both passed by hand every time, because a
+    /// session sets `$CLAUDE_CODE_SESSION_ID`; under launchd, which sets none,
+    /// they were red from 2026-09-14. #1548. The tests now clear both variables
+    /// rather than supplying a `--session` to get past this — a workaround in a
+    /// test is how the guard stayed invisible for as long as it did.
     fn identified(&self) -> Result<()> {
         if self.token.is_some() && self.session.is_none() {
             bail!(
@@ -1565,8 +1581,6 @@ async fn main() -> Result<()> {
         called: session.as_deref().and_then(called_now),
         session,
     };
-    client.identified()?;
-
     let verb = cli.command.verb();
     let done = run(cli, &client).await;
     clocked(&client, verb, started, commands::ended(&done)).await;
