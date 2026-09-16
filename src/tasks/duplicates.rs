@@ -48,10 +48,11 @@
 //! never reaches a model. [`prompt`] asks the model the harder question. Both
 //! now run before the filing; the override passes both.
 //!
-//! ## Closed tasks are read too, and they ADVISE
+//! ## Closed tasks are read too, and they REFUSE
 //!
-//! ⚠ **This section said "open tasks only" until 2026-08-25 and that is no
-//! longer true.** Both halves of the old argument were revisited and both fell:
+//! ⚠ **This section said "open tasks only" until 2026-08-25, then "they ADVISE"
+//! until 2026-09-16.** Why the closed rows are read at all is still the two
+//! findings below; what changed is what a match does with them:
 //!
 //! * **The latency half was stale.** Including the closed rows was measured at
 //!   17 → 56 seconds, *before* `MAX_THINKING_TOKENS` was capped. Re-measured at
@@ -63,15 +64,30 @@
 //!   sessions that could not see each other's closed rows: #27 (dropped), #863
 //!   (dropped 58 seconds after filing), #1064 (open).
 //!
-//! ⚠ **A closed match never refuses, and `dropped` does not change that.** The
-//! obvious rule — dropped means decided against, so refuse — was written and
-//! then refuted by the corpus it would run on. `task drop` records a status and
-//! no reason: #863 is dropped, carries a complete plan, and states no reason at
-//! all, and a model asked about it reported that it "concluded the work wasn't
-//! justified", which the row does not say. Measured, the closed half is also the
-//! weaker reader — 63% against the open half's 83% — and every one of its errors
-//! was same-pattern-different-system. Had it refused, all three would have
-//! blocked correct filings.
+//! ⚠ **A closed match refuses, and the remedy it names is `task reopen`.**
+//! Pippijn, 2026-09-16: *"Make it so it doesn't file when there's an existing
+//! closed task. Make it say that the task should be reopened if it's similar."*
+//! The advice it replaces argued against itself: *"close the one just filed
+//! rather than carrying two"* is a cleanup instruction, and it is only needed
+//! because the duplicate had already landed.
+//!
+//! ⚠ **This overrules a measurement, and the measurement has not gone away.**
+//! The closed half is the weaker reader — 63% against the open half's 83% — and
+//! every one of its errors was same-pattern-different-system. The three MEMORY.md
+//! filings that justify reading closed rows at all are now refused rather than
+//! advised, and so is everything that merely looks like finished work. What
+//! makes that affordable is what made the open half affordable: the caller is
+//! holding the body in the command it just ran, so a wrong refusal costs one
+//! re-run, and `--no-duplicate-check` is named in the refusal itself.
+//!
+//! ⚠ **`dropped` still asserts no decision.** The obvious rule — dropped means
+//! decided against, so refuse harder — was written and then refuted by the
+//! corpus it would run on. `task drop` records a status and no reason: #863 is
+//! dropped, carries a complete plan, and states no reason at all, and a model
+//! asked about it reported that it "concluded the work wasn't justified", which
+//! the row does not say. Both statuses refuse alike now, so what the
+//! distinction still buys is the sentence the reader is sent to the task with,
+//! never whether the filing lands.
 //!
 //! ## What the two halves actually score
 //!
@@ -80,7 +96,10 @@
 //!
 //! * **Precision** — 49 real commit subjects replayed with `--check-only`:
 //!   29 clean, 12 refused, 8 advised. Of the 20 matches, 15 right. Refusals
-//!   10 right / 1 partial / 1 wrong.
+//!   10 right / 1 partial / 1 wrong. ⚠ **Those 8 advised are refusals since
+//!   2026-09-16**, so the refused column on that sample would read 20, not 12 —
+//!   the adjudication was never re-run against the new behaviour and this number
+//!   must not be quoted as though it had been.
 //! * **Recall** — 30 open tasks reworded by a separate model told not to reuse
 //!   their distinctive nouns: 28 named their own task. The one genuine miss was
 //!   #1175, found from domain language in the precision run and lost when every
@@ -411,17 +430,20 @@ pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, S
 
 /// What a filing is told when it resembles something already closed.
 ///
-/// ⚠ **Advises, never refuses** — the module doc carries why, and the reason is
-/// the corpus rather than a preference.
+/// ⚠ **Refuses, and advised until 2026-09-16** — the module doc carries the
+/// decision, the measurement it overrules, and what that costs.
 ///
-/// ⚠ **The remedy is the point, not the match.** A session told its filing
-/// already exists as a closed task still has to be told the move is
-/// `task reopen`, because the alternative it reaches for is filing anyway.
-pub fn advice(found: &[(Match, Settled)], read: usize, unread: usize) -> String {
-    let mut out = String::from(
-        "this may already exist, closed — a model's reading of the titles. It was filed \
-         anyway:\n",
-    );
+/// ⚠ **The remedy is the point, not the match, and it is why this is not
+/// [`refusal`] with a different list.** An open twin is folded into or re-run
+/// past; a closed one is `task reopen`, and a session not told so reaches for
+/// filing anyway — which is the outcome this arm used to produce by itself.
+///
+/// ⚠ **The verdict is the LAST line, corpus counts and all.** Sessions pipe
+/// this to `tail -3`. The provenance used to sit on a line of its own below the
+/// verdict, where it both hid the verdict and cost a finding its place in the
+/// tail; it rides on the verdict now. See the `what_survives_the_tail` tests.
+pub fn reopen_instead(found: &[(Match, Settled)], read: usize, unread: usize) -> String {
+    let mut out = String::new();
     for (one, task) in found {
         let status = if task.dropped {
             "dropped, and the reason is in the task rather than in its status"
@@ -431,9 +453,10 @@ pub fn advice(found: &[(Match, Settled)], read: usize, unread: usize) -> String 
         out.push_str(&format!("  #{:<4} {} — {status}\n", one.id, one.why));
     }
     out.push_str(&format!(
-        "`task show <id>` to read one. If it is the same work, `task reopen <id>` and close \
-         the one just filed rather than carrying two.\n\
-         (read against {read} closed tasks; {unread} skipped as having no body)"
+        "NOT FILED — a model reading the closed titles says this work already exists. \
+         `task reopen <id>` if it is the same work and carry on in that task, or re-run the \
+         same command with --no-duplicate-check if it really is different \
+         (read against {read} closed tasks; {unread} skipped as having no body)."
     ));
     out
 }

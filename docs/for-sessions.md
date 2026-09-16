@@ -381,26 +381,29 @@ rewrite.
 
 **Ask what it WOULD say, without filing:** `task add "…" --priority P4 --check-only`
 runs both halves against open and closed alike, prints what a filing would meet,
-and writes nothing. Use it when you are unsure whether something already exists
-and do not want to find out by having a filing refused.
+and writes nothing. A clean subject prints `NONE`; a match comes back as the
+refusal itself, word for word and on the same exit code a real filing would have
+got. Use it when you are unsure whether something already exists and do not want
+to find out by having a filing refused.
 
-⚠ **A CLOSED match does not stop you — it tells you and files anyway.** The
-finished and abandoned tasks are read as well, and their remedy is different, so
-their message is different:
+⚠ **A CLOSED match stops you too, and the way past it is `task reopen`.** The
+finished and abandoned tasks are read as well; the remedy differs, so the
+message does:
 
 ```text
-this may already exist, closed — a model's reading of the titles. It was filed anyway:
   #689  k8s Dhall model generation and apply convergence check already completed — already done
-`task show <id>` to read one. If it is the same work, `task reopen <id>` and close the one just filed rather than carrying two.
-(read against 984 closed tasks; 11 skipped as having no body)
+NOT FILED — a model reading the closed titles says this work already exists. `task reopen <id>` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
 
-Your task exists — this is a note about it, not a refusal of it. If it is the
-same work, `task reopen <id>` and drop the one you just filed; carrying two is
-the thing this exists to stop. If it is not, ignore it and move on.
+⚠ **Nothing was filed — and this arm DID file until 2026-09-16, so a habit of
+skimming it costs you the filing now.** There is no new task to drop and none to
+come back to. Two answers, both one command: `task reopen 689` and carry on in
+that task, or re-run **the same command** with `--no-duplicate-check` when it
+matched your topic and not your work. You are still holding the body.
 
 ⚠ **`dropped` is not a verdict.** Dropping records a status and no reason, so a
 dropped twin does not mean the work was rejected — read the task and find out.
+It refuses just the same; what changes is the sentence it sends you off with.
 
 **It is a guess from titles, so it is often wrong about what is related.** Two
 tasks on one subsystem read as one task to it. That is the price of catching the

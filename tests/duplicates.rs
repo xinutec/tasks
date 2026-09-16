@@ -14,8 +14,8 @@
 //! pins that whatever comes back is read correctly.
 
 use tasks::tasks::duplicates::{
-    Match, Settled, advice, collision, edged, parse, prompt, refusal, same_subject, settled_block,
-    split, worth_reading,
+    Match, Settled, collision, edged, parse, prompt, refusal, reopen_instead, same_subject,
+    settled_block, split, worth_reading,
 };
 
 /// An id that is deliberately NOT in [`corpus`], so a test can assert that a
@@ -293,9 +293,15 @@ fn an_identical_subject_is_still_a_collision_with_what_it_waits_for() {
 /// ⚠ **`reopen` is the whole point.** A session told only that #863 resembles
 /// its filing will file anyway; told that the move is `task reopen 863`, it has
 /// somewhere to go. This is the line that turns a match into an action.
+///
+/// ⚠ **And it must say NOTHING LANDED.** Until 2026-09-16 this arm filed and
+/// then advised, so its text said *"It was filed anyway"* and sent the reader
+/// to close the new one. Both halves of that are now wrong in the dangerous
+/// direction: a session told its task exists when it does not has lost the
+/// filing and will not come back for it.
 #[test]
-fn a_closed_match_names_reopen_and_says_the_task_still_landed() {
-    let text = advice(
+fn a_closed_match_refuses_and_names_reopen() {
+    let text = reopen_instead(
         &[(
             Match {
                 id: 863,
@@ -313,8 +319,16 @@ fn a_closed_match_names_reopen_and_says_the_task_still_landed() {
     assert!(text.contains("#863"), "{text}");
     assert!(text.contains("task reopen"), "{text}");
     assert!(
-        text.contains("filed"),
-        "the caller must know the task landed: {text}"
+        text.contains("NOT FILED"),
+        "the caller must know nothing landed: {text}"
+    );
+    assert!(
+        !text.contains("filed anyway"),
+        "the old advisory sentence says the opposite of what happens: {text}"
+    );
+    assert!(
+        text.contains("--no-duplicate-check"),
+        "a refusal with no way past it turns a false positive into lost work: {text}"
     );
     assert!(
         text.contains("961") && text.contains("34"),
@@ -330,7 +344,7 @@ fn a_closed_match_names_reopen_and_says_the_task_still_landed() {
 /// rather than assert what its status means.
 #[test]
 fn a_dropped_match_sends_the_reader_to_the_task_not_to_its_status() {
-    let dropped = advice(
+    let dropped = reopen_instead(
         &[(
             Match {
                 id: 863,
@@ -346,7 +360,7 @@ fn a_dropped_match_sends_the_reader_to_the_task_not_to_its_status() {
         0,
     );
     assert!(dropped.contains("reason is in the task"), "{dropped}");
-    let done = advice(
+    let done = reopen_instead(
         &[(
             Match {
                 id: 689,
@@ -585,6 +599,74 @@ mod what_survives_the_tail {
             last.contains("--no-duplicate-check"),
             "no way past it: {last}"
         );
+    }
+
+    /// ⚠ **The closed arm has its own verdict line and it is newer.** It was
+    /// advice until 2026-09-16, written to be read in full — the counts of what
+    /// it had read sat on a line BELOW the remedy, so a `tail -1` got
+    /// provenance and no verdict, and a `tail -3` spent two of its three lines
+    /// on text that names no action.
+    #[test]
+    fn a_closed_refusal_says_everything_in_its_last_line() {
+        let text = reopen_instead(
+            &[(
+                Match {
+                    id: 689,
+                    why: "the same Dhall convergence check".into(),
+                },
+                Settled {
+                    id: 689,
+                    subject: "k8s Dhall model apply".into(),
+                    dropped: false,
+                },
+            )],
+            984,
+            11,
+        );
+        let last = verdict(&text);
+        assert!(
+            last.contains("NOT FILED"),
+            "the verdict is not in it: {last}"
+        );
+        // The remedy that differs from the open arm's, which is the only reason
+        // this is a second sentence at all.
+        assert!(
+            last.contains("task reopen"),
+            "the move it exists to name is lost: {last}"
+        );
+        assert!(
+            last.contains("model"),
+            "it no longer says who is talking: {last}"
+        );
+        assert!(
+            last.contains("--no-duplicate-check"),
+            "no way past it: {last}"
+        );
+        assert!(
+            last.contains("984") && last.contains("11"),
+            "how much was read fell out of the tail: {last}"
+        );
+    }
+
+    #[test]
+    fn a_closed_refusal_spends_one_line_per_finding_and_one_on_the_verdict() {
+        let two: Vec<(Match, Settled)> = (1..=2)
+            .map(|n| {
+                (
+                    Match {
+                        id: n,
+                        why: format!("finding {n}"),
+                    },
+                    Settled {
+                        id: n,
+                        subject: format!("task {n}"),
+                        dropped: false,
+                    },
+                )
+            })
+            .collect();
+        let text = reopen_instead(&two, 10, 0);
+        assert_eq!(text.lines().count(), 3, "{text}");
     }
 
     #[test]

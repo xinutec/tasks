@@ -408,14 +408,16 @@ enum Command {
         /// shape.
         #[arg(long = "subject", hide = true)]
         subject_flag: Option<String>,
-        /// File it even though something open already says this.
+        /// File it even though something open or closed already says this.
         ///
-        /// ⚠ **Both halves refuse, so this is the only way past either.** An
+        /// ⚠ **Every arm refuses, so this is the only way past any of them.** An
         /// open task with the same subject is caught by string equality; the
         /// ones only a reader would spot are caught by a Haiku call, which costs
-        /// 8-25 seconds before the task is filed. Neither is a guess you cannot
-        /// overrule — that is what this is for, and the body you were filing is
-        /// still in the command you just ran, so overruling is one re-run.
+        /// 8-25 seconds before the task is filed, and it reads the closed
+        /// titles as well — a match there is refused too, and sent to
+        /// `task reopen`. None of the three is a guess you cannot overrule —
+        /// that is what this is for, and the body you were filing is still in
+        /// the command you just ran, so overruling is one re-run.
         ///
         /// Also the flag for filing a batch, and for a machine with no `claude`
         /// on its PATH — though that case needs no flag, since a check that
@@ -481,8 +483,8 @@ enum Command {
         /// seconds after filing, carrying a complete plan — says nowhere that
         /// anybody rejected it. Asked about that row, a model reported it had
         /// "concluded the work wasn't justified", which it never says. That is
-        /// why a closed match only ever advises: the status alone means nothing
-        /// without this.
+        /// why a closed match sends the filer to the TASK rather than to its
+        /// status: the status alone means nothing without this.
         #[arg(long, aliases = ["note", "message"])]
         reason: Option<String>,
     },
@@ -1876,24 +1878,26 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 true => (Vec::new(), 0),
                 false => settled_now(&client).await,
             };
-            // Carried past the POST: a closed match does not refuse, so it has
-            // nothing to say until the task it is about actually exists.
-            let mut closed_match = None;
             if !no_duplicate_check {
                 match already_filed(&client, &candidates, &settled, &subject).await {
                     Ok(found) if !found.is_empty() => {
                         let (open, over) = duplicates::split(&found, &settled);
-                        // Open first, and it wins outright: it is the arm that
-                        // refuses, so an answer naming both must not file.
+                        // ⚠ **Both halves refuse since 2026-09-16, and open wins
+                        // when one answer names both.** A live task is the
+                        // stronger of the two remedies: folding into work that
+                        // is still going beats reopening work that stopped, and
+                        // the caller can still reach the closed one from it.
+                        //
                         // ⚠ **`declined`, never `bail!`.** This is the arm that
                         // refuses most often, and a plain error puts it in the
                         // FAILED column of the very measurement the
                         // `Refused` split exists to make readable — and denies
                         // it the one-line printing in `commands::said`.
-                        if !open.is_empty() {
-                            return Err(commands::declined(duplicates::refusal(&open)));
-                        }
-                        closed_match = Some(duplicates::advice(&over, settled.len(), unread));
+                        let said = match open.is_empty() {
+                            false => duplicates::refusal(&open),
+                            true => duplicates::reopen_instead(&over, settled.len(), unread),
+                        };
+                        return Err(commands::declined(said));
                     }
                     Ok(_) => {}
                     Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
@@ -1901,11 +1905,14 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             }
             // ⚠ **After both checks and before the POST**, which is the only
             // place this can be and still describe what a filing would meet.
+            //
+            // ⚠ **Reached only when nothing was named.** All three arms refuse
+            // now — collision, open, closed — and each returns above carrying
+            // its own text, so a match reaches the caller as the refusal
+            // itself, on the exit code a real filing would have got. What is
+            // left to say here is that there was not one.
             if check_only {
-                match &closed_match {
-                    Some(note) => println!("{note}"),
-                    None => println!("NONE — nothing open or closed was named"),
-                }
+                println!("NONE — nothing open or closed was named");
                 return Ok(());
             }
             let mut payload = json!({
@@ -1947,11 +1954,6 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             let shown: Task = serde_json::from_value(task.clone())
                 .context("the service answered with a task this CLI could not read")?;
             emit(cli.json, &task, || println!("{}", line(&shown)));
-            // After the filing and on stderr: the task landed, and this is a
-            // note about it rather than a failure of it.
-            if let Some(note) = closed_match {
-                eprintln!("{note}");
-            }
             // ⚠ **After the POST, because the edge needs this task's id**, which
             // does not exist until the service answers. Recorded on the OTHER
             // task — `blocked_on` belongs to the thing that waits — so the two

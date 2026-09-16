@@ -351,26 +351,31 @@ worse than any duplicate. That distinction is the whole of the design; it was
 advisory until 2026-08-14, and `src/tasks/duplicates.rs` carries both the
 measurement that argued for advisory and the one that overruled it.
 
-**It reads the closed tasks too, and those ADVISE rather than refuse.** The 995
-finished and abandoned tasks ride in the cached half of the call, so a filing
-that repeats work already done is told so and lands anyway:
+**It reads the closed tasks too, and those REFUSE as well — with a different
+remedy.** The 995 finished and abandoned tasks ride in the cached half of the
+call, so a filing that repeats work already done does not land; it is sent to
+reopen the task it repeats:
 
 ```text
-this may already exist, closed — a model's reading of the titles. It was filed anyway:
   #689  k8s Dhall model generation and apply convergence check already completed — already done
-`task show <id>` to read one. If it is the same work, `task reopen <id>` and close the one just filed rather than carrying two.
-(read against 984 closed tasks; 11 skipped as having no body)
+NOT FILED — a model reading the closed titles says this work already exists. `task reopen <id>` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
+
+⚠ **This arm advised and filed until 2026-09-16.** The closed half is the weaker
+reader — 63% against the open half's 83% — so it refuses correct filings more
+often than the open one does, and that is the price of not leaving the cleanup
+to whoever notices a duplicate later. The override is the same single re-run.
 
 **`--check-only` asks what the check would say and files nothing**, which is how
 the gate is measured against its own behaviour rather than by filing probe rows
 into a shared tracker.
 
-⚠ **`dropped` does not refuse either, and the obvious rule saying it should was
+⚠ **`dropped` asserts no decision, and the obvious rule saying it should was
 written and then refuted.** `task drop` records a status and no reason, so a
 dropped task does not mean anybody decided against anything — #863 is dropped,
 carries a full plan and states no reason, and a model asked about it reported a
-decision the row never makes. Both statuses point at the task instead.
+decision the row never makes. Both statuses refuse alike and point at the task
+rather than at what its status is supposed to mean.
 
 ⚠ **A closed row with no body is not read at all.** More than half the dropped
 pile is this tool's own probes, two of which are the paraphrase fixtures for
