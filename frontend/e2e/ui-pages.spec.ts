@@ -24,7 +24,6 @@ import { DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
  * over a *border*, which is not text over text. `shots.spec.ts` is the other
  * half, and it is why that one exists.
  */
-test.use({ serviceWorkers: 'block' });
 
 // The checker-checker: fail loudly here if the device preset is ever lost and
 // the "phone width" suite silently runs at desktop width.
