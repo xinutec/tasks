@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use rand::RngCore;
+use rand::Rng;
 use sqlx::MySqlPool;
 
 use crate::config::Config;
