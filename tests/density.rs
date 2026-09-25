@@ -77,11 +77,9 @@ fn what_is_wrong_is_printed_as_a_guess_with_a_way_out() {
 
 #[test]
 fn one_finding_per_line_is_asked_for() {
-    // ⚠ Asked only for "at most four lines" on 2026-08-23, the model answered
-    // with one line 600 characters wide carrying four correct findings. The
-    // bound was never on the output — it is on how the model chooses to break
-    // it up — so the shape has to be asked for rather than imposed: truncating
-    // mid-sentence cuts the specific half of a finding.
+    // ⚠ Asked only for "at most four lines", a model answers with one very wide
+    // line carrying four findings. So the shape is asked for rather than
+    // imposed: truncating mid-sentence cuts the specific half of a finding.
     assert!(density::prompt(1, 4000, "body").contains("ONE FINDING PER LINE"));
 }
 

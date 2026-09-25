@@ -9,11 +9,10 @@ export class AuthStore {
 }
 
 /**
- * Flips the sign-in wall on any 401 — the recall/messages/memview pattern.
+ * Flips the sign-in wall on any 401.
  *
- * There is no share token here, unlike memview: this list is not a document to
- * publish, it is a working surface for two parties, and a read-only third view
- * of it has no use anyone has asked for.
+ * No share token: this is a working surface for two parties, not a document
+ * to publish.
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthStore);

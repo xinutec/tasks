@@ -1,17 +1,8 @@
 //! What fleetwatch's ingest will and will not accept from us.
 //!
-//! ⚠ **These are the tests that were missing, and their absence is the whole
-//! story.** `fleetwatch::minted` returned 32 hex characters and its own comment
-//! called the result "ULID-shaped". A ULID is 26 characters of Crockford
-//! base32, and `ingest` parses the id before storing anything, answering 422 on
-//! failure. The series holds exactly ONE report — 2026-08-25T18:00:55Z, from a
-//! development build whose id happened to be 26 characters — and nothing after
-//! it, because `minted()` was widened to 32 before the commit. Every test in
-//! this repo stayed green throughout. None of them could see this module: it was
-//! private, inside `src/bin/task.rs`, where `tests/` cannot reach.
-//!
-//! So each test here asserts one rule the RECEIVER enforces, not one this crate
-//! happens to implement.
+//! ⚠ **Each test asserts a rule the RECEIVER enforces**, not one this crate
+//! happens to implement: a push fleetwatch rejects is invisible from here, and
+//! a local side can be self-consistent while disagreeing with the other end.
 
 use tasks::tasks::fleetwatch;
 
@@ -30,10 +21,7 @@ fn a_minted_id_is_a_ulid_the_server_will_accept() {
 
 /// Two reports minted in one run must differ.
 ///
-/// The id is the idempotency key. A content-derived one would make a second
-/// report carrying identical tallies read as a replay of the first and be
-/// dropped — which shows on the chart as a gap exactly when the tracker was
-/// quiet but alive, the one state the series exists to distinguish.
+/// The id is the idempotency key — see `fleetwatch::minted` for why random.
 #[test]
 fn two_ids_minted_together_differ() {
     assert_ne!(fleetwatch::minted(), fleetwatch::minted());
@@ -61,15 +49,8 @@ fn every_check_carries_an_addressable_identity() {
     }
 }
 
-/// What the tally already knew and the push threw away.
-///
-/// ⚠ **Three numbers reached the service and stopped there.** `checks::Tally`
-/// has carried `spoke`, `quiet`, `timeout` and `error` per kind since 0010, and
-/// `commands::Tally` has carried `failed` per verb — and `checks()` turned
-/// exactly one of them into a line, for one kind. Measured by hand on
-/// 2026-08-29: 229 of 268 density reads spoke and 37 never answered, both
-/// invisible on every chart. The gap was not in the instrument; it was in the
-/// last ten lines before the wire.
+/// What the tally knows must reach the wire: every outcome count per kind and
+/// `failed` per verb, or the chart never shows it.
 mod what_reaches_the_wire {
     use super::*;
 
@@ -100,8 +81,7 @@ mod what_reaches_the_wire {
 
     #[test]
     fn a_density_read_that_never_answered_is_on_a_line_of_its_own() {
-        // The 14% that was charted nowhere. `filing` had this line and
-        // `density` — the kind that runs most — did not.
+        // Every kind gets this line, the density read included.
         assert_eq!(value_of("density checks that never answered"), 37.0);
     }
 
@@ -113,9 +93,9 @@ mod what_reaches_the_wire {
 
     #[test]
     fn a_failing_command_is_countable() {
-        // It was inside the observed text of a LATENCY line, where nothing can
-        // chart it or band it. Aggregated, because a series per verb to carry a
-        // number that is nearly always zero crowds out the ones that move.
+        // A VALUE, which charts can use; prose in a latency line is neither.
+        // Aggregated, because a series per verb for a number that is nearly
+        // always zero crowds out the ones that move.
         assert_eq!(value_of("commands that failed"), 3.0);
         let observed = built()
             .into_iter()
@@ -151,8 +131,8 @@ mod what_reaches_the_wire {
     #[test]
     fn only_the_filing_line_claims_a_bound() {
         // Zero unchecked filings is defensible: that is how a duplicate gets in.
-        // A density read is advisory with a measured 14% baseline and no derived
-        // bound, so a verdict there would publish a guess as a finding.
+        // A density read is advisory with no derived bound, so a verdict there
+        // would publish a guess as a finding.
         let verdict = |label: &str| {
             built()
                 .into_iter()
@@ -173,8 +153,7 @@ mod what_reaches_the_wire {
 /// `checks()` reads `line["spoke"]` out of a `Value` and falls back to 0, so the
 /// only thing tying its keys to the service's wire format is that somebody typed
 /// them the same way twice. This drives the REAL structs through `serde` and
-/// asserts the numbers survive — the same shape as the ULID bug this file opens
-/// with: the local side was self-consistent and disagreed with the other end.
+/// asserts the numbers survive.
 #[test]
 fn the_keys_are_the_ones_the_service_actually_sends() {
     use tasks::tasks::checks::{Kind, Tally as CheckTally};

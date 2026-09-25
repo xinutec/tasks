@@ -9,10 +9,8 @@ use serde_json::json;
 pub enum AppError {
     /// No usable credential — or one that stopped short of saying who it is.
     ///
-    /// ⚠ The message is carried rather than fixed because "not authenticated"
-    /// is actively misleading in one of the two cases: a caller whose agent
-    /// token is *correct* but who sent no `X-Session-Id` gets sent to check the
-    /// one thing that was right.
+    /// The message is carried because "not authenticated" misleads a caller
+    /// whose token is right but who sent no `X-Session-Id`.
     #[error("{0}")]
     Unauthorized(&'static str),
 
@@ -23,8 +21,8 @@ pub enum AppError {
     NotFound,
 
     /// A request that cannot be honoured as asked — an unknown status word, a
-    /// subject too long for the one line it has to fit in. The message is shown
-    /// to the caller, because the caller is the one who can fix it.
+    /// subject too long for its one line. The message is shown to the caller,
+    /// who is the one who can fix it.
     #[error("{0}")]
     BadRequest(String),
 

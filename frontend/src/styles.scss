@@ -4,9 +4,8 @@ html {
   color-scheme: light dark;
   @include mat.theme(
     (
-      // Azure, not violet: memview is the violet one, and these two are read
-      // on the same phone. The launcher icon, the theme-color and this have to
-      // agree or the app looks like a different app once it opens.
+      // Azure, telling this apart from the other apps on the same phone. The
+      // launcher icon, the theme-color and this have to agree.
       color: mat.$azure-palette,
       typography: Roboto,
       density: 0

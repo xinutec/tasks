@@ -1,12 +1,9 @@
 //! What `task list` asks the service for.
 //!
-//! ⚠ **The default is the caller, not the fleet.** A bare `task list` used to
-//! mean *every open task there is*, most of a screen against one line for this
-//! session's own plate. All of it lands in a conversation's context and almost
-//! none is work that conversation can act on — the cost `digest.rs` exists to
-//! refuse, reached through the command a session runs to find out what to do.
-//!
-//! So the three questions are named:
+//! ⚠ **The default is the caller, not the fleet.** Every open task there is
+//! would land in a conversation's context, almost none of it work that
+//! conversation can act on — the cost `digest.rs` exists to refuse. So each
+//! question is named:
 //!
 //! | | means | asks for |
 //! | --- | --- | --- |
@@ -16,11 +13,10 @@
 //! | `--all` | what is going on | every holder |
 //! | `--handed-out` | what did I hand out | filed by me, held by anyone else |
 //!
-//! ⚠ **A missing view is not neutral — it gets answered anyway, by guesswork.**
-//! `--pile` had no name, so a session hand-filtered `--all --json`, invented a
-//! field that does not exist, and reported a pile size off by a wide margin
-//! before anybody caught it. Every question worth asking gets a flag and the
-//! tests that come with one.
+//! ⚠ **A missing view is not neutral — it gets answered anyway, by guesswork**:
+//! a session hand-filtering `--all --json` for a view with no flag can invent
+//! a field and report a wrong count. Every question worth asking gets a flag
+//! and its tests.
 //!
 //! ⚠ **`--handed-out` is the only one not about the holder**, and a routing
 //! session needs it most: the digest shows a session its own work and the pile,
@@ -51,10 +47,8 @@ pub enum Holder<'a> {
 /// The query parameters for `GET /api/tasks`.
 ///
 /// **Without a session id there is no "own" to narrow to**, so the caller gets
-/// everything — the same answer `/api/digest` gives a person who names no
-/// session. In practice this is not reachable through the token path, which
-/// refuses to run at all without an id; it is the honest answer rather than a
-/// live case.
+/// everything — as `/api/digest` does for a person who names no session. The
+/// token path refuses to run without an id, so this is not a live case.
 pub fn list_query(
     all: bool,
     mine: bool,
@@ -71,10 +65,8 @@ pub fn list_query(
     if all {
         return Ok(query);
     }
-    // Before the session clauses and without one: the pile has no holder, so
-    // sending an id alongside would ask for the intersection of two disjoint
-    // sets. Needs no session id at all, which is also what makes it the one
-    // list a person can ask for the same way a session does.
+    // Before the session clauses and without an id: the pile has no holder, so
+    // an id alongside would intersect two disjoint sets.
     if pile {
         query.push(("unheld".into(), "true".into()));
         return Ok(query);
@@ -93,15 +85,13 @@ pub fn list_query(
         query.push(("session".into(), session.into()));
         return Ok(query);
     }
-    // ⚠ **Strictly that holder, with no pile.** `--to` answers "what is X
-    // carrying", and folding the unheld tasks in would answer a different
-    // question — the pile is nobody's, so it belongs to no holder's plate.
+    // ⚠ **Strictly that holder, with no pile**: `--to` answers "what is X
+    // carrying", and the pile is on no holder's plate.
     if let Some(holder) = to {
         match holder {
             Holder::Person(name) => query.push(("person".into(), name.into())),
             Holder::Session(id) => query.push(("session".into(), id.into())),
-            // The pile IS a holder in the vocabulary, so `--to nobody` is a
-            // legitimate question and already has an answer.
+            // The pile IS a holder in the vocabulary.
             Holder::Nobody => query.push(("unheld".into(), "true".into())),
         }
         return Ok(query);

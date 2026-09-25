@@ -1,4 +1,4 @@
-//! Stateless HMAC-signed sessions (the recall pattern — no DB in this app).
+//! Stateless HMAC-signed sign-in sessions — no session table.
 //!
 //! The cookie carries its own claims: `base64url(json{u,d,x}).hex(hmac)`.
 //! Nextcloud is touched only at login; every later request verifies the

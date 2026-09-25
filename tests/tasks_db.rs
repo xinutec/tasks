@@ -43,8 +43,8 @@ fn filed(subject: &str) -> NewTask {
     }
 }
 
-/// Filed straight into the pile, which since 2026-08-09 has to be asked for:
-/// leaving the assignee out means the task belongs to whoever filed it.
+/// Filed straight into the pile, which has to be asked for: leaving the
+/// assignee out means the task belongs to whoever filed it.
 fn unclaimed(subject: &str) -> NewTask {
     NewTask {
         assignee: Some(Assignee::nobody()),
@@ -73,9 +73,7 @@ async fn a_filed_task_comes_back_open_and_held_by_whoever_filed_it() {
         .expect("filing");
     assert_eq!(task.subject, "Something to do");
     assert_eq!(task.status, Status::Open);
-    // Filing takes it on. The default was the pile until 2026-08-09, which meant
-    // nothing was ever implicitly its filer's and a session's row could not say
-    // what it was carrying.
+    // Filing takes it on, so a session's row says what it is carrying.
     assert_eq!(task.assignee.kind, AssigneeKind::Person);
     assert_eq!(task.assignee.id.as_deref(), Some("pippijn"));
     assert!(!task.detailed, "no body was given");
@@ -103,10 +101,8 @@ async fn the_pile_is_something_said_rather_than_something_fallen_into() {
     .expect("filing");
     assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
 
-    // ⚠ **This asserted the OPPOSITE until 2026-09-03** — that the pile stays
-    // silent — and that silence is what made the misuse unmeasurable: the rate
-    // behind #1334 had to be inferred from which filings lacked this row. A
-    // decision that leaves no record is not one the tool can report on.
+    // ⚠ **The pile is recorded too**, with its reason: a decision that leaves
+    // no record is not one the tool can report on.
     let moves = kinds(&pool, task.id).await;
     assert_eq!(moves, vec!["created", "assigned"], "the pile is recorded");
 
@@ -284,16 +280,14 @@ async fn moving_a_task_between_the_two_of_us_is_recorded_both_ways() {
         .filter(|e| e.kind == "assigned")
         .map(|e| e.actor.as_str())
         .collect();
-    // Three, not two: the filing to the pile is itself an assignment now, and
-    // its actor is whoever filed. The two moves that follow are the pair this
-    // test is about.
+    // Three, not two: the filing to the pile is itself an assignment, by
+    // whoever filed. The two moves that follow are the pair under test.
     assert_eq!(actors, vec!["pippijn", "pippijn", "memview"]);
 }
 
 #[tokio::test]
 async fn history_names_the_session_that_acted_rather_than_its_id() {
-    // The same session read as `memview` in one column and as a 36-character id
-    // in the next, on the same line, until the actor was resolved too.
+    // The actor is resolved too, so one line never names a session two ways.
     let pool = common::fresh_db().await;
     sessions::touch(&pool, "sess-1", Some("memview"))
         .await
@@ -336,9 +330,7 @@ async fn history_names_the_session_that_acted_rather_than_its_id() {
 #[tokio::test]
 async fn a_change_that_changes_nothing_writes_no_history() {
     let pool = common::fresh_db().await;
-    // Filed into the pile so that the object restated below is the object that
-    // is there — `assignee: nobody` against a task the filer now holds would be
-    // a real change, and the point of this test is that nothing changes.
+    // Filed into the pile so the `assignee: nobody` restated below is no change.
     let task = repo::create(&pool, unclaimed("Steady"), &pippijn())
         .await
         .expect("filing");
@@ -542,9 +534,8 @@ async fn a_session_row_carries_how_much_it_is_holding() {
 
 #[tokio::test]
 async fn finishing_a_task_records_who_finished_it() {
-    // `assignee` is the only place a LIST can say who did something — the
-    // history knows, and no list renders a history. A task closed while held by
-    // nobody therefore read as "done by nobody" everywhere it was seen again.
+    // `assignee` is the only place a LIST can say who did something, so a task
+    // closed from the pile must not read as "done by nobody".
     let pool = common::fresh_db().await;
     // The route touches the session before every write; a session row has to
     // exist for a task to point at one.
@@ -742,13 +733,9 @@ async fn who_holds_what_counts_the_finished_work_too() {
     let cleared = find("session", Some("sess-2"));
     assert_eq!((cleared.open, cleared.total), (0, 1));
 
-    // ⚠ **A session that has never been given anything is not a holder.** A row
-    // exists for every conversation that has ever asked for a digest, which is
-    // every conversation there has ever been — 717 of them two days after the
-    // cutover, of which 14 had held anything at all. Listing the rest buries
-    // the answer under its own bookkeeping, on a page meant to be read on a
-    // phone, and it is the same everything-by-default this service was built to
-    // refuse. They are still *sessions*, and `sessions::list` still has them.
+    // ⚠ **A session that has never been given anything is not a holder** — see
+    // `sessions::holders`. They are still *sessions*, and `sessions::list` has
+    // them.
     assert!(
         !holders
             .iter()
@@ -774,13 +761,9 @@ async fn who_holds_what_counts_the_finished_work_too() {
 
 /// The one test tying `Status::is_open` to the SQL that means the same thing.
 ///
-/// ⚠ **This is the test the fourth status was added for.** Every query that
-/// meant *open* said `status <> 'done'`, which was correct while there were
-/// three states and became a silent miscount the moment `dropped` existed —
-/// nothing would have failed, the numbers would just have been wrong. So this
-/// puts one task in each of the four states and asks every counting query in
-/// the service what it sees, rather than trusting that the six call sites were
-/// all found.
+/// ⚠ **`status <> 'done'` miscounts `dropped` silently**, so this puts one task
+/// in each state and asks every counting query what it sees, rather than
+/// trusting that every call site uses `still_open!`.
 #[tokio::test]
 async fn a_dropped_task_is_not_open_anywhere() {
     let pool = common::fresh_db().await;
@@ -845,8 +828,8 @@ async fn a_dropped_task_is_not_open_anywhere() {
     .expect("listing everything");
     assert_eq!(all.len(), 4, "closed means kept, both kinds of closed");
 
-    // Closed is closed: a dropped task has a closing time, which `IF(? =
-    // 'done', …)` would not have given it.
+    // A dropped task has a closing time, which `IF(? = 'done', …)` would not
+    // have given it.
     let dropped = all
         .iter()
         .find(|t| t.status == Status::Dropped)
@@ -861,7 +844,7 @@ async fn a_dropped_task_is_not_open_anywhere() {
     // able to say who decided it was not worth doing.
     assert_eq!(dropped.assignee.kind, AssigneeKind::Person);
 
-    // Every session row carries its own open count, by a seventh query.
+    // Every session row carries its own open count.
     sessions::touch(&pool, "sess-1", Some("tasks"))
         .await
         .expect("recording a session");
@@ -959,11 +942,8 @@ async fn dropping_a_task_credits_nobody_with_doing_it() {
 
 /// The holder column has to be able to describe the present, not only the past.
 ///
-/// ⚠ **This is the test the starter rule was added for.** A holder was recorded
-/// when a task was CLOSED and at no other moment, so a session could show three
-/// finished tasks and `0 open` while it was in the middle of a fourth — every
-/// conversation looked idle for as long as it was actually working. `start` was
-/// already documented as how a session takes a task on, and it moved nobody.
+/// ⚠ **`start` claims a task from the pile**, or a session mid-task reads as
+/// `0 open` and looks idle for as long as it is actually working.
 #[tokio::test]
 async fn starting_a_task_claims_it_the_way_finishing_one_does() {
     let pool = common::fresh_db().await;
@@ -1050,14 +1030,10 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
 /// A task put back in the pile mid-flight is still `doing`, and `start` is how
 /// the next session takes it on.
 ///
-/// ⚠ **The claim rule read the status, and this is the state where the status
-/// says nothing about the holder.** A holder was inferred only where a task was
-/// *entering* `doing`, which was indistinguishable from "already held by
-/// somebody" until a session stopped work deliberately and handed the task back
-/// with its findings — leaving it `doing` and held by nobody. #19 is that task,
-/// and it is the only one: 1 of the 17 in `doing` when this was written. The one
-/// command a session would run to pick it up reported success and moved nothing,
-/// so a task nobody was carrying sat in the pile reading as somebody's work.
+/// ⚠ **The state where the status says nothing about the holder**: a session
+/// that stops work hands the task back with its findings, leaving it `doing`
+/// and held by nobody. A claim rule that read the status would make `start`
+/// report success and move nothing.
 ///
 /// What stops a second session poaching held work is the HOLDER check beside
 /// this one, not the status; and what keeps a redundant `start` from writing
@@ -1142,15 +1118,11 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
 
 /// A write says what it moved, and a write that moved nothing says that.
 ///
-/// ⚠ **Three defects in one day were writes that answered exactly like a write
-/// that had worked** — `start` on a task already `doing` in the pile, a rename
-/// to a blank name, closing into the pile. Every one was found by reproducing it
-/// against a scratch task, because the caller could not tell success from
-/// nothing-happened.
+/// ⚠ **A no-op must not answer exactly like a write that worked**, or its
+/// defects are only findable by reproducing them.
 ///
-/// **Reported, not refused.** The second `start` here is a legitimate no-op and
-/// must keep succeeding: refusing it would trade a silent success for a spurious
-/// failure. What was missing was the sentence, not the error.
+/// **Reported, not refused**: the second `start` here is a legitimate no-op and
+/// must keep succeeding.
 #[tokio::test]
 async fn a_write_that_moves_nothing_says_so() {
     let pool = common::fresh_db().await;
@@ -1217,9 +1189,7 @@ async fn a_write_that_moves_nothing_says_so() {
         same.changed
     );
 
-    // A body that is the text already there is not an edit. Unconditional until
-    // this test existed, which put an `edited` in the history for saving a body
-    // nobody had touched.
+    // A body that is the text already there is not an edit.
     let reworded = repo::update(
         &pool,
         task.id,
@@ -1264,15 +1234,9 @@ async fn a_write_that_moves_nothing_says_so() {
 /// A task in the pile says which session filed it, so a session can rule it out
 /// without opening it.
 ///
-/// ⚠ **The cost this removes is paid by every session that LOOKS, not by the one
-/// that does the work.** Seeing the whole pile is 548 bytes a turn; deciding
-/// whether one line of it is actionable meant reading the task — 2,732 bytes for
-/// #19 — to learn it is observe work and belongs to a checkout the reader was
-/// not in. `task show` has always answered this, at the bottom, in the history.
-///
-/// It is not the repo column coming back. That was a filter and it hid work;
-/// this is a fact `task_events` already holds, it gates nothing, and where there
-/// is nothing to say it says nothing.
+/// ⚠ **The cost this removes is paid by every session that LOOKS**: without it,
+/// ruling out one pile line means reading the whole task. It gates nothing —
+/// see `Task::filed_by`.
 #[tokio::test]
 async fn a_pile_task_says_which_session_filed_it() {
     let pool = common::fresh_db().await;
@@ -1292,9 +1256,8 @@ async fn a_pile_task_says_which_session_filed_it() {
     )
     .await
     .expect("filing");
-    // A session that has not named itself has nothing to contribute: a
-    // 36-character uuid is not a hint, and printing one would be worse than the
-    // silence it replaces.
+    // A session that has not named itself has nothing to contribute: a uuid is
+    // not a hint.
     let anon = repo::create(
         &pool,
         unclaimed("From a session with no name"),
@@ -1360,10 +1323,8 @@ async fn a_pile_task_says_which_session_filed_it() {
 /// What a session is shown, and what it is not.
 ///
 /// ⚠ **The digest is the only thing that costs anything per turn**, so who it
-/// selects for is a cost question before it is a courtesy one. Until 2026-08-09
-/// it filtered on repository alone — inherited from one `TASKS.md` per repo
-/// holding both parties' work — and every session paid, every turn, for tasks
-/// another conversation was already carrying.
+/// selects for is a cost question: a session must not pay, every turn, for
+/// tasks another conversation is carrying.
 #[tokio::test]
 async fn a_session_digest_carries_its_own_work_and_the_pile() {
     let pool = common::fresh_db().await;
@@ -1466,11 +1427,9 @@ async fn starting_a_task_assigned_to_another_session_takes_nothing() {
 
 #[tokio::test]
 async fn a_closed_task_cannot_be_handed_to_nobody() {
-    // The one live path to the state three old tasks were found in: an explicit
-    // `--to nobody` beats the finisher rule by design, because a caller naming a
-    // destination is more specific than inferring one from who is asking. For
-    // every other destination that is right; for the pile it produced "done by
-    // nobody", which is what `assignee` exists to prevent saying.
+    // An explicit `--to nobody` beats the finisher rule by design — a named
+    // destination is more specific than an inferred one — so this is the path
+    // to "done by nobody", and it is refused.
     let pool = common::fresh_db().await;
     sessions::touch(&pool, "sess-1", None)
         .await
@@ -1586,14 +1545,10 @@ async fn an_open_task_may_still_be_put_in_the_pile() {
     .expect("putting an open task back in the pile");
 }
 
-/// #724: a holder nobody has heard of is a 400 that names it, not a 500.
+/// A holder nobody has heard of is a 400 that names it, not a 500.
 ///
-/// ⚠ **The refusal was always there — the FOREIGN KEY does it.** What was wrong
-/// was the answer: `fk_tasks_session` arrived as `sqlx::Error` → `AppError::Other`,
-/// which is a 500 logged as "internal error" and reaching the caller as the
-/// anyhow context — the words `moving a task`. That names the operation the
-/// caller already knows they asked for, and 500 sends somebody to look at a
-/// service that was working correctly.
+/// ⚠ **The FOREIGN KEY does the refusing**; what is under test is the answer —
+/// a 500 would send somebody to look at a service that is working correctly.
 mod unknown_holder {
     use super::*;
 
@@ -1695,20 +1650,17 @@ mod unknown_holder {
 
     /// ⚠ **The test that keeps the mapping from becoming a masking fallback.**
     ///
-    /// Ablating the `ForeignKeyViolation` check to `true` left all 29 other
-    /// tests green — so without this one, "any failure writing an assignee is
-    /// the caller's fault" was a free edit, and a lost connection mid-move would
-    /// answer `400 no session `sess-2`` about a session that exists.
+    /// Ablating the `ForeignKeyViolation` check to `true` leaves every other test
+    /// green — so without this one a lost connection mid-move would answer
+    /// `400 no session …` about a session that exists.
     ///
     /// An id past `VARCHAR(64)` is the lever: same statement, same column, and
     /// MariaDB answers `1406 (22001)` rather than a constraint violation.
     ///
-    /// ⚠ **So an over-long id stays a 500, and that is left alone deliberately.**
-    /// It is the same complaint as #724 through a door nothing here uses — ids
-    /// are 36-character uuids and the CLI sends the one in its environment — and
-    /// the fix for it is a length bound in `check_assignee`, not a wider reading
-    /// of the constraint. Bounding it here would also delete the only non-FK
-    /// error this statement can produce, and with it this test.
+    /// ⚠ **So an over-long id stays a 500, deliberately**: nothing sends one, the
+    /// fix would be a length bound in `check_assignee` rather than a wider
+    /// reading of the constraint, and it would delete the only non-FK error this
+    /// statement can produce.
     #[tokio::test]
     async fn a_failure_that_is_not_the_constraint_stays_an_internal_error() {
         let pool = common::fresh_db().await;
@@ -1800,8 +1752,8 @@ mod how_much_prose {
 
         // ⚠ Each of these breaks a different part of the projection. The
         // trailing-newline pair is `+ 1` — count newlines alone and a body with
-        // no final newline is short by one, which is EVERY body here, since
-        // `--body` deliberately emits none. The blank-line cases are `TRIM`:
+        // no final newline is short by one, which is every trimmed body. The
+        // blank-line cases are the trim:
         // stored padding the reader never sees must not be charged to it. The
         // last is `LENGTH` being bytes — a body of multibyte characters has far
         // more bytes than characters, and only a difference over a one-byte
@@ -1825,10 +1777,10 @@ mod how_much_prose {
         }
     }
 
-    /// ⚠ The two must agree, because they are answered by two different
-    /// expressions over the same column: `detailed` is `LENGTH(TRIM(body)) > 0`
-    /// and the count is its own `IF`. A reader shown `detailed: true` beside
-    /// `body_lines: 0` would have no way to tell which one to believe.
+    /// ⚠ The two must agree, because they are two expressions over the same
+    /// column: `detailed` tests the length of `body_shown!`, and the count is
+    /// its own `IF`. `detailed: true` beside `body_lines: 0` would leave a
+    /// reader nothing to believe.
     #[tokio::test]
     async fn nothing_to_read_is_zero_and_detailed_agrees() {
         let pool = common::fresh_db().await;

@@ -4,14 +4,12 @@
 //! [`duplicates`](crate::tasks::duplicates) runs before a filing and can refuse
 //! it; [`density`](crate::tasks::density) runs after an edit and can only
 //! advise. Both spawn a one-shot session, read its answer, and delete its
-//! transcript — so until this table, a check that ran left nothing behind
-//! except, on the filing side, a line on the caller's stderr.
+//! transcript, so without this table a check leaves nothing behind.
 //!
 //! ⚠ **Written on every path, including the ones that failed**, because a check
 //! that did not run is the finding. Whether the density read fires at the rate
 //! it was calibrated for, and whether `PATIENCE` abandons calls that would have
-//! answered, are questions about a distribution — and a distribution cannot be
-//! read out of the transcripts that happen to survive.
+//! answered, are questions about a distribution.
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -74,9 +72,8 @@ impl Outcome {
 
 /// One run, as the CLI reports it.
 ///
-/// The session and the clock are the service's: a client that timed its own
-/// call is already trusted for the duration, but who it was and when it
-/// happened are the two fields a caller must not be able to get wrong.
+/// The session and the clock are the service's: a client is trusted for how
+/// long its call took, not for who it was or when.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Run {
     pub kind: Kind,
@@ -98,25 +95,20 @@ pub struct Run {
     pub subject_key: Option<String>,
     /// What a density read said, verbatim, so it outlives the tool result.
     ///
-    /// ⚠ **Sent on the run that is already being recorded, not by a second
-    /// call.** The alternative was a `PATCH /api/tasks/{id}`, which would put a
-    /// write to a task on the failure path of a check that is explicitly allowed
-    /// to fail silently — `accreting()` swallows everything, because the edit
-    /// has already landed and a session must not pay attention to the checker.
+    /// ⚠ **Sent on this run, not by a second call**: a `PATCH` to the task
+    /// would put a write on the failure path of a check that is allowed to fail
+    /// silently.
     ///
-    /// Absent on a filing check, which has no body to be about, and absent on a
-    /// density read that was quiet — which is not the same as absent, and is
-    /// handled by [`record`] as the clear it is.
+    /// Absent on a filing check and on a quiet density read; [`record`] treats
+    /// the quiet read as clearing the finding.
     #[serde(default)]
     pub said: Option<String>,
 }
 
 /// The key a refusal is remembered by.
 ///
-/// ⚠ **Case and surrounding space are ignored, exactly as [`same_subject`]
-/// ignores them**, or the override would refuse to honour a re-run that differs
-/// from the refused filing only in whitespace — which is the same command typed
-/// again, and the whole point.
+/// ⚠ **Case and surrounding space are ignored, as [`same_subject`] ignores
+/// them**, or a re-run differing only in whitespace would not be licensed.
 ///
 /// [`same_subject`]: crate::tasks::duplicates::same_subject
 pub fn subject_key(subject: &str) -> String {
@@ -201,11 +193,9 @@ async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
 
 /// What to record for an answer that came back, or did not.
 ///
-/// ⚠ **A timed-out check and a quiet one are opposite findings that look the
-/// same from outside**: both leave the caller with no advice and the write
-/// already done. This is where they are told apart, and it turns on the error's
-/// chain rather than on its message, so rewording the line a caller prints
-/// cannot silently reclassify a month of runs.
+/// This is where a timeout is told from a quiet check (see [`Outcome`]), and it
+/// turns on the error's chain rather than its message, so rewording the line a
+/// caller prints cannot silently reclassify a month of runs.
 ///
 /// `spoke` is the caller's, because only it knows whether the words amounted to
 /// anything: the same answer is a refusal on one path and advice on the other.
@@ -226,9 +216,9 @@ pub fn outcome(said: &anyhow::Result<String>, spoke: bool) -> Outcome {
 
 /// One recorded run, as it comes back out.
 ///
-/// The same fields as [`Run`] plus the service's clock. Two shapes rather than
-/// one optional field: a client reports what it did and never when, so a struct
-/// that could carry a time on the way in is one somebody will eventually fill.
+/// [`Run`]'s fields plus the service's clock. Two shapes, not an optional
+/// field: a struct that could carry a time on the way in will eventually be
+/// given one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ran {
     pub ran_at: DateTime<Utc>,
@@ -264,10 +254,9 @@ impl Outcome {
 
 /// Every run in the last `days`, newest first.
 ///
-/// ⚠ **A word this module cannot read is an error, not a skipped row.** The
-/// only writer is this module, so an unknown `kind` means a newer version wrote
-/// the table — and dropping the row would quietly shrink exactly the counts
-/// somebody is reading the table to get.
+/// ⚠ **A word this module cannot read is an error, not a skipped row.** It
+/// means a newer version wrote the table, and dropping the row would quietly
+/// shrink the counts.
 pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
     /// A row as the table holds it: the two words are strings there, and
     /// reading them back into the enums is what this function is for.
@@ -320,8 +309,7 @@ pub struct Tally {
     pub timeout: usize,
     pub error: usize,
     /// Milliseconds, by nearest rank over every run including the abandoned
-    /// ones — a timeout took the whole patience and pretending otherwise would
-    /// make the bound look comfortable.
+    /// ones: a timeout took the whole patience.
     pub median_ms: u32,
     pub p90_ms: u32,
     pub worst_ms: u32,
@@ -365,19 +353,15 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
 
 /// How long a refusal licenses an override for.
 ///
-/// ⚠ **Long enough to re-run, short enough not to become the habit.** The
-/// sequence is: refused, read, re-run with `--no-duplicate-check` — seconds,
-/// or a minute if the caller opens the task it named. Generous for that, and far
-/// too short to collect a licence in the morning and skip checks all afternoon.
+/// ⚠ **Long enough to read the refusal and re-run, far too short to collect a
+/// licence in the morning and skip checks all afternoon.**
 const LICENCE: i64 = 1800;
 
 /// Whether this session has been refused this exact subject, recently.
 ///
-/// ⚠ **This is what makes `--no-duplicate-check` cost a re-run.** Most filings
-/// that passed the flag had never been refused anything, so the check never ran
-/// and the trade the whole module rests on never happened. The flag stays —
-/// removing the escape would turn every false positive into a lost body — it
-/// just cannot be used FIRST.
+/// ⚠ **This is what makes `--no-duplicate-check` cost a re-run.** Passed
+/// pre-emptively, the flag means the check never runs. It stays — without it
+/// every false positive would lose a body — but it cannot be used FIRST.
 ///
 /// Keyed on the subject, not merely the session: one refusal licenses re-filing
 /// the thing that was refused, and nothing else.
@@ -399,9 +383,8 @@ pub async fn refused_recently(pool: &MySqlPool, session: &str, subject: &str) ->
 
 /// What a filing is told when it skipped the check without having been refused.
 ///
-/// ⚠ **It must not read as a bug.** The caller passed a documented flag and got
-/// a refusal from the service, which is confusing unless the message says
-/// plainly what to do — and what to do is the easy thing: drop the flag.
+/// ⚠ **It must not read as a bug**: the caller passed a documented flag, so the
+/// message says plainly what to do — drop it.
 pub fn unlicensed() -> String {
     "NOT FILED — --no-duplicate-check is for overruling a refusal you have already seen, \
      and nothing has refused this one. Re-run without it. If the check then names something \

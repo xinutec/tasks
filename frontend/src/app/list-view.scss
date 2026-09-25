@@ -24,26 +24,19 @@
   .row {
     display: flex;
     gap: 4px;
-    // The holder row is fixed at four buttons now that the repository chips
-    // are gone, but the sideways scroll stays: it costs nothing, and wrapping
-    // would push the list itself below the fold on a narrow phone.
+    // The sideways scroll costs nothing, and wrapping would push the list
+    // itself below the fold on a narrow phone.
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  // The focused holder's own row. It must never scroll out of sight the way it
-  // did when it shared the bucket row — this chip is the only thing on screen
-  // saying why the list is short.
+  // The focused holder's own row, which must never scroll out of sight: this
+  // chip is the only thing on screen saying why the list is short.
   //
-  // ⚠ **A whole uuid fits**, which is what the snapshot establishes rather than
-  // any rule here: a session that never named itself shows all 36 characters at
-  // phone width with its close icon beside them, in
-  // `ui-snapshots/who-focused-unnamed.png`. The first attempt reached into
-  // `.mat-mdc-button-touch-target` with `::ng-deep` to clip an overflow that
-  // does not occur, and dev-lint refused it twice over — private Material DOM,
-  // and piercing encapsulation. Were a longer label ever to appear, this clips
-  // the tail and keeps the icon, which is FIRST in the chip, so the filter stays
-  // clearable at any width.
+  // ⚠ **A whole uuid fits** at phone width, which the snapshot establishes
+  // (`ui-snapshots/who-focused-unnamed.png`), not a rule here. A longer label
+  // would clip at the tail and keep the icon, which is FIRST, so the filter
+  // stays clearable. Do not reach into Material's private DOM to clip it.
   .row.focus {
     overflow-x: hidden;
   }
@@ -114,9 +107,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  // An icon rather than the ids: the row already carries a rank, an id and a
-  // holder, and "#697,#14" in a phone-width meta row is what pushes it past the
-  // edge. Which tasks they are is one tap away, on the task itself.
+  // An icon rather than the ids, which would push a phone-width meta row past
+  // the edge. Which tasks they are is one tap away, on the task itself.
   // Overdue is the one state worth colouring, and it is a fact rather than a
   // threshold — which is why there is no "due soon" shade between the two.
   .due {
@@ -185,9 +177,8 @@
     border-radius: 999px;
     background: var(--mat-sys-surface-container-high);
     // A session name can be long — a raw id is 36 characters — so the chip is
-    // capped and told to ellipsise. 12ch rather than 9: at 9 the padding ate
-    // enough that `memview` itself came out as `memv…`, which fails the one
-    // thing the chip is for.
+    // capped and ellipsised. 12ch: any less and the padding truncates ordinary
+    // names like `memview`.
     max-width: 12ch;
     overflow: hidden;
     text-overflow: ellipsis;

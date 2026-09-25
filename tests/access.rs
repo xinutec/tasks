@@ -91,9 +91,8 @@ async fn a_token_without_a_session_id_gets_nothing() {
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    // And it says which half is missing. Refusing a *correct* token with "not
-    // authenticated" sent somebody to re-check the one thing that was right,
-    // which is how `task list` came to look like a broken token.
+    // And it says which half is missing: "not authenticated" would send
+    // somebody to re-check a token that is right.
     assert!(body.contains("X-Session-Id"), "{body}");
     assert!(!body.contains("not authenticated"), "{body}");
 }
@@ -236,13 +235,8 @@ async fn a_session_may_not_rename_another() {
 
 /// A blank rename is refused rather than accepted and ignored.
 ///
-/// ⚠ **`sessions::touch` treats an empty name as "no name given"** — it trims,
-/// filters, and the UPSERT's `COALESCE(VALUES(name), name)` then keeps whatever
-/// was there. That is right for a touch, which happens on every request and must
-/// not wipe a name; it is wrong for a rename, where it made the route answer
-/// `204 No Content` to a write that changed nothing. Blank is refused here so
-/// that a caller clearing the field is told, rather than shown success and the
-/// old name.
+/// ⚠ **`sessions::touch` treats an empty name as "no name given"** and keeps the
+/// old one, which would answer `204` to a rename that changed nothing.
 #[tokio::test]
 async fn a_blank_rename_is_refused_rather_than_silently_ignored() {
     let app = app(Some(TOKEN));
@@ -280,22 +274,15 @@ async fn healthz_answers_without_a_credential() {
 /// ⚠ **An unknown `/api` path must be a 404, not the page.**
 ///
 /// The API is nested under `/api` and the SPA fallback sits on the outer app, so
-/// without a fallback of its own a path that matches no route falls through and
-/// comes back `200 text/html` — the shell, to a caller that asked for JSON.
-/// `spa()` refuses a path whose last segment has a dot, which is what makes a
-/// missing `.woff2` behave; `/api/nonsense` has no dot.
-///
-/// Measured against the live deployment on 2026-08-09: `/api/nonsense` and the
-/// just-retired `/api/tasks/by/recall/79` both answered `200 text/html`. The
-/// CLI's symptom named itself rather than the URL — *"the service answered 200
-/// OK with something this CLI could not read"*.
+/// without a fallback of its own an unknown path comes back `200 text/html`.
+/// `spa()` passes `/api/nonsense`, which has no dot, and the CLI's symptom
+/// names itself rather than the URL.
 #[tokio::test]
 async fn an_api_path_that_is_not_a_route_is_a_404() {
     let app = app(Some(TOKEN));
     for path in [
         "/api/nonsense",
-        // The spelling this service published until d4c6c63, which is how the
-        // hole was found. Old prose and old sessions still contain it.
+        // A path this service once published; old prose still contains it.
         "/api/tasks/by/recall/79",
         "/api/tasks/1/extra",
     ] {
@@ -318,7 +305,7 @@ async fn an_api_path_that_is_not_a_route_is_a_404() {
 
 /// A path that does not exist says so even without a credential.
 ///
-/// A 401 for a typo sends the reader to check the one thing that was right.
+/// A 401 for a typo sends the reader to check their token.
 #[tokio::test]
 async fn an_unknown_api_path_is_not_found_before_it_is_unauthorised() {
     let app = app(Some(TOKEN));

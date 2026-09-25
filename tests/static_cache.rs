@@ -1,19 +1,8 @@
 //! **`index.html` must revalidate; the hashed bundle may be kept forever; a
 //! missing file says nothing about how long to keep it.**
 //!
-//! WHY THIS IS A TEST AND NOT A CURL. Six apps were given this header on
-//! 2026-08-14 and the task was closed as "all fixed, deployed and curled". No
-//! standing check went with it, so when three more names were measured on
-//! 2026-09-07 — tasks among them, live since 2026-08-08 — nothing had ever
-//! asked them the question. A header verified by hand once is a header nobody
-//! is watching.
-//!
-//! What goes wrong without it: with no `Cache-Control` a client falls back to
-//! HEURISTIC freshness, roughly a tenth of the document's age, and may keep
-//! `index.html` for days without asking. That document names the content-hashed
-//! bundle, so the new `main-*.js` is never fetched either and the deploy is
-//! invisible. An Android `WebView` ran several builds behind for hours with a
-//! missing button as the only symptom.
+//! A test rather than a curl: a header verified by hand once is a header nobody
+//! is watching. Why each value: `routes::cache_control_for`.
 //!
 //! No database: the static service answers before anything reaches the pool, so
 //! these take a lazy pool pointed at nothing, the way `tests/access.rs` does.
@@ -115,14 +104,9 @@ async fn a_missing_asset_is_not_told_how_long_to_keep_the_404() {
     assert_eq!(cc, "", "a 404 must carry no Cache-Control at all");
 }
 
-/// ⚠ **A 304 is not an error, and the difference is not cosmetic.** The guard
-/// above was first written as `!status.is_success()`, which also caught
-/// `304 Not Modified` — and a 304 must carry the headers a 200 would, so the
-/// client can refresh what it already holds. Without them every revalidated
-/// asset became a full re-fetch. In `messages` the symptom was a thread that
-/// landed 271px above the bottom, because images arrived and grew the page
-/// after it had scrolled: a scroll bug with no visible connection to a cache
-/// header. This test is the cheap version of that accident.
+/// ⚠ **A 304 is not an error.** `!status.is_success()` would catch it, and a
+/// 304 must carry the headers a 200 would, or every revalidation becomes a
+/// full re-fetch.
 #[tokio::test]
 async fn a_revalidated_asset_is_still_told_it_may_be_kept() {
     let dir = StaticDir::new();

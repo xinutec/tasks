@@ -108,6 +108,8 @@ pub fn prompt(subject: &str, corpus: &[(u64, String)], settled: bool) -> String 
     )
 }
 
+/// The matches in a model's answer.
+///
 /// ⚠ **Unparseable lines are dropped**, or a model that explains itself puts a
 /// paragraph into a refusal.
 ///
@@ -202,10 +204,11 @@ pub fn refusal(found: &[Match]) -> String {
     out
 }
 
-/// ⚠ **`dropped` and `done` are kept apart because their remedies differ**, not
-/// because one is worse. A finished task whose bug came back is a legitimate
-/// new filing; an abandoned one being filed again means a decision is being
-/// made twice.
+/// A closed task, as the check reads it.
+///
+/// ⚠ **`dropped` and `done` are kept apart** so the refusal can say which: a
+/// done task whose bug came back is reopened, while an abandoned one being
+/// filed again is a decision made twice, and its reason is in the task.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settled {
     pub id: u64,
@@ -224,10 +227,9 @@ pub struct Settled {
 /// ⚠ **A property of the row, never a list of ids** — a hard-coded list rots at
 /// the next probe.
 ///
-/// ⚠ **Closing quickly is NOT the signal, and that was nearly the rule.** Some
-/// of the most valuable closed rows were dropped within a minute of filing and
-/// carry a complete plan. What separates the fixtures is that they say nothing:
-/// a filing with no body was never a description of work.
+/// ⚠ **Closing quickly is NOT the signal**: some valuable closed rows were
+/// dropped within a minute and carry a complete plan. What separates the
+/// fixtures is that they say nothing — a filing with no body.
 pub fn worth_reading(detailed: bool) -> bool {
     detailed
 }
@@ -258,8 +260,8 @@ pub fn settled_block(corpus: &[Settled]) -> String {
     )
 }
 
-/// [`parse`] has already dropped ids off neither list, so an id here is real
-/// and the only question is which list it came off.
+/// Which list each match came off. [`parse`] has already dropped ids on
+/// neither.
 pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, Settled)>) {
     let mut open = Vec::new();
     let mut over = Vec::new();

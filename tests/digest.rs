@@ -1,10 +1,9 @@
 //! The index a prompt receives.
 //!
-//! This is the one file in the repository whose assertions are about *cost*.
-//! Every other test asks whether the app is correct; these ask whether it is
-//! still cheap, because the failure that produced this whole project was not a
-//! wrong answer — it was a correct answer that cost 86 kB to deliver 3.9 kB, on
-//! every turn, and nothing anywhere said so.
+//! The one file whose assertions are about *cost*. Every other test asks
+//! whether the app is correct; these ask whether it is still cheap — a correct
+//! answer that costs many times its size on every turn is the failure this
+//! project exists to prevent.
 
 use chrono::{TimeZone, Utc};
 use tasks::digest::{FOCUS_HINT_LINES, MAX_BYTES, PILE_LINES};
@@ -89,10 +88,8 @@ fn one_line_per_task_and_the_line_is_the_subject() {
 
 #[test]
 fn nothing_groups_the_list_and_no_heading_is_spent() {
-    // The repository was dropped in `0004`, and with it the group headings. This
-    // asserts the cost, not the absence of a feature: a heading is a whole line
-    // in the one place that is re-sent on every turn, and re-grouping under some
-    // other key would spend it again.
+    // This asserts the cost, not the absence of a feature: a group heading is a
+    // whole line in the one place re-sent every turn, under any key.
     let out = render(&[open(1, "a"), open(2, "b"), open(3, "c")]);
     assert_eq!(out.lines().count(), 4, "one header and three tasks: {out}");
     assert!(!out.contains("across"), "{out}");
@@ -119,14 +116,8 @@ fn a_holder_is_named_and_nobody_is_not() {
 
 /// The pile is the one part of a digest that nothing else bounds.
 ///
-/// ⚠ **[`MAX_BYTES`] is not this guard.** It is a runaway stop at 25 kB — some
-/// two hundred lines in every conversation before it says a word — and it is
-/// per session, which is the wrong denominator for the pile: an unheld task is
-/// charged to *every* session on *every* turn, so one filed line costs as many
-/// prompts as there are live conversations. The affordability argument in
-/// `README.md` was measured at *3 unheld of 134 open*, and it is conditional on
-/// a number nothing was keeping down — two days after the cutover the recall
-/// session's digest was 5 pile lines against its own 3.
+/// ⚠ **[`MAX_BYTES`] is not this guard** — see `digest::PILE_LINES` for the
+/// pile's denominator.
 #[test]
 fn the_pile_is_bounded_however_long_it_gets() {
     let long: Vec<Task> = (1..=40)
@@ -140,8 +131,8 @@ fn the_pile_is_bounded_however_long_it_gets() {
     assert!(out.starts_with("40 open task(s)"), "{out}");
 }
 
-/// Ablation for the test above: without the cap the same input is 40 lines,
-/// every one of them in every conversation.
+/// Ablation for the test above: without the cap, every pile line reaches every
+/// conversation.
 #[test]
 fn the_cap_is_what_makes_the_test_above_pass() {
     // The same forty subjects, held instead of piled: all forty render, so the
@@ -184,9 +175,7 @@ fn a_pile_short_enough_to_read_is_shown_whole() {
 
 /// The order is the id, and the cap does not reshuffle it.
 ///
-/// Own-first was the obvious way to write the cap and is not what this does:
-/// grouping is a line spent to say what the holder already says, and `render`
-/// promises one flat list.
+/// Not own-first: `render` promises one flat list.
 #[test]
 fn the_cap_keeps_the_list_in_id_order() {
     let mut tasks: Vec<Task> = vec![held(2, "mine", "recall"), held(9, "mine", "recall")];
@@ -208,10 +197,9 @@ fn the_cap_keeps_the_list_in_id_order() {
 /// The property the whole service exists to hold.
 #[test]
 fn the_digest_stays_inside_its_budget_however_many_tasks_there_are() {
-    // Held, not piled: the pile has its own cap now, and a fixture that trips
-    // that one first would leave the byte budget unexercised while still
-    // passing. This budget is the guard on a session's OWN plate, which is the
-    // half nothing else bounds.
+    // Held, not piled: a fixture that tripped the pile cap first would leave the
+    // byte budget unexercised while still passing. This budget guards a
+    // session's OWN plate, which nothing else bounds.
     let many: Vec<Task> = (1..=4000)
         .map(|id| {
             held(
@@ -238,8 +226,7 @@ fn the_digest_stays_inside_its_budget_however_many_tasks_there_are() {
 }
 
 /// Ablation for the test above: without the budget the same input is enormous.
-/// Kept because a cost assertion that cannot fail is the failure mode this
-/// project has hit twice.
+/// Kept because a cost assertion that cannot fail protects nothing.
 #[test]
 fn the_budget_is_what_makes_the_test_above_pass() {
     let many: Vec<Task> = (1..=4000)
@@ -263,13 +250,9 @@ fn the_budget_is_what_makes_the_test_above_pass() {
 
 /// The filer never reaches a prompt.
 ///
-/// ⚠ **`filed_by` was added so a session can rule a pile task out without
-/// opening it — in a LIST, which is fetched when somebody has just asked.** The
-/// digest is not that; it is the per-turn cost, and most open tasks are in the
-/// pile, so a word on each of them is a per-task charge levied on every session
-/// forever. That is the exact shape this file exists to refuse, and it would
-/// arrive wearing a good argument, which is why the guard is a test rather than
-/// a comment.
+/// ⚠ **`filed_by` is for a LIST, fetched when somebody has just asked.** In the
+/// digest a word on every pile line is a charge on every session every turn —
+/// and it would arrive wearing a good argument, so the guard is a test.
 #[test]
 fn the_digest_never_says_who_filed_a_task() {
     let mut task = open(1, "Left for whoever picks it up");
@@ -286,12 +269,9 @@ fn the_digest_never_says_who_filed_a_task() {
 
 #[test]
 fn the_header_countermands_the_built_in_task_tools() {
-    // Not decoration, and not a doc's job: Claude Code emits "consider using
-    // TaskCreate…" on every turn, and `docs/for-sessions.md` is read once. A
-    // session that skims will do as the repeated instruction says — which is to
-    // write into the store that cost 527 kB a turn and is what this replaced.
-    // The counter has to be in the digest because the digest is the only thing
-    // that is also there every turn.
+    // Not decoration: Claude Code emits "consider using TaskCreate…" every turn
+    // and `docs/for-sessions.md` is read once, so the counter has to be in the
+    // one thing that is also there every turn.
     let out = render(&[open(1, "Something")]);
     let head = out.lines().next().expect("a header");
     assert!(head.contains("TaskCreate"), "{head}");
@@ -308,10 +288,9 @@ fn the_header_countermands_the_built_in_task_tools() {
 /// ⚠ **A rank costs nothing until somebody sets one**, which is the only reason
 /// this is allowed in the file that reaches every prompt on every turn.
 ///
-/// Almost every task is unranked and always will be, so the ordinary line must
-/// be byte-for-byte what it was before the column existed. A default of `P2` —
-/// the shape rejected in `migrations/0005_priority.sql` — would have spent five
-/// bytes a line, on every line, in every conversation, to say nothing.
+/// An unranked line must carry no rank marker: a default of `P2` — rejected in
+/// `migrations/0005_priority.sql` — would spend bytes on every line, in every
+/// conversation, to say nothing.
 #[test]
 fn an_unranked_task_costs_exactly_what_it_did_before() {
     let unranked = open(1, "in the pile");
@@ -335,10 +314,8 @@ fn an_unranked_task_costs_exactly_what_it_did_before() {
 
 /// `render` does not sort, and must not start.
 ///
-/// The one ordering in the service is `repo::list`'s `ORDER BY`, so a digest
-/// receives its tasks already ranked. A second sort here would be a second rule
-/// to keep true, and it would fight the pile cap — which trims the tail of
-/// whatever order it is handed.
+/// The one ordering in the service is `repo::list`'s `ORDER BY`. A second sort
+/// here would be a second rule to keep true.
 #[test]
 fn the_order_is_the_one_render_was_handed() {
     let mut urgent = held(9, "ranked but last in the list", "recall");
@@ -353,12 +330,8 @@ fn the_order_is_the_one_render_was_handed() {
     assert_eq!(ids, vec![1, 9], "render reordered by priority:\n{out}");
 }
 
-/// `P4` is the level where nothing is being paid today, so it is the one a
-/// session gains least from being shown every turn. It stays OPEN and stays
-/// in `task list` — counted, not shelved.
-///
-/// Measured 2026-08-17, before this: the `life` session's digest was 1112 bytes
-/// of which **100%** was its P3/P4 tail — 12 of its 13 open tasks were P4.
+/// `P4` is counted, not recited — see `digest::parked`. It stays OPEN and stays
+/// in `task list`.
 #[test]
 fn a_p4_is_counted_and_not_recited() {
     let mut parked = held(2, "whole-house inventory, some day", "life");
@@ -372,9 +345,8 @@ fn a_p4_is_counted_and_not_recited() {
     );
 }
 
-/// Rule 2 of every trim in this service: the party paying for it is told it
-/// happened. The head still counts the parked task, so the discrepancy between
-/// "2 open" and one line has to be explained on the page where it appears.
+/// Every trim is counted: the head still counts the parked task, so "2 open"
+/// above one line is explained where it appears.
 #[test]
 fn what_is_parked_is_said_and_still_counted() {
     let mut parked = held(2, "some day", "life");
@@ -386,10 +358,7 @@ fn what_is_parked_is_said_and_still_counted() {
     assert!(out.contains("task list"), "no way back to it:\n{out}");
 }
 
-/// ⚠ **The effective rank, not the chosen one** — the same rule
-/// `focus::breaks_through` follows. A deadline inside the week raises a task to
-/// `P0` without anything being written, and reading `priority` here would let
-/// this trim bury exactly the task the escalation exists to raise.
+/// ⚠ **The effective rank, not the chosen one**, as in `focus::breaks_through`.
 #[test]
 fn a_parked_task_a_deadline_has_raised_is_recited() {
     let mut raised = held(2, "parked until the date got close", "life");
@@ -402,9 +371,7 @@ fn a_parked_task_a_deadline_has_raised_is_recited() {
     );
 }
 
-/// Overdue is its own arm rather than a consequence, for the reason
-/// `breaks_through` gives: a task can be past its date with no rank at all, and
-/// a deadline that has already passed is the one thing that must not go quiet.
+/// Overdue is its own arm, for the reason `breaks_through` gives.
 #[test]
 fn a_parked_task_past_its_date_is_recited() {
     let mut late = held(2, "parked and now late", "life");
@@ -414,9 +381,8 @@ fn a_parked_task_past_its_date_is_recited() {
     assert!(out.contains("**#2**"), "an overdue task went quiet:\n{out}");
 }
 
-/// A focus is a session saying what it is working on, in so many words. If it
-/// names a parked task then that is the task it means, and a default trim must
-/// not overrule something typed on purpose.
+/// A task the focus names is recited even when parked: a default must not
+/// overrule something typed on purpose.
 #[test]
 fn a_focus_that_names_a_parked_task_shows_it() {
     let mut parked = held(2, "some day, but today", "life");
@@ -432,9 +398,8 @@ fn a_focus_that_names_a_parked_task_shows_it() {
     );
 }
 
-/// The trim costs nothing on the sessions that have no parked work, which is
-/// most of them. Same argument as the priority marker above: stated as a
-/// number, because this file's assertions are about cost.
+/// The trim costs nothing on a session with no parked work, stated as a number
+/// because this file's assertions are about cost.
 #[test]
 fn nothing_parked_costs_nothing() {
     let mut ordinary = held(1, "ordinary work", "health");
@@ -447,12 +412,8 @@ fn nothing_parked_costs_nothing() {
     assert_eq!(out.lines().count(), 2, "{out}");
 }
 
-/// A session carrying 49 recited lines pays for all 49 on every turn and is
-/// working on two of them. `focus` is the only thing in the service that lets
-/// it say which two, and until this existed the digest never named it: the
-/// feature was reachable only from `task focus --help`, which nothing prompts
-/// anybody to run. Measured across every transcript on the machine, `focus`
-/// with real ids appeared in one episode, by one session, ever.
+/// A session paying for many recited lines is told `focus` exists — reachable
+/// only from `--help`, it goes unused.
 #[test]
 fn a_session_carrying_too_much_is_told_focus_exists() {
     let many: Vec<Task> = (1..=FOCUS_HINT_LINES as u64 + 1)
@@ -462,10 +423,7 @@ fn a_session_carrying_too_much_is_told_focus_exists() {
     assert!(out.contains("task focus"), "no hint at the floor:\n{out}");
 }
 
-/// The header is the one line every session pays for on **every** turn, and
-/// this module's rule is to resist growing it. A conditional line is the only
-/// defensible form: it must cost exactly nothing on the sessions below the
-/// floor, which is most of them.
+/// The hint is a conditional line that costs exactly nothing below the floor.
 #[test]
 fn a_session_below_the_floor_pays_nothing_for_the_hint() {
     let few: Vec<Task> = (1..=FOCUS_HINT_LINES as u64)
@@ -478,10 +436,8 @@ fn a_session_below_the_floor_pays_nothing_for_the_hint() {
     );
 }
 
-/// ⚠ **What the session HOLDS, not what the page shows.** The pile is a
-/// handover channel with a different denominator, capped at `PILE_LINES` and
-/// charged to everybody — and `focus` is not the remedy for it. Counting it
-/// here would tell a session with three of its own to go and focus.
+/// ⚠ **What the session HOLDS, not what the page shows** — see
+/// `digest::FOCUS_HINT_LINES`.
 #[test]
 fn the_pile_does_not_push_a_session_over_the_floor() {
     let mut tasks: Vec<Task> = (1..=FOCUS_HINT_LINES as u64)
@@ -495,9 +451,8 @@ fn the_pile_does_not_push_a_session_over_the_floor() {
     );
 }
 
-/// A task the digest did not recite is one the session is not paying for, so it
-/// cannot be part of the argument that it is paying too much. This is what makes
-/// the floor a statement about cost rather than about backlog size.
+/// A task the digest did not recite costs the session nothing, so the floor is
+/// about cost, not backlog size.
 #[test]
 fn what_was_never_recited_does_not_count_toward_the_floor() {
     let mut tasks: Vec<Task> = (1..=FOCUS_HINT_LINES as u64)
@@ -515,9 +470,8 @@ fn what_was_never_recited_does_not_count_toward_the_floor() {
     );
 }
 
-/// Telling a session that has already focused to focus is noise, and worse, it
-/// contradicts the notice directly above it — which says how to *end* the thing
-/// the hint would be recommending.
+/// Never beside a focus, whose notice says how to *end* what the hint
+/// recommends.
 #[test]
 fn a_session_that_has_already_focused_is_not_told_to() {
     let many: Vec<Task> = (1..=FOCUS_HINT_LINES as u64 + 1)
@@ -537,11 +491,9 @@ fn a_session_that_has_already_focused_is_not_told_to() {
 
 /// The marker that makes a critique unignorable, in the one channel that repeats.
 ///
-/// ⚠ **This module argues that a doc cannot win an argument with a per-turn
-/// reminder, and that cuts both ways.** A density read's findings used to be the
-/// tail of a successful edit: said once, to a session in the middle of something
-/// else, and gone with its scrollback. Of the 43 tasks read more than once in
-/// the 5.6 days to 2026-08-29, 28 only ever grew.
+/// ⚠ **A doc cannot win an argument with a per-turn reminder, and that cuts
+/// both ways**: findings said once, to a session busy with something else, are
+/// read past.
 mod sprawl {
     use super::*;
 

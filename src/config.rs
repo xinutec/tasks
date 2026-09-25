@@ -1,9 +1,8 @@
 //! Runtime configuration from the environment.
 //!
-//! Auth is *inert unless configured* (the memview/recall pattern): the
-//! Nextcloud login wall activates only when `SESSION_SECRET` +
-//! `NC_CLIENT_ID` + `NC_CLIENT_SECRET` are all set, so local dev on the Mac
-//! serves open and only the isis deployment raises the wall.
+//! Auth is *inert unless configured*: the Nextcloud login wall rises only when
+//! `SESSION_SECRET` is set (and then the rest of [`AuthConfig`] is required),
+//! so local dev serves open and only the deployment raises the wall.
 
 use anyhow::{Context, Result};
 
@@ -22,11 +21,10 @@ pub struct Config {
     /// The shared secret a Claude session presents to act on its own tasks.
     ///
     /// ⚠ **It authenticates the machine, not the session.** Every session on
-    /// the Mac reads the same value out of the same file, so one holding it can
-    /// act as another by declaring a different `X-Session-Id`. That is not a
-    /// boundary being lost — they run as one user on one machine and can read
-    /// each other's transcripts anyway — but it must not be described as
-    /// per-session authentication, because a later change might rely on that.
+    /// the Mac reads the same file, so one can act as another by declaring a
+    /// different `X-Session-Id`. No boundary is lost — they run as one user and
+    /// can read each other's transcripts anyway — but it must never be relied on
+    /// as per-session authentication.
     ///
     /// None → the agent API is closed entirely, which is what a browser-only
     /// deployment wants and what the tests use to prove the wall exists.

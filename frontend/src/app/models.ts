@@ -13,9 +13,9 @@
 
 /** Where a task stands. Mirrors `tasks::types::Status`.
  *
- *  Two open states and two ways out: `dropped` is a task closed without being
- *  done — overtaken, obsolete, decided against — and it is a separate word from
- *  `done` so that no list credits anybody with work nobody did. */
+ *  Two open states and two ways out: `dropped` is closed without being done —
+ *  overtaken, obsolete, decided against — so no list credits anybody with work
+ *  nobody did. */
 export type Status = 'open' | 'doing' | 'done' | 'dropped';
 
 /** Who holds a task. Mirrors `tasks::types::AssigneeKind`. */
@@ -23,13 +23,10 @@ export type AssigneeKind = 'nobody' | 'person' | 'session';
 
 /** How urgent, when somebody has said. Mirrors `tasks::types::Priority`.
  *
- *  ⚠ **Absence is NOT a sixth member and must not be given one.** Almost every
- *  task is unranked and always will be — there were 700-odd rows the day this
- *  was added and none of them were going to be triaged — so a default would
- *  have all of them assert something nobody said. An unranked task sorts where
- *  `P2` does, which is what lets `P3` and `P4` mean *below the untriaged*
- *  rather than *above it*. The backend does that sorting; nothing here
- *  reorders. */
+ *  ⚠ **Absence is NOT a sixth member and must not be given one**: most tasks
+ *  are unranked, and a default would have them all assert something nobody
+ *  said. An unranked task sorts where `P2` does, so `P3` and `P4` sit *below*
+ *  the untriaged. The backend sorts; nothing here reorders. */
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3' | 'P4';
 
 export interface Assignee {
@@ -50,19 +47,17 @@ export interface Task {
   /**
    * The day it has to be done by, `YYYY-MM-DD`. Absent on almost everything.
    *
-   * ⚠ **It does not reorder anything** — the backend sorts by priority and this
-   * is not part of that. A deadline is evidence for a rank, not a competing
-   * answer to *what next*, so do not sort by it here either.
+   * ⚠ **Do not sort by it here.** A deadline is evidence for a rank; inside the
+   * last week the backend raises it — see `escalated_to`.
    */
   due?: string;
   /**
    * What this sorts as instead, when a near deadline has raised it — always
    * `'P0'` when present, absent otherwise.
    *
-   * ⚠ **Draw `escalated_to ?? priority`, and do not work the rule out here.**
-   * The week (less than seven days) and the level both live in SQL, so this
-   * carries the VALUE rather than a flag. A client that recomputed it would be
-   * a second copy of the rule and a second opinion about what day it is.
+   * ⚠ **Draw `escalated_to ?? priority`, and do not work the rule out here**:
+   * the window and the level live in SQL, and a client recomputing it would be
+   * a second opinion about what day it is.
    *
    * ⚠ **`priority` still holds what somebody actually chose** — nothing is
    * written when a deadline comes close. This is derived on every read.
@@ -90,11 +85,8 @@ export interface Task {
   /**
    * How many lines the body prints as, `0` when there is none.
    *
-   * ⚠ **`detailed` says whether there is prose; this says how much.** It exists
-   * for the CLI, where a reader pipes `task show` to `head` and a truncated
-   * read looks exactly like a complete one. The app scrolls, so it has no such
-   * problem — carried here because the wire carries it, not because a view
-   * needs to draw it.
+   * For the CLI, where a read piped to `head` otherwise looks complete. Carried
+   * here because the wire carries it; no view needs to draw it.
    */
   body_lines: number;
   /**
@@ -118,12 +110,8 @@ export interface Task {
 }
 
 /**
- * A task after a write, and what the write actually moved.
- *
- * `changed` holds the `task_events` kinds written — `status`, `assigned`,
- * `edited` — and is empty when the call moved nothing. A no-op is often the
- * right answer, so it is reported rather than refused; what it must not do is
- * answer exactly like a write that worked.
+ * A task after a write, and what the write actually moved: `changed` holds the
+ * `task_events` kinds written, and is empty when the call moved nothing.
  */
 export interface Updated extends Task {
   changed: string[];
@@ -131,21 +119,15 @@ export interface Updated extends Task {
    * What this write overwrote, present only when it moved prose.
    *
    * Absent — not null — for a change that only moved a status, a rank or a
-   * holder, which is the shape the server sends and the reason this is
-   * optional rather than nullable.
+   * holder.
    */
   replaced?: Replaced;
 }
 
 /**
- * The provenance of text an edit landed on: when it was last written, by whom,
- * and how much of it there was before and after.
- *
- * ⚠ **It exists to be shown at the moment of the write, and it refuses
- * nothing.** A body rewritten from a stale copy looks exactly like a correct
- * edit until somebody sees that the text being replaced was written by another
- * holder more recently than the writer believed. `task undo <id>` is the
- * remedy; the API route behind it is `GET /api/tasks/{id}/previous`.
+ * The provenance of text an edit landed on — shown at the moment of the write,
+ * refusing nothing. See `tasks::types::Replaced`. The remedy is
+ * `GET /api/tasks/{id}/previous` and a write-back.
  */
 export interface Replaced {
   at: string;
@@ -153,18 +135,8 @@ export interface Replaced {
   /** Body length before and after, in characters. */
   was: number;
   now: number;
-  /**
-   * How much this body has grown, in characters, since the last edit that made
-   * it smaller — this one included.
-   *
-   * ⚠ **Neither a size nor a count of edits.** An absolute size cannot tell a
-   * long body somebody has just rewritten from a short one that has doubled
-   * since anyone read it, and a count of edits cannot tell three typo fixes
-   * from three two-thousand-character dumps. What this measures is the text
-   * nobody has read as a whole, which is the text that goes stale in place.
-   *
-   * Zero on the edit that consolidates, because that edit is the answer.
-   */
+  /** Characters grown since the last edit that made the body smaller — this one
+   *  included. Zero on the edit that consolidates. */
   accreted: number;
 }
 
@@ -179,18 +151,15 @@ export interface TaskDetail extends Task {
   body: string;
   body_html: string;
   events: TaskEvent[];
-  /** Whether an edit has replaced text here, so there is a version to put back.
-   *  Answered by the server so the page need not fetch a whole previous body to
-   *  decide whether to offer the button. */
+  /** Whether an edit has replaced text here, so there is a version to put back —
+   *  so the page need not fetch a whole previous body to offer the button. */
   restorable: boolean;
   /**
    * What a model last said about this body, verbatim, when it had something to
    * say. Absent when nothing is outstanding.
    *
-   * ⚠ **Kept because it used to evaporate.** It was printed once, as the tail
-   * of a successful edit, to whoever happened to be making that edit — and then
-   * it was gone. Here it is read by whoever opens the task, which is who it was
-   * always addressed to.
+   * Kept so whoever opens the task reads it, not only the session whose edit
+   * prompted it.
    */
   sprawl_said?: string | null;
 }
@@ -222,11 +191,9 @@ export interface Session {
 /**
  * One party's share of the work, as `/api/holders` answers.
  *
- * ⚠ **`total` counts finished work, and that is why this is not `Session`.**
- * `open` alone says who is busy and nothing about who has done anything, because
- * a task leaves `open` the moment it is finished — so a session that has cleared
- * its plate reads as an idle one. Both numbers come from the backend rather than
- * being derived here: two figures that must agree should be counted once.
+ * ⚠ **`total` counts finished work, which is why this is not `Session`**: with
+ * `open` alone, a cleared plate reads as an idle one. Both come from the
+ * backend, counted once.
  */
 export interface Holder {
   /** The same closed vocabulary as an assignee's. */
@@ -247,10 +214,9 @@ export interface Me {
 /**
  * A task being filed.
  *
- * A REQUEST body: this side serialises it and Rust deserialises it, which is the
- * one place the mirror runs backwards. Omitting `assignee` is what "leave it in
- * the pile" means, so it is optional — see the note on `NewTask` in
- * `tasks/repo.rs` for how that is stated on the other side.
+ * A REQUEST body: this side serialises it and Rust deserialises it, so the
+ * mirror runs backwards. ⚠ Omitting `assignee` files the task to the FILER, not
+ * the pile — see `NewTask` in `tasks/repo.rs`.
  */
 export interface NewTask {
   subject: string;
@@ -258,12 +224,9 @@ export interface NewTask {
   /**
    * Whether the filer let the duplicate check run.
    *
-   * ⚠ **Required here, and said rather than left out.** The service refuses a
-   * filing that says `false` unless that session has just been refused this
-   * exact subject — `--no-duplicate-check` may overrule a refusal, never
-   * pre-empt one. Rust defaults an absent key to `true` so that an older client
-   * is not silently exempted, but this side has no reason to lean on that: the
-   * web UI cannot skip the check, so it says `true` and means it.
+   * ⚠ **Required here, and said rather than left out.** The service refuses
+   * `false` unless that session was just refused this exact subject. The web UI
+   * cannot skip the check, so it says `true`.
    */
   checked: boolean;
   /**
@@ -274,17 +237,9 @@ export interface NewTask {
    * * a level — judged.
    * * `null` — **unassessed**: nobody has judged this yet.
    *
-   * Both sort at `P2`. What the pair buys is that `P2` means *somebody looked
-   * and called it ordinary*, where it used to be indistinguishable from
-   * *nobody looked*. Send `null` rather than omitting the key — omitting it is
-   * a **400** naming both answers, not a default:
-   *
-   * > `priority` is required: "P0" to "P4" if you have judged it, or null for
-   * > unassessed if nobody has. Leaving the key out is not a default.
-   *
-   * ⚠ **A cached bundle of this file older than `5dce9b6` is the one client
-   * that really hits it**, which is the reason that message says as much as it
-   * does — see `src/wire.rs`.
+   * Both sort at `P2`; what the pair buys is that `P2` means *somebody looked
+   * and called it ordinary*. Send `null` rather than omitting the key —
+   * omitting it is a **400** naming both answers, not a default (`src/wire.rs`).
    */
   // dev-lint: allow-wire-mirror the Rust side is `Ranking`, not `Option<Priority>`, and the rule reads the null arm off the TYPE. `Ranking` is a hand-written Deserialize whose whole purpose is that `null` is legal and ABSENCE is not — the one shape an Option cannot express. Null is right here; the rule cannot see it.
   priority: Priority | null;
@@ -295,12 +250,9 @@ export interface NewTask {
    * Why this is nobody's — **required when `assignee` is the pile, refused
    * otherwise**, so the two travel together or not at all.
    *
-   * ⚠ **Filing to the pile was corrected 47 times out of 47** (#1334, every
-   * real filing scanned 2026-09-03), so it is now argued for rather than
-   * typed. Omitting it with a `nobody` assignee is a **400**, and sending it
-   * alongside a real holder is a **400** too: a reason for the pile says
-   * nothing true about a task on somebody's plate. Whitespace is not an
-   * answer.
+   * ⚠ **Filings to the pile were almost always corrected later**, so it is
+   * argued for rather than typed. Omitted with a `nobody` assignee, or sent
+   * with a real holder, it is a **400**. Whitespace is not an answer.
    */
   spare?: string;
 }
@@ -329,12 +281,9 @@ export interface Change {
    *  sent at once, and the same rules apply. */
   append?: string;
   status?: Status;
-  /** Absent means leave it alone, so this cannot UNRANK a task — the same rule
-   *  every other field here follows. Ranking it again is the correction. */
+  /** This cannot UNRANK a task; ranking it again is the correction. */
   priority?: Priority;
-  /** The blockers as they should now be — the whole set, not an addition. An
-   *  empty array is how a task stops being blocked, which is why there is no
-   *  separate unblock flag: `[]` is a value, not an absence. */
+  /** The blockers as they should now be — the whole set. `[]` unblocks. */
   blocked_on?: number[];
   /** Set the day it has to be done by. */
   due?: string;

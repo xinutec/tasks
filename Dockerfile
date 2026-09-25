@@ -63,11 +63,9 @@ RUN groupadd --gid 65532 tasks \
     && useradd --uid 65532 --gid tasks --no-create-home --shell /usr/sbin/nologin tasks
 WORKDIR /app
 COPY --from=backend /app/target/release/tasks /usr/local/bin/tasks
-# ⚠ **The `task` CLI is deliberately NOT copied in.** It was, on the argument
-# that a `kubectl exec` could then read a task when the Mac is unreachable — and
-# that argument is wrong: the CLI authenticates with `TASKS_TOKEN`, which this
-# pod has no business holding (it is the thing the token authenticates *to*), so
-# an exec'd copy could do nothing but print the error saying so.
+# ⚠ **The `task` CLI is deliberately NOT copied in.** It authenticates with
+# `TASKS_TOKEN`, which this pod has no business holding — it is what the token
+# authenticates *to* — so an exec'd copy could only print the error saying so.
 COPY --from=frontend /fe/dist/tasks-web/browser ./public
 ENV STATIC_DIR=/app/public \
     BIND_ADDR=0.0.0.0:8092

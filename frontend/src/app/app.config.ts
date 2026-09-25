@@ -16,12 +16,11 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { routes } from './app.routes';
 import { authInterceptor } from './auth';
 
-// Angular defaults LOCALE_ID to `en-US` whatever the browser is set to, so every
-// `| date` rendered US dates to a UK reader. It is a different knob from
-// `toLocaleString()`, which follows the browser and was already right on a phone
-// — the two can disagree inside one render. Registering the locale data is
-// required as well as naming the id: without it the pipe throws on any format
-// needing month or day names.
+// Angular defaults LOCALE_ID to `en-US` whatever the browser is set to, so
+// `| date` would render US dates to a UK reader — a different knob from
+// `toLocaleString()`, which follows the browser, so the two can disagree in one
+// render. The locale data must be registered too, or the pipe throws on month
+// and day names.
 registerLocaleData(localeEnGb);
 
 export const appConfig: ApplicationConfig = {

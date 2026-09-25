@@ -11,22 +11,17 @@ import { filter } from 'rxjs';
 export type { UpdateOutcome };
 
 /** Marks that we have already auto-reloaded out of an unrecoverable service worker
- *  state. Session-scoped so it survives that very reload. Unchanged from when this
- *  logic lived here, so a tab mid-recovery across the upgrade still sees its mark. */
+ *  state. Session-scoped so it survives that very reload. Keep the key stable, so a
+ *  tab mid-recovery across an upgrade still sees its mark. */
 const RECOVERY_KEY = 'tasks.sw-recovery-attempted';
 
 /**
  * Self-update — the Angular wiring. The rules live in
- * `@xinutec/ui-harness/sw-updates`; this is the adapter.
+ * `@xinutec/ui-harness/sw-updates`, unit-tested there; this is the adapter.
  *
- * This list is reachable from a phone, so the shell is cached and the app opens
- * without waiting for the network. ⚠ **ngsw alone would then cache a build that
- * never learns a newer one exists** — a task list showing yesterday's state
- * indefinitely, which is worse than showing none because it looks fine. That is
- * why the update path arrives in the same change (dev-lint#1384).
- *
- * The policy is shared and unit-tested against a fake; what is here is the
- * Angular wiring, which is the part a unit test cannot reach.
+ * The shell is cached so the app opens without the network. ⚠ **ngsw alone
+ * would then cache a build that never learns a newer one exists** — yesterday's
+ * list, indefinitely, looking fine.
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdates {

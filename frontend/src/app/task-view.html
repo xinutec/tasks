@@ -97,11 +97,9 @@
         }
       </mat-menu>
 
-      <!-- Dropping is behind a menu rather than beside the three status
-           buttons, and not to hide it: those three are a progression a task
-           moves along, and this is the other exit. A fourth button would also
-           have pushed the row past the edge of a phone, which the layout
-           harness would have caught and the shape would still have been wrong. -->
+      <!-- Dropping is behind a menu, not to hide it: the three status buttons
+           are a progression a task moves along, and this is the other exit. A
+           fourth button would also push the row past a phone's edge. -->
       <button
         mat-icon-button
         [matMenuTriggerFor]="more"
@@ -111,11 +109,9 @@
         <mat-icon>more_vert</mat-icon>
       </button>
       <mat-menu #more="matMenu">
-        <!-- "not done" rather than nothing: the verb alone reads as *delete* to
-             anybody who has not been told otherwise, and this deletes nothing.
-             Longer wordings than this ran the label flush to the panel's edge
-             on a phone, which the overflow check passes and a screenshot does
-             not — the menu is right-anchored, so the text is what sizes it. -->
+        <!-- "not done" rather than nothing: the verb alone reads as *delete*, and
+             this deletes nothing. The menu is right-anchored, so the label sizes
+             it — longer wordings run flush to the panel's edge on a phone. -->
         <button mat-menu-item [disabled]="t.status === 'dropped'" (click)="drop()">
           <mat-icon>cancel</mat-icon>
           <span>Drop it — not done</span>
@@ -134,8 +130,7 @@
     }
 
     <!-- ⚠ **Under the body, because it is about the body.** Shown on every open
-         until an edit makes the body smaller — the shape this replaced said it
-         once, to whoever ran an unrelated edit, and then lost it. -->
+         until an edit makes the body smaller. -->
     @if (t.sprawl_said) {
       <section class="sprawl">
         <h2>A model read this body, and it is a guess</h2>
@@ -149,9 +144,7 @@
       @if (previous(); as was) {
         <section class="previous">
           <h2>Before the last edit</h2>
-          <p class="whose">
-            Replaced {{ was.at | date: 'd MMM HH:mm' }} by {{ was.actor }}
-          </p>
+          <p class="whose">Replaced {{ was.at | date: 'd MMM HH:mm' }} by {{ was.actor }}</p>
           <p class="was-subject">{{ was.subject }}</p>
           <pre class="was-body">{{ was.body }}</pre>
           <div class="row">

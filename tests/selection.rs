@@ -4,8 +4,7 @@
 //! route that accepted `pile=true` and ignored it would keep every one of these
 //! green while the pile silently vanished from every session's list. The other
 //! half is `tests/digest_route.rs`, which drives `/api/tasks` through the real
-//! router; ablating `or_unheld` there fails exactly one test and leaves these
-//! five untouched, which is the point of having both.
+//! router.
 
 use tasks::tasks::selection::list_query;
 
@@ -31,10 +30,8 @@ fn joined(query: Vec<(String, String)>) -> String {
 
 #[test]
 fn a_bare_list_is_about_the_caller() {
-    // The whole point. Before this, a bare `task list` sent no session at all
-    // and the service answered with every open task there is — 135 lines,
-    // 12,804 bytes, measured — into the context of a conversation that could
-    // act on one of them.
+    // The whole point: without a session the service answers with every open
+    // task there is, into a conversation that can act on few of them.
     assert_eq!(
         query(false, false, false, Some("sess-1")),
         "session=sess-1&pile=true"
@@ -78,13 +75,10 @@ fn without_an_id_there_is_no_own_to_narrow_to() {
     assert!(list_query(false, true, false, false, false, None, None).is_err());
 }
 
-/// The fourth question, which had no name until 2026-08-10.
+/// The fourth question: what is going spare.
 ///
-/// ⚠ **A view that does not exist is answered anyway.** Wanting to know what
-/// was going spare, a session filtered `--all --json` by hand on a field it
-/// guessed — `session`, which is not in the shape — and every row matched,
-/// so it reported **137** in the pile against a real **5**, to Pippijn, before
-/// anybody checked. The flag is the fix; that number is why it is worth one.
+/// ⚠ **A view that does not exist is answered anyway** — by hand-filtering
+/// `--all --json` on a guessed field that matches every row.
 #[test]
 fn the_pile_can_be_asked_for_on_its_own() {
     assert_eq!(pile_query(false, Some("sess-1")), "unheld=true");
@@ -129,9 +123,7 @@ fn the_pile_is_not_the_widening_that_comes_with_a_bare_list() {
 
 /// ⚠ **A person and a session are different COLUMNS**, and getting that wrong
 /// answers with silence rather than an error: `person=hardware` matches nothing
-/// because `hardware` is a session. Three attempts in the transcripts —
-/// `--to pippijn`, `--assignee hardware`, `--pippijn` — and the tool answered
-/// none of them.
+/// because `hardware` is a session.
 #[test]
 fn asking_for_one_holder_asks_the_right_column() {
     use tasks::tasks::selection::Holder;
@@ -207,11 +199,9 @@ fn handed_out_query(done: bool, session: Option<&str>) -> String {
 
 /// The fifth question, and the only one that is not about the holder.
 ///
-/// ⚠ **A routing session cannot see the work it routes.** The digest shows a
-/// session its own tasks and the pile and never another conversation's — which
-/// is right, and means every task handed to `memview` leaves the router's sight
-/// the moment it is assigned. `--to memview` answers what memview carries from
-/// ALL filers; nothing answered what this session put there.
+/// ⚠ **A routing session cannot otherwise see the work it routes**: the digest
+/// never shows another conversation's tasks, and `--to <holder>` answers what
+/// it carries from ALL filers.
 #[test]
 fn what_i_handed_out_is_asked_for_by_filer_not_by_holder() {
     assert_eq!(handed_out_query(false, Some("sess-1")), "handed_out=sess-1");

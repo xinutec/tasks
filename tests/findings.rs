@@ -1,18 +1,13 @@
 //! Falsifying a review finding, with the two ways the instrument itself failed.
 //!
-//! On 2026-09-06 fifty agents read all 712 closed bodies and returned 235
-//! findings; 81 did not survive this check. The single requirement that did the
-//! work was making a supersession claim quote the LATER text: it rejected **51
-//! of 56** stale-layer claims, 28 of them because the "resolving" text sits
-//! BEFORE the text it supposedly supersedes.
+//! The requirement that does the work is making a supersession claim quote the
+//! LATER text, which rejects most stale-layer claims a review makes — many
+//! because the "resolving" text sits BEFORE the text it supersedes.
 //!
-//! ⚠ **The tests here are the instrument's own mistakes, not hypotheticals.**
-//! The first version of this check searched only the body for a `subject-stale`
-//! quote and rejected 130 correct findings, because a subject is not in the
-//! body. The second tested repetition with `count(quote) > 1` and called all 14
-//! repetition findings false, because an agent quotes a lead-in that appears
-//! once wrapped around a passage that appears twice. Both were caught by
-//! reading, not by the check — which is the argument for pinning them.
+//! ⚠ **Two tests pin the instrument's own mistakes**: searching only the body
+//! rejects every correct `subject-stale` finding, and counting occurrences of
+//! a whole quote calls every repetition false. Both were caught by reading, not
+//! by the check.
 
 use tasks::tasks::findings::{Finding, Kind, Reason, falsify};
 
@@ -53,10 +48,9 @@ fn a_supersession_needs_the_later_text_quoted() {
     assert!(v.rejected_for(Reason::NoResolvingQuote), "{v:?}");
 }
 
-/// ⚠ **The check that did the work.** 28 of 56 stale-layer claims put the
-/// resolving text BEFORE the problem text, which is not a supersession — it is
-/// the reading order reversed, and it is what a model produces when it has
-/// pattern-matched rather than read.
+/// ⚠ **The check that does the work.** Resolving text BEFORE the problem text
+/// is not a supersession but the reading order reversed — what a model
+/// produces when it has pattern-matched rather than read.
 #[test]
 fn resolving_text_that_comes_first_is_refused() {
     let v = falsify(
@@ -85,9 +79,8 @@ fn a_real_supersession_survives() {
     assert!(v.supported(), "{v:?}");
 }
 
-/// ⚠ **Instrument failure 1**, which rejected 130 correct findings: the subject
-/// is not part of the body, so a `subject-stale` quote must be looked for in
-/// both.
+/// ⚠ **Instrument mistake**: the subject is not part of the body, so a
+/// `subject-stale` quote must be looked for in both.
 #[test]
 fn a_subject_quote_is_looked_for_in_the_subject() {
     let subject = "the guard is missing on every write path";
@@ -98,9 +91,9 @@ fn a_subject_quote_is_looked_for_in_the_subject() {
     );
 }
 
-/// ⚠ **Instrument failure 2**: counting occurrences of the whole quote said all
-/// 14 repetition findings were false. The agent quotes one instance plus a
-/// lead-in that appears once. So a repetition finding must name BOTH.
+/// ⚠ **Instrument mistake**: counting occurrences of the whole quote calls
+/// every repetition false, because a model quotes one instance plus a lead-in
+/// that appears once. So a repetition finding must name BOTH.
 #[test]
 fn repetition_must_name_both_occurrences() {
     let twice = "Run it twice.\nsome other line\nRun it twice.\n";

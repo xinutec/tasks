@@ -26,7 +26,7 @@
         task = pkgs.rustPlatform.buildRustPackage {
           pname = "task";
           version = "0.1.0";
-          # Only what compiling needs. `frontend/` is 200 MB of node_modules on a
+          # Only what compiling needs: `frontend/` carries node_modules on a
           # working machine, and taking the whole tree would rebuild the CLI
           # every time a stylesheet moves.
           src = pkgs.lib.fileset.toSource {
@@ -42,13 +42,9 @@
           };
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "--bin" "task" ];
-          # ⚠ The test suite is not the check here, and pretending otherwise
-          # would be worse than skipping it: `tests/tasks_db.rs` needs a real
-          # MariaDB, which the build sandbox has no way to supply, and it fails
-          # rather than skips *on purpose*. The gate (`nix run ../dev-lint#gate`)
-          # supplies one and is what actually gates this repo.
-          # The gate's "tests (against a real MariaDB)" row runs this suite where a
-          # database exists; the sandbox cannot supply one.
+          # ⚠ The test suite is not the check here: the DB tests need a real
+          # MariaDB, which the build sandbox cannot supply, and they fail rather
+          # than skip on purpose. The gate's tests row supplies one.
           # dev-lint: allow-docheck-false tests/tasks_db.rs needs a real MariaDB
           doCheck = false;
           meta.mainProgram = "task";

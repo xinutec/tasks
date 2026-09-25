@@ -1,9 +1,6 @@
 //! The telemetry label is the endpoint's security boundary, not a cosmetic cap.
 //!
-//! A label is verbatim UI text and it is written into a log line as `label=…`.
-//! A newline inside it therefore forges *whole log lines* — including further
-//! `client-event` lines attributed to someone else, or lines that look like they
-//! came from another component. The log stops being the evidence it exists to be.
+//! See `routes::telemetry::one_line` for why.
 
 use tasks::routes::telemetry::one_line;
 

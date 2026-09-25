@@ -1,17 +1,10 @@
 //! What a refused request body says back, driven through the real router.
 //!
-//! ⚠ **A rule the service will not state is half a rule.** `priority` is the one
-//! key a filing may not leave out, and `null` — *unassessed, nobody has judged
-//! this* — is a legal answer to it. Serde's own refusal names the field and
-//! stops: it reads as *you must pick a level*, which is the opposite of the
-//! design, and the escape it never mentions is the whole reason the field is
-//! required rather than defaulted. #724 set the bar on the other side of this —
-//! an unknown holder answers 400, names it, and says how to find a real one.
+//! Why the refusal names the legal answers: see `crate::wire`.
 //!
-//! Who actually reads these: not the CLI (clap refuses first) and not the app
-//! (the button stays disabled), so this is the bare-API path — a hand-written
-//! script, or **a phone still running a pre-`5dce9b6` bundle**, which posts
-//! without the key and gets whatever this file pins.
+//! Who reads these: not the CLI (clap refuses first) and not the app (the
+//! button stays disabled), so the bare-API path — a hand-written script, or a
+//! phone running an old bundle that posts without the key.
 //!
 //! A refused body never reaches the database — an extractor answers before the
 //! handler runs — so these take a lazy pool pointed at nothing, the way
@@ -199,13 +192,9 @@ async fn filing_a_whole_task_still_works() {
 
 /// The response types survive a round trip, with the absent fields absent.
 ///
-/// ⚠ **This is what makes the CLI able to stop working in `serde_json::Value`.**
-/// `Task` and its siblings derived `Serialize` and never `Deserialize`, so the
-/// binary re-derived on raw JSON what the library already had typed — a second
-/// `Status::marker()`, a second effective-rank rule, a third holder label. The
-/// derive is the fix; this is what says it holds for a task whose optional
-/// fields are all absent, which is the ordinary case and the one a missing
-/// `#[serde(default)]` would break.
+/// ⚠ **This is what lets the CLI read typed responses** instead of re-deriving
+/// the library's rules on raw JSON. It pins the ordinary case — every optional
+/// field absent — which a missing `#[serde(default)]` would break.
 mod a_response_comes_back_as_itself {
     use chrono::Utc;
     use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};

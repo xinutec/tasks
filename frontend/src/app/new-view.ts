@@ -16,11 +16,9 @@ import { TasksApi } from './tasks-api';
 /**
  * File a task.
  *
- * ⚠ **The subject field is capped at the length the column is, and says so.**
- * That cap is not tidiness: the subject is the only part of a task that ever
- * reaches a prompt, and it reaches one on every turn for as long as the task is
- * open. The field is where that is cheapest to explain, because it is the moment
- * somebody is about to write an essay into it.
+ * ⚠ **The subject field is capped at the column's length, and says so**: the
+ * subject is the only part of a task that reaches a prompt, every turn, and the
+ * field is where that is cheapest to explain.
  */
 @Component({
   selector: 'app-new-view',
@@ -74,10 +72,9 @@ export class NewView {
   /**
    * Where the new task goes — always stated, never left out.
    *
-   * ⚠ **Absence is no longer the pile.** The service now files a task to
-   * whoever is filing it unless told otherwise, so returning `undefined` for
-   * "nobody" would put every task the form filed onto Pippijn. The pile is a
-   * choice made in the picker and it has to travel as one.
+   * ⚠ **Absence is not the pile**: the service files a task to whoever is
+   * filing it unless told otherwise, so `undefined` for "nobody" would put the
+   * task on Pippijn. The pile is a choice, and travels as one.
    *
    * The one case that still returns nothing is "me" before `/api/me` has
    * answered: there is no id to send, and letting the service infer the person
@@ -109,8 +106,8 @@ export class NewView {
       .create({
         subject,
         body: this.body(),
-        // SENT, always — null for unassessed. Omitting the key is refused by
-        // the service now, and that is the point: it cannot be skipped.
+        // SENT, always — null for unassessed. The service refuses an omitted
+        // key: it cannot be skipped.
         priority,
         assignee: this.assignee(),
         // Sent only with the pile: the service refuses a reason that arrives

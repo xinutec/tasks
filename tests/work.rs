@@ -1,7 +1,7 @@
 //! What is standing in the tracker, counted against a real database.
 //!
-//! ⚠ **Six conditional aggregates in one statement, and every one of them can
-//! be wrong in a way that looks right.** A `SUM(condition)` that never matches
+//! ⚠ **Conditional aggregates in one statement, and every one of them can be
+//! wrong in a way that looks right.** A `SUM(condition)` that never matches
 //! reports 0, which is exactly what an empty tracker reports; a `COUNT(*)` over
 //! a join to `task_blocks` reports edges as tasks; `<= 'P1'` on a string column
 //! is doing lexicographic comparison and works only because `P0` and `P1` sort
@@ -20,9 +20,8 @@ use tasks::tasks::repo::{self, Change, NewTask};
 use tasks::tasks::types::{Actor, Assignee, AssigneeKind, Priority, Ranking, Status};
 use tasks::tasks::work;
 
-/// A session has to exist before it can hold anything — the service refuses an
-/// unknown holder rather than inventing one, which is the same guard that stops
-/// a typo silently parking work where nobody looks.
+/// A session has to exist before it can hold anything: the service refuses an
+/// unknown holder.
 async fn seen(pool: &MySqlPool) {
     tasks::sessions::touch(pool, "s-1", Some("tasks"))
         .await
@@ -230,9 +229,7 @@ async fn a_blocker_that_closed_stops_blocking() {
 
 #[tokio::test]
 async fn the_sprawl_backlog_is_the_number_this_module_was_built_for() {
-    // `0014` put a critique on the task and a mark in every holder's digest.
-    // Whether that works is this count falling, and until now the only way to
-    // ask was a hand-filtered `--all --json`.
+    // Whether the sprawl mark works is this count falling.
     use tasks::tasks::checks::{self, Kind, Outcome, Run};
     let pool = common::fresh_db().await;
     seen(&pool).await;

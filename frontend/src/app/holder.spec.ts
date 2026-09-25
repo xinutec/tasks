@@ -50,14 +50,16 @@ describe('inBucket', () => {
   });
 
   it('does not count another person as mine', () => {
-    expect(inBucket({ kind: 'person', id: 'someone-else' }, parseWho('mine'), 'pippijn')).toBe(false);
+    expect(inBucket({ kind: 'person', id: 'someone-else' }, parseWho('mine'), 'pippijn')).toBe(
+      false,
+    );
   });
 });
 
 describe('one named holder', () => {
   it('shows that session and no other', () => {
-    // #657: `with a session` is every session at once. This is the selection
-    // the app could not make — the one that answers "what is hardware holding".
+    // `with a session` is every session at once; this answers "what is
+    // hardware holding".
     expect(inBucket(named, parseWho('session:sess-1'), 'pippijn')).toBe(true);
     expect(inBucket(unnamed, parseWho('session:sess-1'), 'pippijn')).toBe(false);
     expect(inBucket(nobody, parseWho('session:sess-1'), 'pippijn')).toBe(false);
@@ -107,10 +109,8 @@ describe('parseWho', () => {
   });
 
   it('falls back to everything rather than to nothing', () => {
-    // ⚠ This is the case the old string union got WRONG by construction: the
-    // query parameter was cast to `Who`, so `?who=garbage` was typed as valid,
-    // matched no branch, and returned undefined — an empty list, which on this
-    // screen reads as "no open work" rather than as a bad URL.
+    // ⚠ A cast would type `?who=garbage` as valid and match no branch — an
+    // empty list, which reads as "no open work" rather than as a bad URL.
     for (const raw of [null, undefined, '', 'garbage', 'session', 'session:', 'person:']) {
       expect(parseWho(raw), `${raw}`).toEqual(EVERYTHING);
     }

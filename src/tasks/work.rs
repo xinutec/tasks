@@ -1,19 +1,12 @@
-//! What is standing in the tracker, as numbers — the half fleetwatch never saw.
-//!
-//! ⚠ **The timings collector only ever reported on the TOOL** — command and
-//! check latency, how often a check spoke. None of that describes the work the
-//! tracker exists to hold, so the one question a graph could not answer was *is
-//! the backlog getting better or worse*.
-//!
-//! ⚠ **A fix nobody can chart is a fix nobody can defend keeping.** The sprawl
-//! mark is the case in point: whether it works is exactly one number — does the
-//! flagged count fall — and asking it meant hand-filtering `task list --json`,
-//! which is the shape that reports the pile wrong when the filter is wrong.
+//! What is standing in the tracker, as numbers — the WORK, where the command
+//! and check timings describe the tool. It answers *is the backlog getting
+//! better or worse*, and whether a fix works — does the sprawl count fall —
+//! without anyone hand-filtering `task list --json`.
 //!
 //! ⚠ **One query, and only for the caller handed the reporting job.** This rides
-//! `POST /api/commands`, which every command hits; computing the tally on all of
-//! them would put six aggregates on the hot path of `task list`.
-//! `commands::due_to_report` gates it, as it does the other tallies.
+//! `POST /api/commands`, which every command hits;
+//! [`commands::due_to_report`](crate::tasks::commands::due_to_report) keeps the
+//! aggregates off the hot path of `task list`.
 //!
 //! ⚠ **Counted with the SAME macros the lists sort by.** `still_open!` and
 //! `due_soon!` are shared rather than re-spelled, so a graph and a digest cannot
@@ -37,9 +30,8 @@ pub struct Tally {
     /// Open and doing alike: `still_open!`, so this is the same population every
     /// list in the service counts.
     pub open: u64,
-    /// Held by nobody — the handover channel. Its own line because an empty pile
-    /// and a growing one mean opposite things about whether work is reaching
-    /// somebody, and neither is visible in `open`.
+    /// Held by nobody — the handover channel. An empty pile and a growing one
+    /// mean opposite things, and neither shows in `open`.
     pub unheld: u64,
     /// Past its deadline by the DATABASE's clock, which is the one clock the
     /// digest, the app and the CLI already share.
@@ -50,17 +42,15 @@ pub struct Tally {
     /// Waiting on something still open. Not the same as HAVING a blocker: the
     /// link is kept after a blocker closes, and what ends is its effect.
     pub blocked: u64,
-    /// Carrying a density finding nobody has addressed. The number this module
-    /// was built to make chartable.
+    /// Carrying a density finding nobody has addressed.
     pub sprawling: u64,
 }
 
 /// Count it, in one pass.
 pub async fn standing(pool: &MySqlPool) -> Result<Tally> {
-    // ⚠ **Every `SUM` is CAST to SIGNED, and this is not decoration.** MariaDB
-    // types `SUM()` as DECIMAL and sqlx refuses to decode that into `i64` — at
-    // RUNTIME, on a real row, so it compiles cleanly and fails the first time it
-    // meets a database. `COUNT(*)` is already BIGINT and needs no cast.
+    // ⚠ **Every `SUM` is CAST to SIGNED.** MariaDB types `SUM()` as DECIMAL,
+    // which sqlx refuses to decode into `i64` — at runtime, on a real row.
+    // `COUNT(*)` is already BIGINT.
     //
     // dev-lint: allow-sqlx — a `concat!`ed literal; the macros expand at compile
     // time and nothing here is built from a runtime string.

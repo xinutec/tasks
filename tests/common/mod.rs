@@ -5,10 +5,8 @@
 //! so running them **is** the check on them.
 //!
 //! ⚠ **Unset means failure, not skip.** Returning early after an `eprintln!`
-//! nobody sees is what let a bare `cargo test` in `life` report `ok. 6 passed`
-//! in 0.00s with none of the SQL exercised, looking exactly like a run that had
-//! done the work. A test that silently passes when it cannot run is worse than
-//! no test, because it reports coverage it is not providing.
+//! nobody sees reports `ok` with none of the SQL exercised — coverage that is
+//! not being provided.
 
 use sqlx::MySqlPool;
 

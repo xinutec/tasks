@@ -3,8 +3,7 @@
 //! ⚠ **The wrong answer here is a `200`.** A SPA fallback that hands
 //! `index.html` to a request for `main-ABC123.js` or a `.woff2` is not an error
 //! anywhere: the browser gets HTML where it asked for a font, renders broken
-//! icons, and reports nothing. It was measured on this app's own live
-//! deployment before it was fixed, and memview's console shipped it too.
+//! icons, and reports nothing.
 
 use tasks::routes::spa;
 

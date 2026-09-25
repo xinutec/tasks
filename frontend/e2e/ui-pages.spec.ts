@@ -17,12 +17,9 @@ import { DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
  * read fine in source and only show on a real phone: text that collides, and
  * anything spilling past the right edge.
  *
- * ⚠ **These checks are geometry, and geometry is not the whole of it.** Both
- * defects found on the first render of this app were invisible here: a chip
- * capped so tight that `memview` came out as `memv…`, and a two-line `mat-hint`
- * overflowing Material's one-line subscript slot onto the field below — text
- * over a *border*, which is not text over text. `shots.spec.ts` is the other
- * half, and it is why that one exists.
+ * ⚠ **These checks are geometry, and geometry is not the whole of it**: a
+ * truncated label or text drawn over a border passes them. `shots.spec.ts` is
+ * the other half.
  */
 
 // The checker-checker: fail loudly here if the device preset is ever lost and

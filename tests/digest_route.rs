@@ -2,23 +2,18 @@
 //!
 //! ⚠ **The filter being right is not the same as the route using it.**
 //! `tests/tasks_db.rs` proves `Filter::digest_for` returns a session's own tasks
-//! and the pile. What decides to *call* it is one `match` in `routes::api`, and
-//! that line is the whole property: change it to `Filter::open_in` and every
-//! other test in this repository still passes while every session silently goes
-//! back to carrying every open task there is — 12,371 bytes a turn,
-//! measured, against a few hundred. That is the same shape as the
-//! `status <> 'done'` bug: one edit, nothing fails, the numbers are just wrong.
+//! and the pile. What decides to *call* it is one `match` in `routes::api`:
+//! change it and every other test still passes while every session silently
+//! carries every open task there is.
 //!
 //! So these go through HTTP. `tests/access.rs` drives the router with a lazy
 //! pool because none of its requests reach the database; these do, so they take
 //! the real one.
 //!
-//! `/api/tasks` is here for the same reason and not a different one. `task
-//! list` defaults to the caller's own work plus the pile, and it gets there by
-//! sending `pile=true`; a route that dropped the parameter would answer with a
-//! session's bare plate, the pile would go quiet, and the five unit tests in
-//! `src/bin/task.rs` — which only check what the CLI *sends* — would all still
-//! pass.
+//! `/api/tasks` is here for the same reason: `task list` reaches the caller's
+//! work plus the pile by sending `pile=true`, and a route that dropped the
+//! parameter would pass every test in `tests/selection.rs`, which only check
+//! what the CLI *sends*.
 
 mod common;
 
@@ -307,10 +302,8 @@ async fn all_is_still_reachable() {
 ///
 /// ⚠ **The half `tests/selection.rs` cannot reach.** Those pin that the CLI
 /// sends `handed_out=<id>`; a route that accepted the parameter and dropped it
-/// would keep every one of them green and answer this question with the
-/// caller's own plate — which is the ONE answer that looks most like a correct
-/// one, because a router's own list and the list it handed out are both short
-/// and both plausible.
+/// would keep every one of them green and answer with the caller's own plate —
+/// short and plausible, like the right answer.
 mod handed_out {
     use super::*;
 
@@ -456,12 +449,9 @@ mod handed_out {
 
 /// A request names the session that sent it, without anybody typing it.
 ///
-/// ⚠ **The header is the whole feature, and one line in each handler is what
-/// uses it.** `sessions::touch(&app.db, id, None)` was the shape everywhere
-/// until 2026-08-10, and it still compiles: drop the argument back to `None` and
-/// every other test in this repository passes while every session goes back to
-/// being a uuid. That is the same edit-one-line-fail-nothing shape as the filter
-/// above, so it is tested through HTTP for the same reason.
+/// ⚠ **One line in each handler uses the header**: pass `None` to
+/// `sessions::touch` instead and it still compiles, every other test passes,
+/// and every session is a uuid again. So it is tested through HTTP.
 mod naming {
     use super::*;
 
@@ -580,10 +570,8 @@ mod naming {
 /// The pile, asked for on its own, through the route that answers it.
 ///
 /// ⚠ **Paired with `tests/selection.rs` deliberately.** Those pin that the CLI
-/// SENDS `unheld=true`; a route that parsed it and dropped it on the floor would
-/// leave all four of them green while `task --pile` answered with every task
-/// there is — which is the shape that produced this ticket in the first place:
-/// a filter believed rather than checked, reporting 137 where there were 5.
+/// SENDS `unheld=true`; a route that dropped it would leave them green while
+/// `task list --pile` answered with every task there is.
 mod pile {
     use super::*;
 
@@ -597,7 +585,7 @@ mod pile {
 
     /// ⚠ **Ids are not predictable across the suite.** `fresh_db` does not reset
     /// the counter, so the fourth task filed here is `#4` only in whichever test
-    /// runs first — which passed alone and failed in the run, once.
+    /// runs first.
     async fn pile_tasks(app: &axum::Router, query: &str) -> Vec<serde_json::Value> {
         let res = app
             .clone()
@@ -672,9 +660,7 @@ mod pile {
     /// ⚠ **Not a quirk of this query — a consequence of another rule.** Closing
     /// a task into the pile is refused outright ("a finished task with no holder
     /// reads as done by nobody"), so `closed AND unheld` is a state the service
-    /// will not store. `--pile --done` therefore answers the same as `--pile`,
-    /// and an empty pile stays empty however it is asked. Written after
-    /// asserting the opposite and being told so by the service.
+    /// will not store. `--pile --done` therefore answers the same as `--pile`.
     #[tokio::test]
     async fn the_pile_never_holds_closed_work_however_it_is_asked() {
         let pool = common::fresh_db().await;
@@ -712,11 +698,8 @@ mod pile {
 /// The hourly report, driven through the real router.
 ///
 /// ⚠ **The half the builder's tests cannot reach.** `tests/fleetwatch.rs` pins
-/// that `checks()` turns a work tally into lines, and it would keep doing so
-/// while this route stopped putting one in the payload — the same shape as the
-/// `pile` parameter above, and the same shape as the ULID: both ends
-/// self-consistent, disagreeing with each other. What decides is one field in
-/// one struct literal in `routes::api`.
+/// that `checks()` turns a work tally into lines, and would keep passing if
+/// this route stopped putting one in the payload.
 mod reporting {
     use super::*;
 
@@ -772,8 +755,7 @@ mod reporting {
     #[tokio::test]
     async fn only_one_caller_an_hour_pays_for_it() {
         // ⚠ **The guard that keeps this off the hot path.** Every command posts
-        // here; a report on each would put six aggregates and two windows on the
-        // path of every `task list`. The second caller must get nothing.
+        // here, so the second caller must get nothing.
         let pool = common::fresh_db().await;
         seed(&pool).await;
         let app = app(pool);

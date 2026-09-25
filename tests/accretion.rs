@@ -1,15 +1,7 @@
 //! How much a body has grown since anything last made it smaller.
 //!
-//! ⚠ **The unit is characters since the last consolidation, and both halves of
-//! that matter.** A count of edits cannot tell three typo fixes from three
-//! two-thousand-character dumps, and an absolute size cannot tell a long body
-//! somebody has just rewritten from a short one that has doubled since anyone
-//! read it. Measured 2026-08-23 over nine days of history: 667 body-changing
-//! edits, of which 459 were exact appends or prepends adding 791,400
-//! characters, against 183 rewrites removing 26,593. #982 ran 42 consecutive
-//! growing edits, 2,795 → 100,382 characters, without once being consolidated.
-//!
-//! What this number feeds is advice, never a refusal — see `density.rs`. These
+//! The unit is characters since the last consolidation — see
+//! `types::Replaced::accreted` for why. It feeds advice, never a refusal; these
 //! tests pin the arithmetic, which is the half that has to be exact.
 
 mod common;

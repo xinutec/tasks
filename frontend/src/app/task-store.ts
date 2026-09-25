@@ -5,23 +5,17 @@ import { Holder, Me, Session, Task } from './models';
 import { TasksApi } from './tasks-api';
 
 /**
- * What the whole app knows, held above the views that draw it.
+ * What the whole app knows, held above the views that draw it: the tasks, the
+ * sessions work can be handed to, and who holds what.
  *
- * **Root-provided rather than fetched per component**, which is the rule
- * `DL-ANGULAR-COMPONENT-FETCHED-LIST` states and the reason behind it: a list a
- * component fetches into its own signal is empty again the moment you navigate
- * away and back, so a phone user tapping a task and pressing back watches the
- * list blank and refill. Here it is retained, and a return is instant.
+ * **Root-provided rather than fetched per component**
+ * (`DL-ANGULAR-COMPONENT-FETCHED-LIST`): a component's own list blanks and
+ * refills every time you tap a task and press back. Here a return is instant,
+ * and screens sharing the sessions fetch them once.
  *
- * Two things are held: the tasks, and the sessions work can be handed to. Both
- * are read by more than one screen — the move menu and the file form both need
- * the sessions — so a component-level copy would also mean fetching the same
- * thing twice on one navigation.
- *
- * ⚠ **A failure is withdrawn when the next attempt succeeds.** An error signal
- * that is only ever set stays on screen forever after one dropped request, which
- * is `DL-ANGULAR-ERROR-SIGNAL-STICKY` — and on a phone on a VPN, one dropped
- * request is a normal Tuesday.
+ * ⚠ **A failure is withdrawn when the next attempt succeeds**, or one dropped
+ * request — ordinary on a phone on a VPN — stays on screen forever
+ * (`DL-ANGULAR-ERROR-SIGNAL-STICKY`).
  */
 @Injectable({ providedIn: 'root' })
 export class TaskStore {

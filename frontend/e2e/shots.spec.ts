@@ -5,14 +5,10 @@ import { DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 /**
  * Write one picture out, with the animations finished.
  *
- * ⚠ **`animations: 'disabled'` is not a nicety here — without it these were
- * pictures of a transition.** Playwright fires the screenshot as soon as the
- * element is visible, and Material fades a menu in over ~120 ms, so the move
- * menu was captured at part opacity — legible enough to look deliberate, which
- * is the worst way for a reference image to be wrong — and the overflow menu
- * was captured at nearly zero and came out as a page with no menu on it. The
- * option fast-forwards every CSS animation and transition to its end state
- * first, which is what a person opening the app actually sees.
+ * ⚠ **`animations: 'disabled'` is not a nicety**: Playwright shoots as soon as
+ * the element is visible, and Material fades a menu in, so without it a menu is
+ * captured part-transparent — legible enough to look deliberate — or not at
+ * all.
  */
 async function shot(page: Page, name: string, whole = false): Promise<void> {
   const path = `ui-snapshots/${name}.png`;
@@ -21,12 +17,10 @@ async function shot(page: Page, name: string, whole = false): Promise<void> {
     await page.screenshot({ path, animations: 'disabled' });
     return;
   }
-  // ⚠ **`fullPage: true` was a lie on every screen of this app**, and silently:
-  // it grows the capture to the *document's* scroll height, and this layout
-  // never scrolls the document — `main` scrolls inside a fixed shell, so the
-  // whole history of a task sat 78 px below a picture that claimed to be the
-  // whole page. So the viewport is grown to the content instead, which is the
-  // only thing that makes the scrolled part render at all.
+  // ⚠ **Not `fullPage: true`**, which grows the capture to the *document's*
+  // height: this layout scrolls `main` inside a fixed shell, so a full-page
+  // shot silently cuts the scrolled part off. The viewport is grown to the
+  // content instead.
   const height = await page.evaluate(() => {
     const main = document.querySelector('main');
     if (!main) return document.documentElement.scrollHeight;
@@ -42,14 +36,9 @@ async function shot(page: Page, name: string, whole = false): Promise<void> {
 /**
  * Render every screen and write the picture out, so it can be **looked at**.
  *
- * Not a gate — it asserts nothing and is not in `gate.dhall`. It exists because
- * geometry checks are not sight: the first render of this app passed the whole
- * layout harness while shipping two defects that are obvious in a screenshot and
- * invisible to a measurement. A chip capped at 9ch turned `memview` into
- * `memv…`, failing the one thing a holder chip is for; and a two-line
- * `mat-hint` overflowed Material's one-line subscript slot onto the outline of
- * the field below — text over a *border*, which no text-overlap check will ever
- * call a collision.
+ * Not a gate — it asserts nothing and is not in `gate.dhall`. Geometry checks
+ * are not sight: a truncated chip label, or a hint drawn over a field's border
+ * rather than over text, passes every measurement.
  *
  * `pnpm run shots`, then open `ui-snapshots/`. Same fixtures as the assertions,
  * so the picture is of exactly what was measured.
@@ -81,8 +70,7 @@ test('every screen, at phone width', async ({ page }) => {
   await page.locator('.previous').scrollIntoViewIfNeeded();
   await shot(page, 'undo-viewport');
 
-  // The app bar's own menu, which had never been looked at — and is the reason
-  // the task screen's overflow needed a different glyph.
+  // The app bar's own menu, beside the task screen's differently-glyphed one.
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('menuitem', { name: 'Who has what' }).waitFor();
@@ -105,9 +93,8 @@ test('every screen, at phone width', async ({ page }) => {
 
   // Both ways out of a task: the overflow menu that offers the second one, and
   // what a task looks like once it has been taken. ⚠ Reloaded rather than
-  // pressing Escape — dismissing the move menu leaves its backdrop up through
-  // the close animation, and the next click lands on that instead of on the
-  // button, which produced a "menu" screenshot with no menu in it.
+  // pressing Escape: the move menu's backdrop stays up through the close
+  // animation and takes the next click.
   await page.goto(`/t/${TASKS[1].id}`);
   await page.getByRole('button', { name: 'More actions' }).click();
   await page.locator('.mat-mdc-menu-panel').waitFor();
@@ -125,11 +112,9 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('heading', { name: 'Who has what' }).waitFor();
   await shot(page, 'who', true);
 
-  // #657: the row is the link, and the list it reaches has to SAY which holder
-  // it is showing — none of the four buckets is lit on arrival, so without the
-  // holder's own chip the filter is invisible and an empty result reads as no
-  // work existing. Captured by clicking rather than by visiting the URL, so the
-  // picture is evidence the link exists and points where it says.
+  // The row is the link, and the list it reaches has to SAY which holder it is
+  // showing, or an empty result reads as no work existing. Captured by clicking
+  // rather than visiting the URL, so the picture shows the link works.
   await page.getByRole('link', { name: /memview/ }).click();
   await page.getByRole('button', { name: /memview/ }).waitFor();
   await shot(page, 'who-focused', true);
@@ -146,7 +131,9 @@ test('every screen, at phone width', async ({ page }) => {
   // phone beside nothing else.
   await page.goto('/who');
   await page.getByRole('heading', { name: 'Who has what' }).waitFor();
-  await page.getByRole('button', { name: new RegExp(`Name ${SESSIONS[1].id.slice(0, 8)}`) }).click();
+  await page
+    .getByRole('button', { name: new RegExp(`Name ${SESSIONS[1].id.slice(0, 8)}`) })
+    .click();
   await page.getByRole('textbox').waitFor();
   await shot(page, 'who-renaming', true);
 

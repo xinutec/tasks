@@ -1,15 +1,12 @@
 //! What blocks what, and the rule that carries.
 //!
-//! Pippijn, 2026-08-11: *"If something is blocked, it should get a ticket number
+//! Pippijn: *"If something is blocked, it should get a ticket number
 //! that it's blocked on. It can be the same, but not higher priority than the
 //! thing it's blocked on."* And, separately: *"If A blocks B then B can't block
 //! A."*
 //!
-//! ⚠ **The rule is what makes the link worth storing.** A dependency you can
-//! only read is a note; one that constrains the rank is a check. Claiming *do
-//! this next* about something you cannot start is the single move that inflates
-//! a scale — everything downstream drifts up while the thing actually holding it
-//! sits at `P3` — and it is the one shape a machine can catch.
+//! ⚠ **The rule is what makes the link worth storing**: a dependency you can
+//! only read is a note; one that constrains the rank is a check.
 
 mod common;
 
@@ -86,11 +83,8 @@ fn refusal(e: tasks::error::AppError) -> String {
 
 #[tokio::test]
 async fn a_task_can_wait_on_more_than_one_thing() {
-    // ⚠ The first cut of this feature was ONE column, chosen because no open
-    // task named two blockers. That measured the absence of the feature rather
-    // than the shape of the work — there was nowhere to record even one — and
-    // with a single slot the workaround for a second is prose, which is the
-    // staleness the table replaced. Pippijn caught it before it shipped.
+    // ⚠ A LIST: with a single slot, a second blocker would go in the prose and
+    // go stale there.
     let pool = common::fresh_db().await;
     let one = file(&pool, "the first thing", None).await;
     let two = file(&pool, "the second thing", None).await;
@@ -223,7 +217,7 @@ async fn nothing_may_block_itself() {
 
 #[tokio::test]
 async fn if_a_blocks_b_then_b_may_not_block_a() {
-    // Pippijn's words, 2026-08-11. The two-task case is the one anybody thinks
+    // Pippijn's words. The two-task case is the one anybody thinks
     // of; the test below is the one that actually needs the graph walk.
     let pool = common::fresh_db().await;
     let a = file(&pool, "A", None).await;
@@ -242,8 +236,7 @@ async fn if_a_blocks_b_then_b_may_not_block_a() {
 ///
 /// `A → B → C → A` arrives as three separate edits, each of which looks fine on
 /// its own: nothing in the third edit mentions A. Only a walk over the whole
-/// graph refuses it, which is why `no_cycle` is breadth-first rather than a
-/// single lookup.
+/// graph refuses it.
 #[tokio::test]
 async fn a_longer_loop_is_refused_too() {
     let pool = common::fresh_db().await;
@@ -353,20 +346,14 @@ async fn ranking_and_blocking_in_one_change_is_judged_on_the_result() {
 
 /// The deadline twin of the rank rule.
 ///
-/// ⚠ **This one is arithmetic, not judgement.** A task cannot be finished before
-/// the thing it is waiting for, so a due date earlier than an open blocker's is
-/// wrong however anybody feels about it — no threshold, no "soon", nothing to
-/// calibrate. Equal is allowed: both landing on the same day is tight, not
-/// impossible.
+/// ⚠ **Arithmetic, not judgement**: a task cannot be finished before what it
+/// waits for. Equal is allowed — tight, not impossible.
 mod deadlines {
     use super::*;
     use chrono::{Duration, NaiveDate, Utc};
 
     /// ⚠ **Relative, because a hardcoded future date is a test with an expiry
-    /// date.** As first written these were literals — `2026-09-01` for "not
-    /// overdue", `2026-08-12` for "has a deadline" — both true the afternoon
-    /// they were written, both false within a month, and the second one broke
-    /// the same day, when a deadline inside a week started raising the rank.
+    /// date.**
     fn day(days: i64) -> NaiveDate {
         (Utc::now() + Duration::days(days)).date_naive()
     }
@@ -497,16 +484,8 @@ mod deadlines {
             .expect("a closed blocker still held the date back");
     }
 
-    /// ⚠ **A FAR deadline must not reorder anything** — which is a narrower
-    /// claim than this test started with.
-    ///
-    /// As first written it said *a deadline* must not reorder, with a fixture
-    /// due tomorrow, and it was correct until Pippijn added the rule that a
-    /// deadline inside a week raises the rank (`mod escalation`). What survives
-    /// is the half still worth defending: a date far enough out is evidence for
-    /// a rank rather than a substitute for one, and leaves the order alone. The
-    /// near half is now a stated rule rather than arithmetic overriding a
-    /// decision, which is the whole difference.
+    /// ⚠ **A FAR deadline must not reorder anything**: it is evidence for a rank,
+    /// not a substitute for one. A near one is `mod escalation`.
     #[tokio::test]
     async fn a_far_deadline_does_not_move_a_task_up_the_list() {
         let pool = common::fresh_db().await;
@@ -528,14 +507,11 @@ mod deadlines {
     }
 }
 
-/// A deadline inside the week raises the rank — Pippijn, 2026-08-11.
+/// A deadline inside the week raises the rank — Pippijn's rule.
 ///
-/// ⚠ **This is the one thing a deadline is allowed to reorder**, and it does not
-/// contradict `a_deadline_does_not_move_a_task_up_the_list` above: that pins
-/// that a FAR date changes nothing. The earlier refusal was about arithmetic
-/// overriding a human decision; a rule Pippijn states IS the decision, and it is
-/// also the case where `P0`'s own test ("every hour it stays open costs more")
-/// starts being true, since the hours are what is being spent.
+/// ⚠ **The one thing a deadline reorders**, which does not contradict
+/// `a_deadline_does_not_move_a_task_up_the_list`: that pins that a FAR date
+/// changes nothing.
 mod escalation {
     use super::*;
     use chrono::{Duration, Utc};

@@ -1,16 +1,8 @@
 //! Waking a session that is not speaking.
 //!
-//! Pippijn, 2026-09-05: *"When there's a problem someone needs to fix, we should
-//! have a way for the task tool to wait, so a background job can run and wait
-//! until that's done, waking up the session that can then continue"* — and,
-//! narrowing it, *"I just need that blocked session to have a way to be notified
-//! of a task being closed so they can continue working."*
-//!
-//! ⚠ **The digest already clears the `⛔` the moment a blocker closes, and that
-//! is not a notification.** It is rendered when the session takes a turn, and a
-//! blocked session is not taking turns. So the wake has to be something the
-//! session is already holding open — a background command that returns — rather
-//! than anything delivered to it.
+//! Pippijn: *"I just need that blocked session to have a way to be notified of a
+//! task being closed so they can continue working."* See `tasks::wait` for why
+//! that is a background command returning rather than anything delivered.
 //!
 //! What is tested here is the decision, not the sleeping: given what the service
 //! says about each blocker, does the wait end, and what is the session told when
@@ -48,9 +40,8 @@ fn every_blocker_finished_ends_the_wait() {
     );
 }
 
-/// ⚠ **`drop` is *overtaken, obsolete, decided against* — the problem was NOT
-/// fixed.** A waiter that treats it as `done` wakes the session and tells it the
-/// opposite of what happened, which is worse than never waking it at all.
+/// ⚠ **`drop` means the problem was NOT fixed**; a waiter treating it as `done`
+/// tells the woken session the opposite of what happened.
 #[test]
 fn a_dropped_blocker_ends_the_wait_but_not_as_done() {
     assert_eq!(
@@ -85,10 +76,8 @@ fn waiting_names_all_the_outstanding_ones() {
     );
 }
 
-/// ⚠ **Nothing to wait for is not a successful wait.** Naming no task would
-/// otherwise fall through to "every blocker finished" and wake the session with
-/// a clean bill of health about a question nobody asked, so the refusal is at
-/// the argument, before any of this is reached.
+/// ⚠ **Nothing to wait for is not a successful wait**: it would fall through to
+/// "every blocker finished", so the CLI refuses it at the argument.
 #[test]
 fn naming_no_task_is_refused_at_the_argument() {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
@@ -113,9 +102,7 @@ fn the_poll_is_eager_at_first_and_lazy_afterwards() {
     );
 }
 
-/// What the woken session actually reads. The exit code says fixed or not; this
-/// says which task and how it ended, because the session has been away and the
-/// id is the only thing that reconnects the wake to the work it was doing.
+/// What the woken session reads: which task, and how it ended.
 #[test]
 fn the_verdict_says_which_task_and_how_it_ended() {
     let said = wait::said(&Verdict::Done, &[1350]);

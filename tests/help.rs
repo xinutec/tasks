@@ -1,15 +1,10 @@
 //! What `--help` states about the model, which is the only place most sessions
 //! will ever read it.
 //!
-//! ⚠ **Text as a feature, not decoration** — the same argument
-//! `tests/digest.rs::the_header_countermands_the_built_in_task_tools` makes. Two
-//! facts govern how this tool should be used and neither is guessable from the
-//! commands: a session never ends, and a holder's open tasks are its future
-//! work. While they were written down nowhere, a session that had used the tool
-//! all day inferred the opposite, measured which conversations had live
-//! processes, and filed #713 proposing a liveness column and a warning on
-//! `move` — both of which would have taught every session to prefer whoever is
-//! online over whoever owns the work.
+//! ⚠ **Text as a feature, not decoration.** Two facts govern how this tool is
+//! used and neither is guessable from the commands: a session never ends, and
+//! a holder's open tasks are its future work. Without them a session infers the
+//! opposite and prefers whoever is online over whoever owns the work.
 //!
 //! So these assert the remedy is present, and `--help` is where it has to be:
 //! `docs/for-sessions.md` is read once, if at all, and this is free on every
@@ -21,9 +16,7 @@ use std::process::Command;
 ///
 /// ⚠ **Not cosmetic: clap re-wraps to the terminal width**, so a phrase this
 /// file asserts on can be split across a newline by nothing more than where the
-/// window edge fell. Asserting on the raw output failed here for exactly that
-/// reason while the sentence was present and correct — a test that would have
-/// gone red on somebody else's screen size.
+/// window edge fell.
 fn help(args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_task"))
         .args(args)
@@ -61,8 +54,7 @@ fn the_top_level_help_says_open_work_is_future_work() {
 
 #[test]
 fn handing_over_says_to_pick_by_subject_rather_than_by_who_is_awake() {
-    // The refused fix, stated as the rule it replaces. #713 proposed warning on
-    // this command; the answer was to say what the command means instead.
+    // Not a warning on this command: the help says what the command means.
     let help = help(&["move", "--help"]);
     assert!(
         help.contains("queueing"),
@@ -108,11 +100,9 @@ fn editing_states_the_standard_a_body_is_held_to() {
 
 /// The words sessions typed that the tool had no answer for.
 ///
-/// ⚠ **Measured, not guessed** (#958, over every transcript): `close` 11 times,
-/// `update` 7, `note` 3, `rank` 2, `history` 1 — each answered `unrecognized
-/// subcommand` and, for `close` and `update`, without even clap's "a similar
-/// subcommand exists" line, because edit distance finds no neighbour. The cost
-/// was a re-run every time; the fix is that the tool answers to the word.
+/// Taken from what sessions actually typed: each answered `unrecognized
+/// subcommand`, often without clap's "a similar subcommand exists" line, since
+/// edit distance finds no neighbour.
 #[test]
 fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
     for (typed, real) in [
@@ -132,8 +122,7 @@ fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
 /// A flag naming a field this tool deleted has to say so.
 ///
 /// ⚠ **`unexpected argument '--repo' found` reads as a typo**, and the session
-/// leaves believing the field exists. Seven filings reached for `--repo` or
-/// `--project` after migration 0004 removed the concept.
+/// leaves believing the field exists.
 #[test]
 fn a_field_that_was_removed_is_refused_by_name() {
     let out = nameless(&["add", "anything", "--priority", "P2", "--repo", "tumor"]);
@@ -151,18 +140,10 @@ fn the_subject_is_not_a_flag_and_the_refusal_says_where_it_goes() {
 
 /// The CLI run by something that is not a conversation.
 ///
-/// ⚠ **Clearing the two variables is the whole point, and passing `--session`
-/// was the bug.** These two tests reach past clap into `main`, where the
-/// identity guard used to run before any argument was looked at — so without a
-/// session id the CLI answered *"a token but no session id"* and never reached
-/// the field being asserted on. Both were written with a `--session` to get
-/// past that, which made them green in a session and red under launchd, which
-/// sets nothing. They were red in the nightly from 2026-09-14 and passed by
-/// hand every time anybody checked. #1548.
-///
-/// The guard moved to the request path on 2026-09-16, so a refusal that needs
-/// no identity no longer waits on one — and this helper is what proves it:
-/// supply a `--session` here again and the test stops testing anything.
+/// ⚠ **Clearing the two variables is the whole point.** A scheduler sets
+/// neither, and a refusal that needs no identity must not wait on one — see
+/// `Client::identified`. Supply a `--session` here and the test stops testing
+/// anything.
 fn nameless(args: &[&str]) -> std::process::Output {
     std::process::Command::new(env!("CARGO_BIN_EXE_task"))
         .args(args)
@@ -172,11 +153,8 @@ fn nameless(args: &[&str]) -> std::process::Output {
         .expect("running the CLI")
 }
 
-/// ⚠ **Five closes in the transcripts passed a note to `done` and were
-/// refused** — `--reason` twice, `--message`, `--note`, `--body`. Three of those
-/// four spellings are now accepted; the fourth is `--body`, which is deliberately
-/// NOT an alias because it means "replace everything" everywhere else in this CLI
-/// and would delete the very history the note is being written above.
+/// `--reason`, `--message` and `--note` are accepted; `--body` deliberately is
+/// NOT an alias, because everywhere else it means "replace everything".
 #[test]
 fn closing_a_task_takes_its_outcome_in_the_same_command() {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))
@@ -187,8 +165,7 @@ fn closing_a_task_takes_its_outcome_in_the_same_command() {
     assert!(text.contains("--note"), "{text}");
     // ⚠ Matched as an OPTION LINE, not as a substring: the flag's own help
     // explains why `--body` is not an alias, so the word appears in the prose
-    // and a `contains` check cannot tell the two apart. This assertion failed
-    // for exactly that reason when it was first written.
+    // and a `contains` check cannot tell the two apart.
     assert!(
         !text
             .lines()
@@ -197,9 +174,8 @@ fn closing_a_task_takes_its_outcome_in_the_same_command() {
     );
 }
 
-/// A drop that records no reason is what makes a dropped task unreadable later:
-/// #863 was dropped 58 seconds after filing with a complete plan in it and says
-/// nowhere that anybody rejected it.
+/// A drop that records no reason is unreadable later: the status says nothing
+/// about why.
 #[test]
 fn dropping_a_task_takes_its_reason_in_the_same_command() {
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_task"))

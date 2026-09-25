@@ -1,18 +1,13 @@
 //! Whose edit an undo would revert.
 //!
-//! ⚠ **These exist because it happened, to the session that built the store.**
-//! `task undo` restores the one version a task keeps, whoever displaced it — so
-//! it reverts *the* last edit, not *your* last edit. On 2026-08-15 a session
-//! over-deleted #921's body, another appended to it eleven seconds later, and
-//! the first ran `task undo` meaning to take back its own write. What it took
-//! back was the other session's.
+//! ⚠ **`task undo` reverts *the* last edit, not *your* last edit.** A session
+//! that undoes its own mistake seconds after another session edited the same
+//! task takes back the other session's write.
 //!
-//! What is under test here is the fact the CLI needs in order to refuse:
-//! [`Revision::mine`], answered against the STORED identity rather than the
-//! rendered label. The refusal itself is `tasks::tasks::undo`, whose wording is
-//! tested beside it — this file is about getting the question right, because a
-//! guard that answers "is this mine" wrongly is worse than none: it either
-//! blocks a caller from its own work or waves through somebody else's.
+//! Under test is the fact the CLI needs in order to refuse: [`Revision::mine`],
+//! answered against the STORED identity rather than the rendered label. A
+//! guard that answers "is this mine" wrongly is worse than none: it blocks a
+//! caller from its own work or waves through somebody else's.
 
 mod common;
 

@@ -69,10 +69,8 @@ export class TasksApi {
   /**
    * Give a conversation a name.
    *
-   * One column, and it moves nothing: the id is the identity, so every task
-   * stays where it is and the lists that resolve a name through the join start
-   * saying the new one at once. A session may only rename itself; Pippijn may
-   * rename any of them, which is what this call is for.
+   * One column, and it moves nothing: the id is the identity. A session may
+   * only rename itself; Pippijn may rename any, which is what this is for.
    */
   rename(id: string, name: string): Observable<void> {
     return this.http.patch<void>(`/api/sessions/${id}`, { name });

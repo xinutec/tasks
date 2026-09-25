@@ -6,8 +6,8 @@ conversation and back.
 
 - **Backend:** Rust (axum) + MariaDB via sqlx. Migrations are embedded and run at
   boot behind a named lock.
-- **Frontend:** Angular 22 + Material (zoneless), `frontend/`. Self-contained
-  fonts (no third-party fetches) — it must render over the VPN.
+- **Frontend:** Angular + Material (zoneless), `frontend/`. Self-contained fonts
+  (no third-party fetches) — it must render over the VPN.
 - **CLI:** `task`, the same surface for a session that has no browser.
 - **Auth:** Nextcloud OAuth2 identity with a stateless HMAC session cookie for
   the person; a shared bearer token plus an `X-Session-Id` header for a session.
@@ -16,131 +16,76 @@ conversation and back.
 
 ## Why this exists
 
-Every task list this project has had was thrown away for the same reason: it was
-re-serialised into the conversation on every turn. The CLI's built-in list
-reached **527 kB a turn** on one session — 93% of it a `description` field the
-prompt never renders — and became 73% of a 3.7 GB transcript. The fix was never a
-shorter list; it was a different shape: **inject an index, fetch the content.**
+A task list kept in a file is re-serialised into the conversation every turn,
+and grows until it dominates the transcript — which is what happened to the
+CLI's built-in list. The fix is a different shape: **inject an index, fetch the
+content.** This service replaced a `TASKS.md`-per-repository scheme that did
+that, because a file in a repository cannot say which conversation is carrying a
+task, or that it has been handed back.
 
-That produced the file scheme this service replaces — a `TASKS.md` per repository
-with bodies in `docs/tasks/<id>.md`, injected by a `UserPromptSubmit` hook
-(`xinutec-infra/mac-mini/claude_tasks.py`, whose docstring is the authority on
-the measurements). It worked, and it could not do the one thing wanted next: a
-task belongs to a *holder*, and a file in a repository has no way to say that a
-particular conversation is carrying it, or that it has been handed back.
-
-**The constraint survives the move, and it is the property every change here has
-to keep:**
+**The property every change here has to keep:**
 
 > What reaches a prompt is one line per OPEN task, and nothing else.
 
-`src/digest.rs` is where that is enforced, and it is the only module whose output
-a hook ever sees. `tests/digest.rs` is the only test file in the repository whose
-assertions are about cost rather than correctness — including one that renders
-4,000 tasks and fails if the result is not still small.
+`src/digest.rs` enforces it and is the only module whose output a hook sees.
+`tests/digest.rs` is the one test file whose assertions are about cost rather
+than correctness — including one that renders 4,000 tasks and fails if the
+result is not still small.
 
-⚠ **A session is shown its own open tasks and the pile — not what another
-conversation is holding.** The first shape filtered on repository alone, which
-was inherited rather than chosen: one `TASKS.md` per repo meant both parties'
-work sat in one file because there was nowhere else to put it. Carried into a
-database it made every session pay, on every turn, for tasks it could not act
-on — 132 open across 13 repos, 12,371 bytes, half the budget spent describing
-other people's work.
+## What a prompt is shown
 
-The repository itself went in `0004`, and the holder is now the whole of the
-question. A session spans checkouts — fleet work is `xinutec-infra` and
-`nixos-config` together — so it was never a question with one answer, and
-selecting on the set a session had *claimed* made an unclaimed session's empty
-digest indistinguishable from a broken service. A task handed to the right
-session in the wrong repo was invisible to the receiver, and `task edit` had no
-`--repo` to correct it.
+⚠ **A session sees its own open tasks and the pile — never what another
+conversation is holding.** Every session paying every turn for work it cannot act
+on is the cost this service exists to refuse. There is no repository to narrow
+by: a session spans checkouts, so *which repo* never had one answer.
 
-The pile stays, and that is the part worth stating: it is how a task is handed to
-whichever conversation is around rather than to a named one, so a digest narrowed
-to strictly its own would make work Pippijn left for anybody invisible to
-everybody. Looking across holders is a thing you ask for: `task list --all` for
-every open task, `task sessions` for who is carrying what.
+⚠ **The pile stays**, because it is how a task reaches whichever conversation is
+around rather than a named one. Strictly *mine* would make work Pippijn left for
+anybody invisible to everybody. Looking across holders is something to ask for:
+`task list --all`, `task sessions`.
 
-⚠ **The pile is capped in the digest at `PILE_LINES`, because it is the one part
-with a different denominator.** A task a session holds is in one conversation's
-prompt; an unheld one is in *every* conversation's, on every turn — so a single
-line left for whoever picks it up costs as many prompts as there are live
-sessions. This was first argued as affordable from *3 unheld of 134 open*, and
-that is a **condition** rather than a property: two days after the cutover the
-recall session's digest carried 5 pile lines against its own 3, with nothing
-keeping the number down. `MAX_BYTES` is not that guard — it stops a runaway at
-some two hundred lines, per session, which the pile would reach only after weeks
-of being ruinous. Past the cap the digest says how many more are in the pile and
-names `task list`, which is the handover intact and the cost bounded. What a session
-*holds* is never capped: growth there is a backlog for that conversation to work
-off, not a charge on everybody else.
+⚠ **The pile is capped at `PILE_LINES`, because it has a different
+denominator.** A held task is in one conversation's prompt; an unheld one is in
+*every* conversation's, every turn. `MAX_BYTES` is not that guard — it is a
+runaway stop per session. Past the cap the digest says how many more there are
+and names `task list`. What a session *holds* is never capped: growth there is a
+backlog to work off, not a charge on everybody else.
 
-⚠ **The CLI's default is the same selection, as of 2026-08-09.** `task list`
-used to mean every open task there is, which put the cost the digest refuses
-behind the one command a session runs to decide what to do next — 135 lines and
-12,804 bytes, against one for the session that ran it. It now answers the
-digest's question: your own, and the pile. `--mine` drops the pile, `--all` is
-the old behaviour, and both are named because all three are real questions.
+⚠ **`P4` is counted and never recited.** The rank means *nothing is being paid
+for it today*, so it gains least from being carried every turn. It is still open
+work, and the head still counts it. `P3` is deliberately not trimmed: it means a
+workaround is in use, which is still a plan, and hiding it would push everything
+to `P2` to stay visible.
 
-⚠ **`--handed-out` is the one selection that is not about the holder**, and it
-follows from the rule above rather than sitting beside it. Narrowing every list
-to the caller is what makes a routing session blind to its own output: the tasks
-it files for others are, by construction, the ones it never sees again. So the
-filer is the fifth question — what did I hand out, and is any of it still open —
-answered by the `created` event's actor rather than by `assignee`.
+⚠ **A session can narrow its own digest for a few hours** — `task focus 849 850
+--for 4h` recites those and counts the rest. `src/tasks/focus.rs` is the only
+thing that hides an **open** task, so three rules are not negotiable:
 
-⚠ **`P4` is counted in the digest and never listed.** The rank means *nothing is
-being paid for it today*, so it is the one level a session gains least from
-carrying on every turn. It is still open work — counted, not shelved.
-Measured 2026-08-17, the `life` session's whole 1112-byte digest was its P3/P4
-tail — 12 of its 13 open tasks were `P4`. The head still counts them and a notice
-names `task list`, which is the same rule the pile cap and focus follow. `P3` is
-deliberately not treated this way: it means a workaround exists and is in use,
-which is still a plan, and the eleven the `home` session carries get done
-*because* they are read. Hiding it would make filing at `P3` filing into a
-drawer, and invert the pressure until everything is ranked `P2` to stay visible —
-a change to what the ranks mean rather than to what a page shows.
+* **It expires**, and cannot be set to "until I say otherwise". Longer than a day
+  is refused: that is a handover, and `task move` is how work changes hands
+  where everybody can see it.
+* **What is hidden is counted**, and the notice names `task focus --clear`.
+* **P0 and overdue break through**, on the effective rank, so a focus cannot bury
+  the task an escalation exists to raise.
 
-⚠ **A session can narrow its own digest further, for a few hours** —
-`task focus 849 850 --for 4h`, and for four hours its prompt recites those two
-and counts the rest. It answers the case the cap above does not: a conversation
-holding fifty open tasks pays for all fifty on every turn and is working on two
-of them, and nothing else in the service lets it say which two. `src/tasks/focus.rs`
-is the only thing here that hides an **open** task, so three rules hold and none
-of them is negotiable:
+A session carrying more than `FOCUS_HINT_LINES` recited lines of its own is told
+`focus` exists — reachable only from `--help`, it goes unused. The line states
+what `focus` does and stops there. Focus touches the digest and nothing else:
+`task list` still shows everything, because a list somebody typed is one they
+wanted.
 
-* **It expires**, and cannot be set to "until I say otherwise". A focus nobody
-  clears stops applying at its hour; longer than a day is refused, because that
-  is not an afternoon's work but a handover, and `task move` is how work changes
-  hands where everybody can see it.
-* **What is hidden is counted** and the notice names `task focus --clear` — the
-  same rule the pile cap follows, for the same reason.
-* **P0 and overdue break through**, on the effective rank rather than the chosen
-  one, so a focus cannot bury the task an escalation exists to raise.
+⚠ **Every trim is counted, never silent.** The head gives the full number, so a
+short list is explained where it appears.
 
-⚠ **The digest names `focus` once a session is carrying more than
-`FOCUS_HINT_LINES` recited lines of its own**, because until 2026-08-18 it never
-did: the feature was reachable only from `task focus --help`, and across every
-transcript on the machine it had been used with real ids in a single episode, by
-one session, while another carried 49 lines on every turn. The floor counts what
-the session *holds and the digest recites* — not the pile, which has its own cap
-and its own denominator, and not anything already trimmed, which costs nothing to
-begin with. Twelve comes from the distribution rather than from taste, and the
-distribution it comes from is the one *after* the `P4` trim: 49, 15, then 10, 10,
-10 and a tail. The line says what `focus` does and stops there; a digest that
-told a session to hide its work would be pushing exactly the conversations most
-likely to hide something they should be doing.
+**The CLI's bare `task list` is the digest's selection**: your own, and the pile.
+`--mine` drops the pile, `--pile` is strictly the unheld, `--all` is everything.
+⚠ **`--handed-out` is the one selection not about the holder**: what *you* filed
+that somebody else now has. Narrowing every view to the caller makes a routing
+session blind to its own output, so this answers from the `created` event's
+actor rather than from `assignee`.
 
-It touches the digest and nothing else: `task list` still shows everything,
-because the digest is the channel nobody asked for and a list somebody typed is
-one they wanted.
-
-⚠ **What changed is what happens to a finished task.** The file scheme *deleted*
-it, because keeping it is what turned 48 live items into 366, and git recorded the
-completion better than a flag did. There is no git here — so the database keeps
-done tasks and `task_events` records every move, and the original property is
-preserved by the **query** rather than by deletion: nothing injected ever selects
-a done row.
+Done tasks are kept, and `task_events` records every move; the property above is
+held by the **query** — nothing injected selects a closed row — not by deletion.
 
 ## The model
 
@@ -154,163 +99,100 @@ a done row.
 | a **deadline** | a `DATE`, when something outside decides — usually none |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
 
-⚠ **Status and holder are independent, and that is why there are four states and
-not seven.** "New" is `open` with no holder; "assigned" is `open` with one;
-"accepted" is `doing`. Chaining those into one ladder would have made handing a
-task back to the pile a *status* change, which would then have to un-say that
-somebody had started it — and the whole point of this service is that work moves
+⚠ **Status and holder are independent**, which is why there are four states and
+not seven. "New" is `open` with no holder; "assigned" is `open` with one;
+"accepted" is `doing`. One ladder would make handing a task back to the pile a
+*status* change that un-says that somebody started it — and work here moves
 between a person and a conversation repeatedly.
 
-⚠ **`dropped` is a closed task that was never done**, for one that has been
-overtaken, has gone out of date, or has been decided against. It exists because
-the two alternatives are both worse: leaving it open for ever, or closing it as
-`done` and having every later list credit somebody with work nobody did. It buys
-nothing anywhere else — nothing injected selects a closed row of either kind —
-and there is deliberately no *reason* field beside it, because a reason is prose
-and the body is where prose goes.
+⚠ **`dropped` is a closed task that was never done**: overtaken, out of date, or
+decided against. Without it an obsolete task stays open for ever, or is closed as
+`done` and credits somebody with work nobody did. There is no *reason* field: a
+reason is prose, and `task drop --reason` writes it above the body.
 
-⚠ **A priority is absent by default, and absence is not a level.** Asked for by
-Pippijn on 2026-08-11. There were 700-odd tasks the day the column was added and
-none of them were going to be triaged, so a `DEFAULT 'P2'` would have had every
-one of them assert something nobody said — a field that is false about most of
-its rows is worse than the absent field it replaced.
+⚠ **A priority is absent by default, and absence is not a level.** A
+`DEFAULT 'P2'` would have every unranked task assert something nobody said.
 
 ⚠ **It still has to order, and the whole feature is one `COALESCE`.** Lists sort
-by `COALESCE(priority, 'P2'), id`, so an unranked task sorts exactly where an
-ordinary one does. `P0` and `P1` rise above the untriaged; `P3` and `P4` **sink
-below** it; everything untouched keeps its id order. The obvious alternative —
-ranked first, unranked after — gets `P4` backwards, lifting a task marked *when
-there is room* above four hundred nobody has read. `Priority::rank` is the same
-rule in Rust and `tests/priority.rs` compares the two against a real database,
-because a drift between them is silent: every list still returns every task, in
-an order nobody notices is wrong until the `P0` is not at the top.
+by `COALESCE(priority, 'P2'), id`, so an unranked task sorts where an ordinary one
+does: `P0` and `P1` rise above the untriaged, `P3` and `P4` **sink below** it,
+and everything untouched keeps its id order. "Ranked first, unranked after"
+would lift *when there is room* above everything nobody has read.
+`Priority::rank` is the same rule in Rust, and `tests/priority.rs` compares the
+two against a real database, because a drift between them is silent.
 
 ⚠ **`repo::list` is the only sort in the service.** `digest::render` preserves
-the order it is handed, so the prompt, the CLI and the app all inherit one rule
-rather than three. The rank costs five bytes on a line that has one and nothing
-at all on a line that does not, which is what makes it affordable in the digest.
+the order it is handed, so the prompt, the CLI and the app inherit one rule.
 
-⚠ **Nothing can clear a priority**, on `PATCH` or from the CLI. Absence means
-*leave it alone* for every field on that endpoint, and the exception —
-`Option<Option<Priority>>`, a field whose null is meaningful — costs more than
-the gesture is worth. Ranking it again is the correction.
+⚠ **Nothing can clear a priority.** Absence means *leave it alone* for every
+field on `PATCH`, and a meaningful null (`Option<Option<Priority>>`) makes every
+client guess. Ranking again is the correction.
 
-⚠ **A deadline is a DATE and it reorders nothing.** Asked for on 2026-08-11,
-straight after the first full ranking pass found the gap: #260 was ranked `P0`
-and does not pass the `P0` test — nothing about it accrues hourly, it fails all
-at once on a date somebody else chose, and there was nowhere to write that date
-down. The rank was carrying an argument the column could not hold.
+⚠ **A deadline is a DATE, and it reorders nothing — except inside the last
+week**, where it raises the task to `P0` (Pippijn's rule). The raise is derived
+at read time and never written, drawn as `P0!` so it does not look chosen, and
+`task show` gives both levels. Further out, a date is evidence for a rank, not a
+competing answer to *what next* — how long the work takes would decide, and
+nothing records it. Overdue is shown as a fact; there is no "due soon", which
+would need a threshold.
 
-`repo::list` stays the only sort. A deadline is evidence for a rank, not a
-competing answer to *what next* — how long the work takes is the term that would
-decide, and nothing records it, so floating a `P4` above a `P1` because a date is
-near would replace a human decision with an arithmetic one. What it does instead
-is show on the line and shout once the day has passed: **overdue is a fact and
-needs no threshold, where "due soon" would need one**, which is why there is no
-such notice.
+⚠ **A blocked task names its blockers, and the link carries rules.** Pippijn:
+*"It can be the same, but not higher priority than the thing it's blocked on."*
+Claiming *do this next* about work you cannot start is the move that inflates a
+scale, and one a machine can catch. Refused at both ends — ranking the blocked
+task up, and demoting the blocker — rather than cascaded, because silently
+re-ranking rows nobody asked about is worse than naming the pair. With several
+blockers the bound is the LEAST urgent open one. A due date earlier than an open
+blocker's is refused too: that is arithmetic, not judgement.
 
-The one constraint is the deadline twin of the rank rule: a task may not be due
-before something it is blocked on. That is arithmetic rather than judgement, and
-it is refused at both ends like its twin.
+* **A table, not a column**: with one slot, a second blocker goes in the body and
+  goes stale there.
+* **No cycles, walked over the whole graph**: `A → B → C → A` arrives as three
+  edits that each look fine.
+* **An unranked task is never in violation.** The rule binds a claim, and
+  recording *"this waits for that"* must not require ranking anything first.
+* **Kept when the blocker closes**, as a record of how the work went; it stops
+  constraining anything and stops being drawn.
 
-⚠ **A blocked task says which ticket, and the link carries a rule.** Pippijn,
-2026-08-11: *"It can be the same, but not higher priority than the thing it's
-blocked on."* Claiming *do this next* about work you cannot start is the single
-move that inflates a scale — everything downstream drifts up while the thing
-actually holding it sits at `P3` — and it is the one shape a machine can catch.
-Refused at both ends: ranking the blocked task up, and demoting the blocker.
-Refused rather than cascaded, because quietly re-ranking rows nobody asked about
-is worse than saying no and naming the pair.
-
-⚠ **A table, and the first cut was a column.** The measurement said no open task
-named more than one blocker; that counted the absence of the feature rather than
-the shape of the work, since there was nowhere to record even one. With a single
-slot the workaround for a second blocker is the body — which is the staleness
-this replaced, applied to the tasks with the most dependencies.
-
-⚠ **No cycles, walked rather than checked one step.** `A → B → A` is the case
-everybody thinks of; `A → B → C → A` arrives as three separate edits that each
-look fine, and only a traversal of the whole graph refuses it. A loop would make
-the rank rule unsatisfiable, not merely odd.
-
-⚠ **An unranked task is never in violation, and that asymmetry is deliberate.**
-It sorts as `P2` — that is the ordering — but it asserts nothing, and the rule is
-about assertions. Applying it to untriaged tasks would mean recording a
-dependency is refused until you rank the dependent, turning a fact into a
-decision. That is the pressure that ends with everything ranked to satisfy a
-field, and a value that was satisfied rather than chosen says nothing.
-
-⚠ **A session's id is its identity and its name is an attribute.** A rename is
-an `UPDATE` of one column and every task assigned to that session stays
-assigned; making the name the key would have re-pointed the whole list.
-
-⚠ **That is about storage, and it was allowed to answer a question it does not
-address: where the name COMES from.** From it, "so the session pushes the name"
-was taken to follow, and it does not. Until 2026-08-10 `sessions.name` was
-written by `task rename` alone, so a conversation that never typed it was a uuid
-for ever — including the one holding twenty-nine open tasks, which Claude Code
-had been calling `memview` all along. The CLI writes
-`{"type":"agent-name","agentName":"…","sessionId":"…"}` into the transcript and
-appends another on every rename, so the answer was already on the disk the CLI
-runs on. It now reads it and sends it with every request (`src/agent_name.rs`),
-and the column is a cache of that rather than a self-report.
-
-**Derived beats stored, and that was measured rather than assumed:** of the
-fourteen sessions the service knew, thirteen had a stored name and all thirteen
-matched what is derived. None disagreed, and the fourteenth was the one with
-none. A stored column is still needed — a session whose transcript is
-unreachable must render, and history rows are written at render time on purpose
-— so this fills it, and `task rename` survives for a conversation the CLI has
-not named. It refuses when there is a name to derive, because the next command
+⚠ **A session's id is its identity and its name is an attribute.** A rename is an
+`UPDATE` of one column and no task moves. The name is not a self-report: the CLI
+reads what Claude Code calls the conversation out of its own transcript
+(`src/agent_name.rs`) and sends it with every request, so the column is a cache.
+`task rename` refuses when there is a name to derive, because the next command
 would overwrite it.
 
-⚠ **The id is global.** The file scheme numbered per repo and its own hook
-documented the cost: *"a bare `#4` means nothing when two repos both have one"*.
-One id space means `task show 4` needs nothing else to resolve it — which is what
-made dropping the repository in `0004` a deletion rather than a redesign.
+⚠ **The id is global**, so `task show 4` needs nothing else to resolve it.
 
 ## Views
 
 | route | what |
 | --- | --- |
-| `/` | the open list, in id order, filtered by holder |
+| `/` | the open list, in the backend's order, filtered by holder |
 | `/t/:id` | one task: its prose, its status, who holds it, its history |
 | `/new` | file one |
 | `/who` | who holds what: `open/total` per session, for the person, and the pile |
 
-⚠ **`/who` and `task sessions` answer with *holders*, not with every session
-row.** A row exists for every conversation that has ever asked for a digest,
-which is every conversation that has ever run: **717 of them two days after the
-cutover, of which 14 had ever held anything**. Answering with all of them buries
-the fourteen under seven hundred `0/0` lines on a screen meant for a phone. The
-predicate is *has ever been assigned a task*, not *has anything open* — a
-cleared plate still says who cleared it, and a session that dropped its whole
-list decided something. `task sessions --all` is every row, which is how a
-brand-new conversation's id is found in order to hand it work.
+⚠ **`/who` and `task sessions` answer with *holders*, not every session row.** A
+row exists for every conversation that ever asked for a digest, and nearly all
+of them never held anything. The predicate is *has ever been assigned a task*,
+not *has anything open*, so a cleared plate still says who cleared it.
+`task sessions --all` is every row — how a brand-new conversation's id is found.
 
 ⚠ **There is deliberately no liveness anywhere here, and there must not be.** A
 session never ends — conversations go quiet and come back — so a task addressed
 to one with no live process is *queued*, not stranded, and its open list is the
-work waiting for it rather than work in flight. `- [>]` is the only mark that
-means in hand.
-
-Neither fact was written down for the life of the project, and on 2026-08-10 a
-session that had been using the tool all day inferred the opposite: it measured
-which conversations had live processes (5 of 12), and filed a ticket arguing that
-assigning to an offline one "silently reduces visibility", proposing a liveness
-column and a warning on `move`. Both would have trained every session to prefer
-whoever is online over whoever owns the work, which is the opposite of what an
-addressed list is for. That ticket is #713, dropped. **The remedy is stating the
-model, not warning about the consequence** — so it is now in `task --help`, in
-`move --help`, and in `docs/for-sessions.md`, and a liveness signal should be
-refused if it is proposed again.
+work waiting for it. `- [>]` is the only mark that means in hand. A liveness
+column or a warning on `move` would train every session to prefer whoever is
+online over whoever owns the work; **the remedy is stating the model** — in
+`task --help`, `move --help` and `docs/for-sessions.md` — and a liveness signal
+should be refused if it is proposed again.
 
 ## The CLI
 
-`docs/for-sessions.md` is this same surface written for the reader who uses it
-most — a Claude session — and it is the one to point a new conversation at. This
-section says what the commands are; that one says which question each answers,
-and which of them a session gets wrong.
+`docs/for-sessions.md` is this surface written for the reader who uses it most —
+a Claude session — and is the one to point a new conversation at. This section
+says what the commands are and why they are shaped so; `task --help` is the
+authority on the flags.
 
 ```sh
 task list [--all|--mine|--pile] [--done]  # yours and the pile; wider; narrower; spare
@@ -320,11 +202,11 @@ task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
 task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody] [--priority P1]
                                           # `--to nobody` needs `--spare "<why>"`
-task start <id> / task done <id> [--to W] # move it along
-task drop <id>                            # close it without doing it
+task start <id> / task done <id> [--to W] [--note -]   # move it along
+task drop <id> [--reason -]               # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
 task move <id> me|pippijn|<session>|nobody  # hand it over
-task wait <id>… [--for 4h] &              # in the BACKGROUND: block until they close it,
+task wait <id>… [--for 4h] &              # in the BACKGROUND: block until they close,
                                           # and the command returning wakes this session
 task edit <id> [--subject S] [--body -] [--priority P0]   # change the words, rank it
 task edit <id> --prepend "DONE in <sha>."                 # put text ABOVE the body, keeping it
@@ -332,148 +214,107 @@ task edit <id> --append -                                 # and BELOW; `-` reads
 task focus <id>… --for 4h                 # for four hours my prompt shows only these
 task focus [--clear]                      # what I am on, how long is left; end it now
 task digest                               # exactly what a prompt receives
-task rename <name>                        # tell the service what I call myself
+task checks / task timings                # what the model checks and the commands cost
 ```
 
-**`task add` REFUSES what something already covers.** Before the filing goes
-anywhere, the local `claude` is asked — as Haiku, on the caller's own
-subscription rather than an API key — whether the new subject is one of the open
-tasks in different words. That is the duplicate no one can catch by hand:
-sessions cannot see each other's lists, and the two spellings of one problem
-share no words. A match ends the command, `nothing was filed`, naming what it
-matched and the override in the same breath: `--no-duplicate-check` re-runs it
-past both halves, and the caller is still holding the body it tried to file.
+### The duplicate check
+
+**`task add` refuses what something already covers.** Before the filing is sent,
+the local `claude` (the cheapest model, on the caller's own subscription) is
+asked whether the subject is one of the open tasks in different words — the
+duplicate nobody can catch by hand, since sessions cannot see each other's lists.
+An exact subject is caught by string equality first. A match ends the command
+with `NOT FILED`, naming what it matched. **`--no-duplicate-check` overrules a
+refusal you have just seen, and only then**: the service refuses the flag unless
+this session was recently refused that exact subject, because passed
+pre-emptively it means the check never runs. The caller still holds the body, so
+overruling is one re-run.
 
 ⚠ **Only a model that names something refuses.** A failed, slow or missing
 `claude`, or a list that could not be read, prints `duplicate check did not run:
-…` on stderr and **files the task** — a session that cannot write things down is
-worse than any duplicate. That distinction is the whole of the design; it was
-advisory until 2026-08-14, and `src/tasks/duplicates.rs` carries both the
-measurement that argued for advisory and the one that overruled it.
+…` and **files the task** — a session that cannot write things down is worse than
+any duplicate.
 
-**It reads the closed tasks too, and those REFUSE as well — with a different
-remedy.** The 995 finished and abandoned tasks ride in the cached half of the
-call, so a filing that repeats work already done does not land; it is sent to
-reopen the task it repeats:
+**It reads the closed tasks too, and those refuse as well — with a different
+remedy.** The closed list rides in the cached half of the call, and a filing that
+repeats finished work is sent to reopen it:
 
 ```text
   #689  k8s Dhall model generation and apply convergence check already completed — already done
 NOT FILED — a model reading the closed titles says this work already exists. `task reopen <id>` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
 
-⚠ **This arm advised and filed until 2026-09-16.** The closed half is the weaker
-reader — 63% against the open half's 83% — so it refuses correct filings more
-often than the open one does, and that is the price of not leaving the cleanup
-to whoever notices a duplicate later. The override is the same single re-run.
+The closed half is the weaker reader, so it refuses correct filings more often;
+that is the price of not leaving the cleanup to whoever notices later. The
+verdict is always the LAST line, because sessions pipe this to `tail -3`.
 
-**`--check-only` asks what the check would say and files nothing**, which is how
-the gate is measured against its own behaviour rather than by filing probe rows
-into a shared tracker.
+* **`dropped` asserts no decision.** The status carries no reason, and a model
+  asked about one will invent it — so both closed statuses refuse alike and point
+  at the task.
+* **A closed row with no body is not read** — mostly this tool's own probes.
+  The filter is what a row *says*, never how fast it closed. What it skips is
+  counted and printed.
+* **A declared edge is exempt**: a task named in `--blocked-on` or `--blocks` is
+  not compared, because a blocker resembles what it unblocks by construction.
+* **`--check-only`** runs both halves and files nothing, so the check can be
+  tried without probe rows in a shared tracker.
 
-⚠ **`dropped` asserts no decision, and the obvious rule saying it should was
-written and then refuted.** `task drop` records a status and no reason, so a
-dropped task does not mean anybody decided against anything — #863 is dropped,
-carries a full plan and states no reason, and a model asked about it reported a
-decision the row never makes. Both statuses refuse alike and point at the task
-rather than at what its status is supposed to mean.
-
-⚠ **A closed row with no body is not read at all.** More than half the dropped
-pile is this tool's own probes, two of which are the paraphrase fixtures for
-this very check. The filter is what the row *says*, never how fast it closed:
-#863 was dropped 58 seconds after filing and is the most valuable row in the
-corpus. What it skips is counted and printed.
-
-**The tool records what it costs you, from real use.** Every invocation writes
-its own wall clock to `command_run`; `task timings` reads it back. Nothing polls
-— an earlier version of this was a 15-minute launchd probe timing `task list
---all`, a command no session runs, from a process with no session id and a cold
-cache. One real command an hour carries the numbers to fleetwatch, chosen by a
-conditional UPDATE so concurrent sessions cannot all send at once.
+### The density read
 
 **A body that has grown without being rewritten is read back to you.** Once one
-has gained 3,000 characters since the last edit that made it smaller, `task edit`
-puts it to the same local Haiku against the three rules `task edit --help`
-prints, and says what came back on stderr. It never refuses and never delays the
-write — the edit has already landed, so a missing, slow or unreadable `claude` is
-silence rather than an error, and `--no-density-check` skips the wait. The unit
-is characters since the last consolidation rather than a size or a count of
-edits: a size cannot tell a long body somebody has just rewritten from a short
-one that has doubled since anyone read it. Measured 2026-08-23 over nine days of
-`task_revision`: 667 body-changing edits, of which 459 were exact appends or
-prepends adding 791,400 characters against 183 rewrites removing 26,593, and
-#982 ran 42 consecutive growing edits to 100,382 characters without once being
-consolidated.
+has gained `density::SAMPLER` characters since the last edit that made it
+smaller, `task edit` puts it to the local model against the three rules `task
+edit --help` prints, and says what came back on stderr. It never refuses: the
+edit has landed, so a missing, slow or unreadable `claude` is silence, and
+`--no-density-check` skips the wait. The unit is characters since the last
+consolidation — a size cannot tell a body just rewritten from one that has
+doubled unread. What a read said is stored on the task, shown by `task show`, and
+marked `[sprawl …]` in the digest until an edit makes the body smaller or a
+later read finds it dense.
 
 **Both checks cap how long the model may deliberate** (`MAX_THINKING_TOKENS=1024`).
-Uncapped, one read of a 5 kB body took 220 seconds and 19,792 output tokens to
-reach two findings that the capped read reaches in 11 seconds; the live rows had
-a 79-second median and one abandoned run. Not zero, though — with thinking off,
-#982's 105 kB answered `DENSE`, meaning *this holds together*, in three of four
-runs, in 2.3 to 3.2 seconds — a false all-clear on the task that most needs the
-read.
+Uncapped, a read runs many times longer to reach the same findings; at zero, the
+most tangled bodies come back `DENSE` in seconds — a false all-clear on the task
+that most needs the read.
 
-**Both checks write down what they did** (`check_run`, `POST /api/checks`): kind,
-characters put to the model, elapsed, and outcome — `quiet`, `spoke`, `timeout`
-or `error`. Neither could be counted before: the filing check's only trace was a
-line on the caller's stderr, and the density read swallows every failure by
-design. The table carries no foreign keys, because an instrument that its own
-subject can refuse or delete is not one. `task checks` folds the last week into
-one line per kind — runs, outcomes, and the latency spread including the calls
-that were abandoned, since leaving those out is what makes a bound that fires
-look comfortable.
+**Both checks write down what they did** (`check_run`): kind, characters put to
+the model, elapsed, and `quiet`, `spoke`, `timeout` or `error`. The table has no
+foreign keys, because an instrument its subject can refuse or delete is not one.
+`task checks` folds the last week into one line per kind, the abandoned calls
+included — leaving them out makes a bound that fires look comfortable.
 
-`--body -` reads stdin, which is how a session writes a long one without fighting
-shell quoting. `TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret.
-**Never on argv** — a token in a command line is in every process listing on the
-machine and in the transcript of the session that typed it.
+**The tool records what it costs you, from real use.** Every invocation writes its
+wall clock to `command_run`; `task timings` reads it back. Nothing polls: a timer
+times a command nobody runs, from a cold process. One real command an hour
+carries the numbers to fleetwatch, chosen by a conditional `UPDATE` so concurrent
+sessions cannot all send.
+
+### Identity, the token and the cache
+
+`TASKS_TOKEN`, or `~/.config/tasks/token`, is the shared secret. **Never on
+argv** — a token in a command line is in every process listing and in the
+transcript of the session that typed it.
 
 **Identity needs no setup.** Claude Code sets `$CLAUDE_CODE_SESSION_ID` in every
-shell it runs, and the CLI reads it: `--session`, then `$TASKS_SESSION`, then
-that. A session therefore cannot forget to say who it is, nor mistype *another*
-conversation's id into its own history. There is no anonymous mode for reads
-either — the service needs both halves of the credential to answer at all — so a
-bare token gets a 401 that names the missing half rather than the generic one
-that once read as a bad token.
+shell it runs; `--session`, then `$TASKS_SESSION`, override it. A session cannot
+forget to say who it is, nor mistype another conversation's id. There is no
+anonymous mode for reads either, and a token without a session id is refused by
+the CLI with a message naming the missing half.
 
 **A write drops the prompt hook's cached digest** (`src/hook.rs`, and
-`~/.cache/claude-tasks/<session>.txt` at the other end). The hook reads that file
-before the network and treats anything under a minute as current, which is right
-for reading and wrong for the moment after a write: a session that files a task
-and is then shown a digest without it has been given a reason to file it twice —
-the one mistake the pile's visibility exists to prevent. Every non-`GET` clears
-it, centrally in `Client::send` rather than per command, and silently, because
-the write has already succeeded and the cost of missing it is one stale prompt.
-
-### Installing it
-
-```sh
-nix build .#task            # just the binary, here
-```
-
-On the Mac it is installed through home-manager (`pippijn/mac-config`) like every
-other tool, pinned to this repo's committed HEAD. ⚠ **A commit here is not an
-installed CLI**: `~/.config/home-manager/switch.sh` re-locks and activates, and
-until it runs every session is holding the previous build. The gate has a row for
-the package, so the flake cannot rot unnoticed between switches.
+`~/.cache/claude-tasks/<session>.txt` at the other end). The hook serves its last
+answer for a short while, which is right for reading and wrong right after a
+write: a session shown a digest without the task it just filed has a reason to
+file it twice. Every non-`GET` clears it, centrally in `Client::send`, silently.
 
 **Naming a task.** Every command that takes one accepts `79`, or `#79` as the
-digest prints it — the hash is accepted because the digest puts one on every
-line of every prompt, and a session copying an id out of its own context must
-not be corrected for it.
+digest prints it — a session copying an id out of its own context must not be
+corrected for it.
 
-⚠ **There was a second spelling, and spending it was the work of retiring it.**
-`recall#79` named a task by what a session called it before the migration, held
-resolvable by `origin_session` / `origin_number`, because 178 of the 620
-imported tasks could not keep their number. Pippijn confirmed on 2026-08-09 that
-every session had moved, so the columns went — but only after every reference
-that depended on them was rewritten to a live id: 29 machine-written
-`blockedBy` / `blocks` footers and 21 citations in ordinary prose. Deleting the
-mapping first would have turned all fifty into dead references with nothing
-failing. `migrations/0003_drop_origin.sql` records what was checked.
+### Who holds a task
 
-**A task belongs to whoever is dealing with it, and the service works that out
-rather than waiting to be told.** Three moments infer a holder, all meaning the
-same thing by it and sharing one function (`actor_holder`):
+**A task belongs to whoever is dealing with it, and the service works that out.**
+Three moments infer a holder, sharing one function (`actor_holder`):
 
 | moment | the rule |
 | --- | --- |
@@ -481,129 +322,90 @@ same thing by it and sharing one function (`actor_holder`):
 | **starting** | `start` claims it **out of the pile** — never off another holder |
 | **closing** | `done` and `drop` alike hand it to whoever closed it |
 
-`assignee` is the only place a *list* can say any of this — the history records
-every actor, and no list renders a history — so a task closed while held by
-`nobody` read as "done by nobody" everywhere it was seen again. Dropping counts
-on the same argument backwards: who decided a thing was not worth doing belongs
-in a list too, and the status beside the name tells the two apart. An explicit
-assignee in the same change always wins, and reopening leaves the holder alone.
+`assignee` is the only place a *list* can say who did something — no list
+renders a history — so a closed task must not read as done by nobody, and a
+closed task cannot be handed to the pile. An explicit assignee always wins, and
+reopening leaves the holder alone.
 
-**A pile row says who filed it, and that is the whole of what replaced the repo
-column.** `filed_by` is the filing session's name, read out of `task_events` —
-there is nothing to set and nothing that can drift, and it was known for 112 of
-the 139 open tasks the day it was added. It is drawn only where there is no
-holder, in the space a pile row leaves empty, and as plain text rather than the
-holder's pill: a chip would say somebody has the task, which is the one thing
-that row must not say.
+⚠ **Nothing means Pippijn implicitly.** `me` is whoever is running the command;
+handing work to the person is `pippijn`.
 
-⚠ **A hint, not a filter, and not in the digest.** Dropping the repo column
-removed two things at once and only one of them was wrong. *Which sessions
-should be shown this* hid work and is gone for good; *where does this work live*
-is what a session needs to rule a task out, and without it that cost 2,732 bytes
-of `task show` against 548 for seeing the whole pile. The digest stays silent because a word on each
-filer is a per-task charge on every session on every turn —
-`the_digest_never_says_who_filed_a_task` is the guard, because that argument will
-come back wearing a good suit. ⚠ **This used to argue from "most open tasks are
-in the pile", which is no longer true and is no longer needed:** filing there
-takes a reason now, and `task list --pile` is where the current size lives. The
-per-task charge was always the load-bearing half. And the filer is
-not always the place: #683 was filed by the tasks session about memview.
+⚠ **The pile is argued for.** `--to nobody` needs `--spare "<why>"` beside it:
+filings to the pile were almost always corrected later, so an unheld task is
+something stated rather than a way of not choosing. A reason WITHOUT the pile is
+refused too — it would say nothing true about a held task.
 
 ⚠ **`doing` and `nobody` together is a real state, not a leftover.** A session
-that stops work deliberately hands the task back without closing it — the
-question is still open, the approach is not — so the status is testimony that
-work happened rather than a claim that it is happening, and the body is where
-the next taker finds out how far it got. #19 is the task that established it,
-and it is why the starting rule reads the holder and nothing else: a
-`before.status != Doing` clause survived here until 2026-08-09, which made
-`start` a silent no-op on the one state where there was nobody to displace.
-Refusing the state instead would have been the wrong fix — unlike a task closed
-into the pile, which claims a finish nobody made, this one is true.
+that stops work hands the task back without closing it — the question is still
+open, the approach is not — so the status says work happened, and the body says
+how far. This is why the starting rule reads the holder and nothing else: a rule
+reading the status would make `start` a silent no-op there.
 
-⚠ **Nothing means Pippijn implicitly.** `me` is whoever is running the command,
-so for a session it is that conversation; handing work to the person is
-`pippijn`, which says so. It read the other way round until 2026-08-09, together
-with a default of the pile on filing and a `start` that claimed nothing — three
-separate places where a session's own work was not its own. The visible symptom
-was a conversation showing `0 open` while it was hours into a task, because a
-holder was recorded on the way out and at no other time.
+**A pile row says who filed it.** `filed_by` is the filing session's name, read
+from `task_events`, so there is nothing to set and nothing to drift. It is drawn
+only where there is no holder, as plain text rather than the holder's pill. It is
+a hint about where the work lives, not a filter, and **never in the digest**,
+where a word on every pile line would be a charge on every session every turn —
+`the_digest_never_says_who_filed_a_task` is the guard. And the filer is not
+always the place: one conversation files work for another.
 
-⚠ **The pile is a decision now, and since 2026-09-03 an argued one.**
-`--to nobody` — or "nobody" in the form — is how work is left for whoever picks
-it up, which is how Pippijn hands a task to no conversation in particular. It
-needs `--spare "<why>"` beside it: filing to the pile was corrected 47 times out
-of 47 across every real filing, so absence of a holder is now something stated
-rather than a way of not choosing. A reason WITHOUT the pile is refused too — it
-would say nothing true about a task somebody holds. It is still the second thing
-a digest carries, deliberately: see below.
+### What a write answers
 
-⚠ **"Open" is `Status::is_open`, never `status <> 'done'`.** Six queries spelled
-it the second way, which was the same thing until it wasn't: a dropped task would
-have gone on counting as open in the list, the filter bar and all three `/who`
-tallies, and none of them would have failed. `still_open!` is now the only place
-that vocabulary appears in SQL, and `a_dropped_task_is_not_open_anywhere` is what
-holds the Rust and the SQL halves together.
+⚠ **"Open" is `Status::is_open`, never `status <> 'done'`**, which counts a
+dropped task as open, silently. `still_open!` is the only place the vocabulary
+appears in SQL, and `a_dropped_task_is_not_open_anywhere` holds the Rust and SQL
+halves together.
 
 **A write answers with what it moved.** `PATCH /api/tasks/{id}` returns the task
-plus `changed`: the `task_events` kinds it wrote — `status`, `assigned`,
-`edited` — empty when it wrote none. The CLI prints *nothing changed — it was
-already like that* under the task line.
+plus `changed`: the `task_events` kinds it wrote, empty when it wrote none, and
+the CLI prints *nothing changed — it was already like that*. **Reported, not
+refused**: a no-op is often correct — starting a task already yours is meant to
+be quiet — but must not answer exactly like a write that worked.
+`a_write_that_moves_nothing_says_so` holds both halves.
 
-⚠ **Reported, not refused, and the distinction is the whole design.** Three
-defects in one day were writes that answered exactly like writes that had
-worked: `start` on a task already `doing` in the pile (`07df813`), a rename to a
-blank name (`0cf49a5`), closing into the pile (`98157f4`). Each was found by
-reproducing it against a scratch task, because success and no-op were
-indistinguishable. But a no-op is *often correct* — starting a task already
-yours is meant to be quiet — so refusing them would trade a silent success for a
-spurious failure. The event rows are the answer rather than a second list kept
-level by hand: a write that records no history changed nothing, by definition.
-`a_write_that_moves_nothing_says_so` holds both halves, and it is why a body
-write now compares before it records.
+**An edit that replaced text says whose, and when**, with `task undo` beside it.
+It refuses nothing — sessions rewrite each other's words by standing permission —
+but a writer told the text was rewritten recently by somebody else can stop.
+`task undo` restores the one previous version kept per task, and refuses without
+`--anyway` when the edit it would revert is somebody else's.
 
-**`--json` on any read command prints what the service answered, verbatim**, and
-`task show <id> --body` prints the stored markdown alone. Both exist so a claim
-about the data can be *checked* rather than parsed out of a human format with a
-regex — which is what the check that verified the migration had to do, until the
-health session pointed out that `wc -l` on both sides proves only the count. The JSON is reprinted rather than rebuilt here, so there is one documented
-shape rather than two kept level by hand. `task digest` refuses `--json`: it
-answers in text/plain deliberately, being exactly what a prompt receives.
+**`--json` on any read command prints what the service answered, verbatim**, so
+a claim about the data can be checked rather than parsed out of the human
+format; `task show <id> --body` prints the stored markdown alone. The JSON is
+reprinted, not rebuilt, so there is one shape. The holder is `assignee`, an
+object of `{kind, id, name}` — there is no top-level `session` field, and
+guessing one matches every row. `task digest` refuses `--json`: it is exactly
+what a prompt receives, in text/plain, and prints its byte count on stderr —
+the per-turn cost of the whole system.
 
-⚠ **The shape is now written down in `--help`, because it was being guessed.** A
-task is `{id, subject, status, assignee, detailed, filed_by, created_at,
-updated_at, closed_at}`; the holder is `assignee`, an object of `{kind, id,
-name}` with `kind` one of `session`/`person`/`nobody`, and there is no top-level
-`session` field. A session hand-filtering `--all --json` assumed there was,
-matched every row that lacked it, and reported **137** tasks in the pile against
-a real **5** — to Pippijn, before anybody checked. A flag whose help documents
-its own provenance at length and never says what it returns is half a flag.
+### Installing it
 
-**`--pile` exists for the same reason**: that question had no name, so it was
-answered by hand. `pile=true` on the wire *widens* a session's plate to include
-the unheld; `unheld=true` *narrows* to them. Both are parameters because both are
-real questions, and the CLI spends a flag on telling them apart.
+```sh
+nix build .#task            # just the binary, here
+```
 
-`task digest` prints the byte count on stderr. That number is the per-turn cost of
-the whole system, and it is the one worth watching.
+On the Mac it is installed through home-manager (`pippijn/mac-config`), pinned to
+this repo's committed HEAD. ⚠ **A commit here is not an installed CLI**:
+`~/.config/home-manager/switch.sh` re-locks and activates, and until it runs every
+session holds the previous build. The gate has a row for the package, so the
+flake cannot rot unnoticed between switches.
 
 ## Who may do what
 
 | credential | is | may |
 | --- | --- | --- |
-| Nextcloud session cookie | the person | everything |
-| `AGENT_TOKEN` + `X-Session-Id` | that session | everything except renaming another session |
+| Nextcloud session cookie | the person | everything but a focus, which belongs to a conversation |
+| `AGENT_TOKEN` + `X-Session-Id` | that session | everything, but it may rename and focus only itself |
 
 ⚠ **The actor is derived from the credential, never from the request body.** A
-write says what to change; it does not get to say who is changing it. That is what
-stops a session filing history as though Pippijn had moved a task, and it is
-prevented by there being no field to put it in.
+write says what to change, not who is changing it, so a session cannot file
+history as though Pippijn had moved a task: there is no field to put it in.
 
 ⚠ **`AGENT_TOKEN` authenticates the machine, not the conversation.** Every session
-on the Mac reads the same value out of the same file, so one holding it can act as
-another by declaring a different id. That is not a boundary being lost — they run
-as one user on one machine and can read each other's transcripts anyway — but it
-must not be described as per-session authentication, because a later change might
-rely on that.
+on the Mac reads the same file, so one can act as another by declaring a
+different id. No boundary is lost — they run as one user and can read each
+other's transcripts anyway — but it must never be relied on as per-session
+authentication.
 
 ## Run (dev, Mac)
 
@@ -643,18 +445,15 @@ two.
 **Two rows carry the weight.** `tests` brings up a throwaway MariaDB, because the
 SQL here is runtime strings and running the queries is the only check on them —
 and the tests **panic rather than skip** when no database is supplied, so a
-hand-run cannot report green with none of the SQL exercised.
-`ui-check` renders every screen at Pixel width and asserts no text collides and
-nothing spills past the right edge.
+hand-run cannot report green with none of the SQL exercised. `ui-check` renders
+every screen at Pixel width and asserts no text collides and nothing spills past
+the right edge.
 
-⚠ **Geometry is not sight, and this app proved it on its first render.** The
-layout harness passed while shipping two defects a screenshot makes obvious: a
-holder chip capped so tight that `memview` rendered as `memv…`, and a two-line
-`mat-hint` overflowing Material's one-line subscript slot onto the field below —
-text over a *border*, which no text-overlap check will ever call a collision. So
-`pnpm run shots` renders every screen to `ui-snapshots/` for a person to look at.
-It is deliberately **not** a gate row: it asserts nothing, and a check nobody
-reads is worse than none.
+⚠ **Geometry is not sight.** A truncated chip label, or a hint drawn over a
+field's border rather than over text, passes every measurement. So `pnpm run
+shots` renders every screen to `ui-snapshots/` for a person to look at. It is
+deliberately **not** a gate row: it asserts nothing, and a check nobody reads is
+worse than none.
 
 ## Deployment
 

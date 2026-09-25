@@ -15,7 +15,6 @@ import harness from './e2e/harness.mjs';
  * see dev-lint/docs/layout-quality-architecture.md. What this app says about
  * itself is in e2e/harness.mjs.
  *
- * `npm run ui-check` (wired into scripts/verify.sh after `ng build`) serves the
- * freshly-built dist.
+ * `pnpm run ui-check` serves the built dist, so build first; the gate does.
  */
 export default defineConfig(phoneConfig(harness, devices, { testMatch: '**/ui-pages.spec.ts' }));

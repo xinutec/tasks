@@ -21,9 +21,8 @@
   padding: 0;
 
   li {
-    // The row gained a second child when naming arrived, so the `li` is now the
-    // one that lays them side by side. The anchor keeps its own flex — see the
-    // note below — and takes the space the button leaves.
+    // The `li` lays the link and the rename button side by side. The anchor
+    // keeps its own flex — see below — and takes the space the button leaves.
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--mat-sys-outline-variant);
@@ -36,11 +35,10 @@
     }
   }
 
-  // ⚠ **The row's layout lives on the anchor, not on the `li`.** The whole row
-  // became a link in #657, and an `<a>` is inline by default — leaving the flex
-  // on the `li` would have made the anchor a single inline box and stacked the
-  // icon, the name and the count vertically. The tap target is the whole row on
-  // purpose: this is read on a phone, and a count is not a thing to aim at.
+  // ⚠ **The row's layout lives on the anchor, not on the `li`.** An `<a>` is
+  // inline by default, so flex on the `li` alone would stack the icon, name and
+  // count vertically. The whole row is the tap target on purpose: a count is
+  // not a thing to aim at on a phone.
   a {
     display: flex;
     align-items: center;
@@ -80,8 +78,7 @@
     }
 
     // The id under the field, at the size the row's own handle uses. One line:
-    // a two-line hint overflows Material's subscript slot onto whatever is
-    // below, which is a defect this app has already shipped once.
+    // a two-line hint overflows Material's subscript slot onto what is below.
     mat-hint {
       font: var(--mat-sys-label-small);
       overflow: hidden;

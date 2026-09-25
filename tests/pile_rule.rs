@@ -1,19 +1,9 @@
 //! One rule, two renderings — the pile's reason, checked in both places.
 //!
-//! `--to nobody` needs `--spare "<why>"`, and the refusal is issued twice on
-//! purpose: the CLI says no BEFORE spending a duplicate check's model call, and
-//! the service says no from the type so the web form and any API caller are
-//! covered too. #1389 recorded that the duplication was deliberate and that
-//! nothing held the two copies level.
-//!
-//! ⚠ **The dangerous direction is one-way.** A CLI that is LOOSER than the
-//! service is harmless — the service refuses and the session sees a 400. A CLI
-//! that is STRICTER blocks a filing the service would have accepted, and it
-//! fails at the one place with no second opinion.
-//!
-//! So the verdict now lives in one function and both callers render their own
-//! words from it. These assert the verdict over all four inputs, and that each
-//! caller's message is addressed to its own audience.
+//! `--to nobody` needs `--spare "<why>"`, and both the CLI and the service
+//! refuse without one — see `holder::PileVerdict` for why twice, and why one
+//! verdict. These assert it over all four inputs, and that each caller's
+//! message is addressed to its own audience.
 
 use tasks::tasks::holder::{PileVerdict, pile_verdict};
 
@@ -28,9 +18,8 @@ fn the_four_inputs_have_one_verdict_each() {
     assert_eq!(pile_verdict(false, true), PileVerdict::ReasonWithoutPile);
 }
 
-/// ⚠ **A bare `--spare ""` is not a reason.** Whitespace passes `is_some()` at
-/// the CLI and is trimmed away at the service, which is exactly the shape of
-/// drift this file exists to stop: the two would disagree about the same input.
+/// ⚠ **A bare `--spare ""` is not a reason**, or the CLI and the service would
+/// disagree about the same input.
 #[test]
 fn an_empty_reason_is_no_reason() {
     assert_eq!(pile_verdict(true, false), PileVerdict::PileNeedsReason);

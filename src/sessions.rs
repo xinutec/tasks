@@ -1,19 +1,14 @@
 //! The conversations work can be handed to.
 //!
-//! ⚠ **The CLI's session id is the identity; the name is an attribute.** A
-//! session is renamed as its job changes, and that arrives here as an update.
-//! Everything that points at a session points at the id, so a rename touches one
-//! column and no task moves.
-//!
-//! ⚠ **The name is no longer something a session has to tell us.** It is read
-//! from the conversation's own transcript by the CLI and sent on every request
-//! — see [`crate::agent_name`] — so this column is a cache of what Claude Code
-//! calls a conversation rather than a self-report, and a session that never ran
-//! `task rename` is not a uuid for ever. [`touch`] is where the two meet.
+//! ⚠ **The CLI's session id is the identity; the name is an attribute.**
+//! Everything points at the id, so a rename touches one column and no task
+//! moves. The CLI reads the name from the conversation's own transcript
+//! ([`crate::agent_name`]) and sends it on every request, so the column is a
+//! cache of what Claude Code calls the conversation; [`touch`] stores it.
 //!
 //! A row is created by the first thing a session does, not by a registration
-//! step: a session that has to be enrolled before it can be given work is a
-//! session that will be given work before it is enrolled.
+//! step: a session that must be enrolled before it can be given work will be
+//! given work before it is enrolled.
 
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -32,9 +27,8 @@ pub struct Session {
     pub name: Option<String>,
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
-    /// How much is on this session's plate right now. The front page draws it
-    /// per row, so it is swept for every session in one query rather than asked
-    /// once per row.
+    /// How much is on this session's plate, counted for every session in one
+    /// query because the front page draws it per row.
     pub open: i64,
 }
 
@@ -49,11 +43,9 @@ struct Row {
 
 /// Record that a session exists, and what it calls itself.
 ///
-/// ⚠ **An absent name does not erase the stored one.** A caller that knows its
-/// id but not its name (the prompt hook, which is given only the id) would
-/// otherwise blank the name on every prompt, and the list would be a column of
-/// uuids by lunchtime. Passing `Some("")` is treated the same way: the CLI
-/// reports an empty name before a session has titled itself.
+/// ⚠ **An absent name does not erase the stored one**, or the prompt hook,
+/// which knows only the id, would blank it on every prompt. `Some("")` counts
+/// as absent: the CLI reports an empty name before a session has one.
 pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()> {
     let name = name.map(str::trim).filter(|n| !n.is_empty());
     sqlx::query(
@@ -70,26 +62,20 @@ pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()>
 
 /// One party's share of the work: what they are holding, and what they have held.
 ///
-/// ⚠ **`total` counts finished work, which is the only reason this type exists
-/// apart from [`Session`].** `open` alone says who is busy; it says nothing
-/// about who has done anything, because a task leaves `open` the moment it is
-/// finished. A session with `0/56` has cleared its plate, and a bare `0` reads
-/// as an idle one.
+/// ⚠ **`total` counts finished work — the reason this type exists apart from
+/// [`Session`].** `open` says who is busy, not who has done anything: `0/56`
+/// is a cleared plate, where a bare `0` reads as an idle one.
 ///
-/// ⚠ **A dropped task is in neither number.** It is not work in hand and it is
-/// not work done, and counting it would make `total` mean "tasks that reached an
-/// end", which is a figure nobody wants — dropping ten stale items would read as
-/// having finished ten. So a task that is dropped simply leaves the tally, which
-/// is the honest thing for a number whose whole job is to say what somebody has
-/// got through.
+/// ⚠ **A dropped task is in neither number.** It is neither in hand nor done;
+/// counting it would make dropping ten stale items read as finishing ten.
 #[derive(Debug, Clone, Serialize)]
 pub struct Holder {
     /// `session`, `person` or `nobody` — the same vocabulary as an assignee.
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// What to call them. A session that has not named itself has none, and the
-    /// client shows the id; the pile and the person always have one.
+    /// What to call them. A session may have none, and the client shows the id;
+    /// the pile and the person always have one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub open: i64,
@@ -100,14 +86,11 @@ pub struct Holder {
 
 /// Count a group of tasks as `open` and `done`.
 ///
-/// ⚠ **Both halves are counted, and `total` is added up in Rust.** Not for want
-/// of a third `SUM`: the two figures must agree, and expressing the second as
-/// "everything except dropped" would have put the closed vocabulary into SQL
-/// three more times, in the exact shape (`<> 'something'`) that made the fourth
-/// status a silent miscount in the first place. `still_open!` and `= 'done'`
-/// are the only two things these queries know how to say. `SUM` of a boolean
-/// comes back DECIMAL, hence the cast — sqlx will not decode it into `i64`, and
-/// nothing but a real query finds that out.
+/// ⚠ **Both halves are counted, and `total` is added in Rust.** Spelling it as
+/// "everything except dropped" in SQL would be a `<> 'something'`, which
+/// silently miscounts when a status is added; `still_open!` and `= 'done'` are
+/// the only two things these queries say. `SUM` of a boolean comes back
+/// DECIMAL, which sqlx will not decode into `i64` — hence the cast.
 macro_rules! tally {
     ($extra:literal, $tail:literal) => {
         concat!(
@@ -124,31 +107,19 @@ macro_rules! tally {
 
 /// Who holds what: every session that has held something, Pippijn, and the pile.
 ///
-/// Three queries rather than one union, because the three groups are counted
-/// from different columns — `assignee_session`, `assignee_person`, and the
-/// absence of both. Ordered by what is open, most first, since the question
-/// this answers is "who is loaded"; ties go to the larger history.
+/// Three queries rather than one union: the groups are counted from different
+/// columns — `assignee_session`, `assignee_person`, and the absence of both.
+/// Most open first, since the question is "who is loaded"; ties go to the
+/// larger history.
 ///
-/// ⚠ **A session that has never been given a task is not a holder, and is left
-/// out.** A row here is created by the first thing a conversation does — which
-/// is asking for a digest, on its first prompt — so the table holds every
-/// conversation that has ever run: **717 two days after the cutover, of which
-/// 14 had ever held anything**. Answering with all of them buries the fourteen
-/// under seven hundred `0/0` lines, on a screen meant to be read on a phone and
-/// in the one CLI command whose whole job is to say who is carrying what. That
-/// is the same everything-by-default `task list` was narrowed for the day
-/// before.
-///
-/// The predicate is *has ever been assigned a task*, not *has anything open*:
-/// [`Holder::total`] exists precisely so a cleared plate still says who cleared
-/// it, and a session that dropped its whole list decided something and should
-/// be seen to have. `list` is still every session known, which is what
-/// `task sessions --all` asks for.
+/// ⚠ **A session that has never been given a task is left out.** Every
+/// conversation that ever ran has a row, and nearly all of them never held
+/// anything; listing them would bury the holders under `0/0` lines. The
+/// predicate is *ever assigned*, not *anything open*, so a cleared plate still
+/// says who cleared it. [`list`] is every session known (`task sessions --all`).
 pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
-    // `COUNT(t.id)` over the left join is *ever assigned anything*, and it is
-    // deliberately not spelled with the status vocabulary: "has a history" is a
-    // different question from "is open", and `still_open!` is the only place
-    // the second one is allowed to be said.
+    // `COUNT(t.id)` over the left join is *ever assigned anything* —
+    // deliberately not spelled with the status vocabulary.
     //
     // dev-lint: allow-sqlx — a `concat!`ed literal assembled by `tally!`, not a
     // string built at runtime; the only interpolation is another macro.

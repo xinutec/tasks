@@ -5,16 +5,12 @@
 //! input to it, and every handover starts with a `task sessions | grep` to
 //! translate.
 //!
-//! ⚠ **What is NOT resolved is refused, and that is the important half.** Not
-//! because the write would land — `fk_tasks_session` refuses an assignee with no
-//! `sessions` row — but because of *how*: the constraint surfaces as
-//! `AppError::Other`, a 500 logged as "internal error" and reaching the caller
-//! as `moving a task`. A typo deserves "no session called that, did you mean …",
-//! and the list of names has just been fetched anyway.
+//! ⚠ **What is NOT resolved is refused here.** `fk_tasks_session` would refuse
+//! the write anyway, but as a 500 "internal error"; a typo deserves "no session
+//! called that, did you mean …", and the names have just been fetched.
 //!
-//! In the library rather than the CLI for the reason
-//! [`selection`](super::selection) gives: a decision rather than plumbing, and
-//! testable as public API instead of through a binary.
+//! In the library rather than the CLI: a decision, testable as public API
+//! instead of through a binary.
 
 /// What a typed holder turned out to be.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,19 +20,18 @@ pub enum Holder {
     Session(String),
     /// The name belongs to more than one conversation.
     ///
-    /// ⚠ **Not hypothetical: names are reused, and sessions get renamed.**
-    /// Guessing would hand work to whichever conversation held the name first,
-    /// so every id is returned and the caller chooses.
+    /// ⚠ **Names are reused, and sessions get renamed.** Guessing would hand
+    /// work to whichever held the name first, so every id is returned.
     Ambiguous(Vec<String>),
     /// Nothing answers to it. Carries the names that do exist, because the
     /// reader's next question is always "what should I have typed".
     Unknown(Vec<String>),
 }
 
+/// Resolve `typed` against the known `(id, name)` pairs.
 ///
-/// **An exact id wins over a name.** They cannot collide in practice — one is a
-/// uuid — but the id is the identity and the name is an attribute of it, so if
-/// they ever did, the identity is the answer.
+/// **An exact id wins over a name**: the id is the identity, should a name ever
+/// look like one.
 pub fn resolve<'a>(
     known: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
     typed: &str,
@@ -67,16 +62,11 @@ pub fn resolve<'a>(
 
 /// Whether a filing's holder and its `--spare` reason fit each other.
 ///
-/// ⚠ **The rule is issued twice on purpose, and that is why it is decided
-/// once.** The CLI refuses BEFORE the duplicate check, which spends a model call
-/// a filing that cannot land should not pay for; the service refuses from the
-/// type, so the web form and any API caller get the same rule.
-///
-/// ⚠ **Drift here is one-directional.** A CLI LOOSER than the service is
-/// harmless — the service refuses and the caller sees a 400. A CLI STRICTER
-/// than the service blocks a filing the service would have accepted, at the one
-/// place with no second opinion. So the verdict is shared and only the WORDS
-/// differ, because the two answer different readers.
+/// ⚠ **Issued twice, so decided once.** The CLI refuses BEFORE the duplicate
+/// check, so a filing that cannot land spends no model call; the service
+/// refuses too, for the web form and any API caller. A CLI stricter than the
+/// service would block filings the service accepts, so the verdict is shared
+/// and only the WORDS differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PileVerdict {
     /// Held with no reason, or the pile with one.
@@ -89,8 +79,7 @@ pub enum PileVerdict {
 }
 
 /// Decide it. `has_reason` must already have had blank reasons discarded — an
-/// empty `--spare ""` is not a reason, and the two callers must agree on that
-/// before they get here or they will disagree about the same input.
+/// empty `--spare ""` is not a reason — or the two callers will disagree.
 pub fn pile_verdict(to_nobody: bool, has_reason: bool) -> PileVerdict {
     match (to_nobody, has_reason) {
         (true, false) => PileVerdict::PileNeedsReason,

@@ -2,11 +2,10 @@
 //!
 //! Establishes *who the user is* and nothing else. The access token is used
 //! once to read `{id, displayname}` then discarded; no refresh token is
-//! stored. Copied from the `messages` app, with recall's public/internal URL
-//! split: the *browser* is sent to `nc_base_url`, but the server-side token +
-//! userinfo calls can go to `nc_internal_url` (cluster Service DNS) carrying
-//! a Host header for `nc_base_url`'s host — on isis a pod can't hairpin to
-//! the node's own public IP.
+//! stored. The *browser* is sent to `nc_base_url`; the server-side token and
+//! userinfo calls may go to `nc_internal_url` (cluster Service DNS) with a Host
+//! header for `nc_base_url`'s host, because on isis a pod cannot hairpin to the
+//! node's own public IP.
 
 use anyhow::{Context, Result, anyhow};
 use serde::Deserialize;

@@ -1,13 +1,8 @@
 //! Adding to a body instead of replacing it.
 //!
-//! ⚠ **These exist because the absence of this cost two bodies in one
-//! afternoon.** Until 2026-08-15 the only way to write prose onto a task was
-//! `--body`, which replaces — so recording an outcome meant reading the old
-//! text out, concatenating by hand, and sending the whole thing back. Twice
-//! that day the read half was skipped by the session that maintains this tool:
-//! once caught by the collapse guard, and once at 52% kept, which is under the
-//! threshold and which nothing catches. The second one was only noticed because
-//! the writer went looking.
+//! ⚠ **Without this, adding prose means `--body`**, which replaces: read the old
+//! text out, concatenate by hand, send it all back — and a skipped read loses
+//! the body, often by less than the collapse guard catches.
 //!
 //! Two properties are under test, and the second is the one that could not be
 //! got by fixing this in the client:
@@ -16,8 +11,7 @@
 //!    seam — a note butted straight onto prose becomes its first sentence.
 //! 2. **The addition is resolved against the body inside the transaction that
 //!    reads it.** A client-side read-concatenate-PATCH would lose one of two
-//!    concurrent additions, and this store has sessions editing the same task
-//!    eleven seconds apart on record.
+//!    concurrent additions, and sessions do edit one task seconds apart.
 
 mod common;
 
@@ -130,8 +124,7 @@ async fn one_blank_line_at_the_seam_whatever_was_typed() {
     // ⚠ **The indentation survives.** Only newlines are eaten at the seam:
     // whitespace inside a line is markdown content — two trailing spaces are a
     // hard break, leading spaces set continuation — so a `trim` here would edit
-    // what the task says while claiming to keep it. The first version of
-    // `joined` did exactly that and this assertion is what caught it.
+    // what the task says while claiming to keep it.
     assert_eq!(now, "DONE.\n\n  The filing, indented and padded.\n\n\n");
     assert!(
         !now.contains("\n\n\n  The"),
@@ -226,13 +219,13 @@ async fn adding_waits_for_whoever_is_already_writing_the_body() {
     // a body that had never contained the other's text. `SELECT … FOR UPDATE`
     // is what makes the second wait and then read what the first wrote.
     //
-    // ⚠ **Two earlier versions of this test passed against the BROKEN code**,
-    // which is why it is shaped so awkwardly:
+    // ⚠ **Gentler shapes of this test pass against the BROKEN code**, which is
+    // why it is shaped so awkwardly:
     //
-    // * A `tokio::join!` of two updates passed three times out of three —
-    //   `join!` polls the first until it yields, and a local MariaDB is fast
-    //   enough that the two rarely overlap where it matters.
-    // * Asserting that the addition merely BLOCKS passed too. It does block —
+    // * A `tokio::join!` of two updates — `join!` polls the first until it
+    //   yields, and a local MariaDB is fast enough that the two rarely overlap
+    //   where it matters.
+    // * Asserting that the addition merely BLOCKS. It does block —
     //   on the `UPDATE`, not the read — and then writes the body it built from
     //   text that had already been replaced. Blocking is not the property; not
     //   losing the other write is.
@@ -342,20 +335,10 @@ async fn the_history_counts_an_addition_as_what_it_is() {
 
 #[tokio::test]
 async fn the_reply_counts_the_body_that_was_written_not_the_one_that_was_sent() {
-    // ⚠ **The reply said `10 → 10 chars` over an addition, from `346120c` until
-    // 2026-08-16.** `Replaced.now` was read off `change.body`, which an addition
-    // leaves at None — so its `map_or` fallback handed back the BEFORE size and
-    // the line reported that nothing had moved.
-    //
-    // That line is `displaced()` in the client, and its whole job is to make a
-    // session look twice at text it just replaced. Saying an addition displaced
-    // nothing is the one wrong answer that reads as reassurance, so the case
-    // that broke is the case where being wrong costs most.
-    //
-    // The history line was right throughout — see
-    // `the_history_counts_an_addition_as_what_it_is` — because the write and
-    // the event were both built from the resolved body. Only the reply read the
-    // request instead.
+    // ⚠ **`Replaced.now` must come from the resolved body, not `change.body`**,
+    // which an addition leaves at None — the reply would say `10 → 10 chars`
+    // over an addition. That line exists to make a session look twice at what
+    // it replaced, so "nothing moved" is the wrong answer that reassures.
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 

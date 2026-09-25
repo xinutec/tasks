@@ -24,22 +24,15 @@ import { TaskStore } from './task-store';
 /**
  * The open list.
  *
- * **One flat list, in id order.** The backend returns creation order
- * deliberately — a list that re-sorts as work starts on an item moves the line
- * you were reading — and this screen keeps it.
+ * **One flat list, in the backend's order** — by rank, then id. A list that
+ * re-sorts as work starts on an item moves the line you were reading.
  *
- * It grouped by repository until the column was dropped: a session spans
- * checkouts, so the repository was never a question with one answer. What is
- * left is *whose is it*, held as state on the screen rather than as a query the
- * backend runs, because the whole list is already here and a round trip to hide
- * four rows is a round trip a phone waits for.
+ * The filter is *whose is it*, applied on the screen rather than by the
+ * backend: the whole list is already here, and a round trip to hide four rows
+ * is one a phone waits for.
  *
- * ⚠ **The filter lives in the URL, and that is what makes `/who` able to link
- * here.** It was a component signal until #657, which meant the only way to
- * reach a selection was to tap a chip: `/who` could say `hardware 6/31` and had
- * no way to show you which six, because there was no address for "hardware's
- * work". `app.routes.ts` had documented `?who=` for weeks — a reader checking
- * whether the feature existed found a sentence saying it did.
+ * ⚠ **The filter lives in the URL**, which is what lets `/who` link to one
+ * holder's work.
  */
 @Component({
   selector: 'app-list-view',

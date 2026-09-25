@@ -42,9 +42,8 @@
     </mat-select>
   </mat-form-field>
 
-  <!-- Only for the pile, because it is the only holder that has to be argued
-       for: filing there was corrected 47 times out of 47 (#1334). Every other
-       holder is a statement already; this one is the one that needs a why. -->
+  <!-- Only for the pile, the one holder that has to be argued for: filings
+       to it were almost always corrected later. -->
   @if (to() === 'nobody') {
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Why is this nobody's?</mat-label>
@@ -59,10 +58,9 @@
     </mat-form-field>
   }
 
-  <!-- Last, and starting on NOTHING. Filing means answering this: either a
-       level, or `unassessed` for work you are not the one to judge. The old
-       control defaulted to unranked, which answered for the filer — the same
-       objection as defaulting to a level, in the other direction. -->
+  <!-- Last, and starting on NOTHING. Filing means answering this: a level,
+       or `unassessed` for work you are not the one to judge. A default
+       would answer for the filer. -->
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>Priority</mat-label>
     <mat-select name="priority" [ngModel]="priority()" (ngModelChange)="priority.set($event)">

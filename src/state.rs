@@ -1,6 +1,5 @@
-//! Shared application state + the short-lived OAuth `state` store (in-memory,
-//! per process — fine for a single-pod deployment). Copied from memview, which
-//! took it from `messages`.
+//! Shared application state, and the short-lived OAuth `state` store —
+//! in-memory, per process, which is fine for a single-pod deployment.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -11,10 +10,9 @@ use sqlx::MySqlPool;
 
 use crate::config::Config;
 
-/// How long a started sign-in stays valid, for the in-memory entry AND for the
-/// cookie that binds it to the browser — one number, because two would let the
-/// cookie outlive the entry it names and turn a stale sign-in into a confusing
-/// refusal rather than a clear one.
+/// How long a started sign-in stays valid, for the in-memory entry AND the
+/// cookie that binds it to the browser — one number, so the cookie cannot
+/// outlive the entry it names.
 pub const OAUTH_TTL_SECS: i64 = 600; // 10 minutes
 
 const OAUTH_TTL: Duration = Duration::from_secs(OAUTH_TTL_SECS as u64);

@@ -1,10 +1,9 @@
 //! Who is asking: the person in a browser, or a Claude session.
 //!
 //! ⚠ **The actor is derived from the credential, never from the request body.**
-//! A write says what to change; it does not get to say who is changing it. That
-//! is what stops a session filing history as though Pippijn had moved a task —
-//! the one thing in this app that would make the record untrustworthy, and it is
-//! prevented by there being no field to put it in.
+//! A write says what to change, not who is changing it, so a session cannot
+//! file history as though Pippijn had moved a task: there is no field to put
+//! it in.
 //!
 //! Two credentials, and they are not the same strength:
 //!
@@ -37,15 +36,10 @@ pub const SESSION_NAME_HEADER: &str = "X-Session-Name";
 
 /// A name a caller reports for *itself*, read from its own transcript.
 ///
-/// ⚠ **Deliberately not part of [`Viewer`].** The identity is the id and it
-/// comes from the credential; this is an attribute arriving beside it, and
-/// keeping the two apart is what makes the rule easy to state: a name is only
-/// ever applied to the row of the session that sent it. Folding it into
-/// `Viewer::Session` would put a client-supplied string inside the thing this
-/// module exists to say cannot be client-supplied.
-///
-/// The worst a lying caller achieves is renaming itself, which `task rename`
-/// already offers it.
+/// ⚠ **Deliberately not part of [`Viewer`]**, which must hold nothing
+/// client-supplied. A name is only ever applied to the row of the session that
+/// sent it, so the worst a lying caller achieves is renaming itself — which
+/// `task rename` already offers.
 pub struct SeenAs(pub Option<String>);
 
 impl<S: Send + Sync> FromRequestParts<S> for SeenAs {
@@ -96,10 +90,9 @@ enum Offered {
     On(String),
     /// Our token, and nothing saying which conversation it speaks for.
     ///
-    /// Still refused — a change filed against nobody is the one thing the
-    /// history must not contain — but refused *by name*, because the token
-    /// being right is exactly what makes a bare "not authenticated" send
-    /// somebody to re-check their token.
+    /// Refused — history must not hold a change filed against nobody — but
+    /// refused *by name*: a bare "not authenticated" would send somebody to
+    /// re-check a token that is right.
     Nameless,
 }
 
@@ -137,15 +130,12 @@ fn agent(app: &AppState, parts: &Parts) -> Offered {
 }
 
 fn resolve(app: &AppState, parts: &Parts) -> Result<Viewer, AppError> {
-    // The agent credential is checked first, so a request that carries one is
-    // filed against the session even from a browser that also holds a cookie —
-    // otherwise a session driven from a signed-in machine would write history
-    // under Pippijn's name.
+    // The agent credential first, so a session driven from a signed-in
+    // browser does not write history under Pippijn's name.
     match agent(app, parts) {
         Offered::On(session) => return Ok(Viewer::Session(session)),
         // Not a fall-through to the cookie: whoever holds this token is a
-        // script, and letting it land on a signed-in browser's cookie is the
-        // misattribution the check above exists to prevent.
+        // script, and the cookie would misattribute it.
         Offered::Nameless => return Err(AppError::Unauthorized(NAMELESS)),
         Offered::Nothing => {}
     }

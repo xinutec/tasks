@@ -2,16 +2,14 @@
 //!
 //! ⚠ **The whole feature is one `COALESCE`, and it is written twice.** The SQL
 //! sorts on `COALESCE(t.priority, 'P2')` and Rust answers the same question in
-//! [`Priority::rank`]; they were written on the same afternoon and nothing but a
-//! test makes them stay level. A drift between them is silent — every list still
+//! [`Priority::rank`]; only a test keeps them level. A drift is silent — every list still
 //! returns every task, in an order nobody notices is wrong until the thing they
 //! ranked `P0` is not at the top.
 //!
 //! ⚠ **The second property is the one that is easy to get backwards**, and it is
 //! why unranked is not simply sorted last: ranking a task `P4` must push it
 //! DOWN, past the tasks nobody has read. "Ranked first, unranked after" would
-//! have lifted *when there is room* above four hundred untriaged tickets, which
-//! is the opposite of what the word means.
+//! lift *when there is room* above every untriaged ticket.
 
 mod common;
 
@@ -68,8 +66,8 @@ async fn a_rank_is_stored_and_comes_back() {
 
 #[tokio::test]
 async fn nothing_is_ranked_unless_somebody_ranks_it() {
-    // The decision this feature turns on. 700-odd rows existed when the column
-    // was added; a DEFAULT would have had every one of them claim a level.
+    // The decision this feature turns on: a DEFAULT would have every unranked
+    // row claim a level.
     let pool = common::fresh_db().await;
     let task = repo::create(&pool, filed("Filed the ordinary way", None), &pippijn())
         .await
@@ -166,7 +164,7 @@ async fn ranking_a_task_afterwards_says_so_in_its_history() {
     .expect("ranking");
     assert_eq!(updated.task.priority, Some(Priority::P1));
     // ⚠ `Moved::Ranked`, not "priority": the history and this list are one
-    // vocabulary now, and this assertion used to pin them apart.
+    // vocabulary.
     assert_eq!(updated.changed, vec![Moved::Ranked]);
 
     let detail = repo::get(&pool, task.id)
@@ -296,12 +294,9 @@ mod filing {
 
 /// What a session types when it means P3.
 ///
-/// ⚠ **Five filings across the transcripts passed `--priority 3` and were
-/// refused** (#958). A bare digit has no other meaning at this flag, and the
-/// stored spelling stays `P3` — so accepting it costs nothing and saves a
-/// re-run. Anything that is not a level is still an error, which is the half
-/// that must not drift: a silent default here would file work at a rank nobody
-/// chose.
+/// A bare digit has no other meaning at this flag and the stored spelling stays
+/// `P3`, so it is accepted. Anything that is not a level is still an error: a
+/// silent default would file work at a rank nobody chose.
 #[test]
 fn a_bare_digit_is_the_level_a_session_meant() {
     use std::str::FromStr;

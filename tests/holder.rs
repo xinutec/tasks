@@ -3,9 +3,8 @@
 //! ⚠ **These pin the DECISION, not the round trip.** What the CLI fetches to
 //! answer with — holders first, then every row — is plumbing; which conversation
 //! a word picks out is the property, and getting it wrong hands somebody's work
-//! to a conversation that is not there. So the resolution is a pure function in
-//! the library, exercised here as public API, for the same reason
-//! `tests/selection.rs` exists one module over.
+//! to a conversation that is not there. So the resolution is a pure function,
+//! exercised here as public API.
 
 use tasks::tasks::holder::{Holder, resolve};
 
@@ -23,9 +22,7 @@ fn fleet() -> Vec<(&'static str, Option<&'static str>)> {
 
 #[test]
 fn a_name_this_tool_prints_is_a_name_it_accepts() {
-    // The whole ticket in one assertion: `task list` says `(health)`, so
-    // `task move 42 health` has to work. It did not, and translating the one
-    // into the other was a `task sessions | grep` every time.
+    // `task list` says `(health)`, so `task move 42 health` has to work.
     assert_eq!(
         resolve(fleet(), "health"),
         Holder::Session(HEALTH.to_string())
@@ -54,12 +51,9 @@ fn an_id_beats_a_name_that_collides_with_it() {
     );
 }
 
-/// Names are reused, so this is a real case rather than a defensive one.
-///
-/// Two distinct conversations have both been called `memview`: `7c0202eb`, which
-/// still is, and `f67a35b2`, which is `dev-lint` now. Resolving to whichever
-/// came first in a list would hand work to a conversation on the strength of a
-/// name it used to have.
+/// Names are reused, so this is a real case rather than a defensive one:
+/// resolving to whichever came first would hand work to a conversation on the
+/// strength of a name it used to have.
 #[test]
 fn a_name_two_conversations_share_is_refused_with_both_ids() {
     let overlapping = vec![(MEMVIEW, Some("memview")), (DEV_LINT, Some("memview"))];
@@ -75,12 +69,8 @@ fn a_name_two_conversations_share_is_refused_with_both_ids() {
 
 /// The half that matters more than the naming.
 ///
-/// ⚠ **Checked, not assumed:** the write would not land either way —
-/// `fk_tasks_session` refuses an assignee with no `sessions` row. What falling
-/// through to "probably an id" would cost is the *answer*: the constraint
-/// arrives as `AppError::Other`, a 500 logged as an internal error and reaching
-/// the caller as `moving a task`. Every mistyped name would send somebody to
-/// look at the service.
+/// The write would not land either way — `fk_tasks_session` refuses it — but a
+/// mistyped name deserves the list of real ones, not a refusal about an id.
 #[test]
 fn a_word_that_names_nothing_is_refused_rather_than_sent_as_an_id() {
     match resolve(fleet(), "helth") {
@@ -106,8 +96,8 @@ fn the_refusal_says_what_the_alternatives_were() {
 
 #[test]
 fn unnamed_conversations_do_not_crowd_the_refusal() {
-    // Most rows are conversations nobody has named — 717 against 14 when that
-    // was split — and listing them as blanks would bury the answer.
+    // Most rows are conversations nobody has named, and listing them as blanks
+    // would bury the answer.
     let mostly_anonymous = vec![
         (HEALTH, Some("health")),
         ("11111111-1111-1111-1111-111111111111", None),
@@ -129,13 +119,10 @@ fn nothing_known_at_all_is_still_a_refusal() {
 
 /// The rules that infer a holder when the caller did not name one.
 ///
-/// ⚠ **These two have regressed twice, both times against a live database.** A
-/// session running `start` took a task off another session that had not got to
-/// it yet; and `start` on a task left `doing` in the pile — the state #19 sat in
-/// — reported success and moved nobody. Both were found by reproducing them on
-/// a real service because `repo::update` needs a MySQL pool, so the decision
-/// itself had never been asserted anywhere cheap. `inferred_holder` is that
-/// decision, and this is the cheap assertion.
+/// ⚠ **Both have regressed before**: `start` taking a task off another session
+/// that had not got to it yet, and `start` on a task left `doing` in the pile
+/// reporting success and moving nobody. `inferred_holder` is the decision, and
+/// this asserts it without a database.
 mod who_it_lands_on {
     use chrono::Utc;
     use tasks::tasks::repo::{Change, inferred_holder};
@@ -233,8 +220,7 @@ mod who_it_lands_on {
 
     #[test]
     fn starting_a_task_another_session_holds_takes_nothing() {
-        // ⚠ The regression that narrowed the rule. Taking somebody else's task
-        // is a handover, and `move` is the word for it.
+        // ⚠ Taking somebody else's task is a handover, and `move` is the word.
         let before = task(
             Status::Open,
             held_by(AssigneeKind::Session, Some(SOMEBODY_ELSE)),
@@ -249,9 +235,9 @@ mod who_it_lands_on {
 
     #[test]
     fn starting_a_task_already_doing_in_the_pile_still_claims_it() {
-        // ⚠ #19's state, and the second regression. A session that puts work
-        // down without closing it leaves the task `doing` AND unheld; `start`
-        // used to read the status, report success, and move nobody.
+        // ⚠ A session that puts work down without closing it leaves the task
+        // `doing` AND unheld; a rule reading the status would make `start`
+        // report success and move nobody.
         let before = task(Status::Doing, held_by(AssigneeKind::Nobody, None));
         let got = inferred_holder(
             &before,

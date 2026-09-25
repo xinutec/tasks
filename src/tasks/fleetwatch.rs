@@ -1,25 +1,17 @@
 //! Pushing the tool's own timings to fleetwatch.
 //!
-//! **In the library rather than the binary so it can be tested against.** As a
-//! private module inside the binary nothing in `tests/` could reach it, and it
-//! spent its whole life pushing an id the receiver rejected while every test in
-//! the repo stayed green. A private module in a binary is a module with no seam.
+//! **In the library, not the binary, so `tests/` can reach it**: a private
+//! module in a binary has no seam, and a push the receiver rejects stays
+//! invisible to every test. Success is a row in fleetwatch's database, so check
+//! it there after changing what is sent.
 //!
-//! ⚠ **It WORKED before it shipped, which is the part worth remembering.** One
-//! report landed, pushed by a development build; the id format was widened just
-//! before the commit and every push after that was refused. The evidence of
-//! success was a row in somebody else's database that nobody re-read, so the
-//! last edit before shipping went unchecked.
+//! ⚠ **No timer, and no prober.** Every number came from a command somebody
+//! ran, and the service hands one caller at a time the job of forwarding them
+//! ([`crate::tasks::commands::due_to_report`]). On a day nobody uses the
+//! tracker nothing is sent, and fleetwatch's staleness reporting says so.
 //!
-//! ⚠ **No timer, and no prober.** Every number here came from a command somebody
-//! actually ran, and the service hands one caller at a time the job of
-//! forwarding them — see [`crate::tasks::commands::due_to_report`]. Nothing
-//! happens on a day nobody uses the tracker, and fleetwatch's own staleness
-//! reporting is what says so.
-//!
-//! ⚠ **The token is read ONLY when the job is handed over.** It is a fleet
-//! credential this CLI otherwise never touches, and reading it on every `task
-//! list` would put it in reach of every command for no reason.
+//! ⚠ **The token is read ONLY when the job is handed over**: it is a fleet
+//! credential no other command needs.
 
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
@@ -34,9 +26,8 @@ const KEYCHAIN_ITEM: &str = "fleetwatch-ingest-token";
 
 /// The ingest token, or nothing.
 ///
-/// ⚠ **Absence is not an error and must never reach the caller.** A machine
-/// with no token is not a broken filing; it is a machine that does not
-/// report. The command that was handed the job simply does not do it.
+/// ⚠ **Absence is not an error and must never reach the caller**: a machine
+/// with no token is one that does not report.
 fn token() -> Option<String> {
     let out = std::process::Command::new("security")
         .args([
@@ -58,19 +49,13 @@ fn token() -> Option<String> {
 
 /// A ULID, which fleetwatch dedupes on.
 ///
-/// ⚠ **Minted with the crate the RECEIVER parses it with, and hand-rolling it
-/// cost this whole series.** A hex string described in its own comment as
-/// "ULID-shaped" is not a ULID, and `ingest` rejects a bad id before storing
-/// anything. Every push was refused while the local recording, the carrier
-/// selection and the ablation all passed — none of them look at what the
-/// receiver said.
+/// ⚠ **Minted with the crate the RECEIVER parses it with.** `ingest` rejects a
+/// bad id before storing anything, and a "ULID-shaped" hex string is not one.
 ///
-/// ⚠ **Random rather than derived from the numbers.** Two reports a minute
-/// apart can carry identical tallies — nothing was recorded between them —
-/// and a content-derived id would make the second read as a duplicate of the
-/// first and be dropped, so the chart would show a gap exactly when the
-/// tracker was quiet but alive. `Ulid::new` is random in its low 80 bits,
-/// which is that property without a second implementation of it here.
+/// ⚠ **Random, not derived from the numbers.** Two reports can carry identical
+/// tallies when nothing was recorded between them; a content-derived id would
+/// drop the second as a duplicate, and the chart would show a gap exactly when
+/// the tracker was quiet but alive.
 pub fn minted() -> String {
     ulid::Ulid::new().to_string()
 }
@@ -88,12 +73,10 @@ fn check(label: &str, observed: String, value: f64, unit: &str, verdict: &str) -
 
 /// Turn the service's tally into checks.
 ///
-/// ⚠ **Values, and almost no verdicts.** These distributions are days old
-/// and nobody knows their shape yet; a threshold invented now would be the
-/// probe's mistake again — publishing a guess as a measurement. The one
-/// thing asserted is that no filing should go unchecked, because zero is
-/// the only defensible expectation on that line. Everything else is a
-/// number fleetwatch can chart until there is a week to derive a bound from.
+/// ⚠ **Values, and almost no verdicts.** A threshold with no distribution to
+/// derive it from publishes a guess as a measurement. A verdict is given only
+/// where zero is the one defensible expectation — unchecked filings, overdue
+/// tasks — and the rest are numbers fleetwatch charts.
 pub fn checks(report: &Value) -> Vec<Value> {
     let mut out = Vec::new();
     let mut failed_total = 0u64;
@@ -120,10 +103,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
         // `commands::Tally::unchecked_p90_ms` for why the mix cannot be read as
         // a latency. This one moves only for the service.
         //
-        // ⚠ **Emitted only where the client said**, so an older CLI's rows do
-        // not quietly become a second copy of the number above. A figure that
-        // falls back to the value it is meant to correct looks like the fix
-        // working, which is worse than no figure.
+        // ⚠ **Emitted only where the client said**: falling back to the mix
+        // would make a second copy of the number it corrects.
         if let Some(alone) = line["unchecked_p90_ms"].as_u64() {
             let waited = line["waited"].as_u64().unwrap_or(0);
             out.push(check(
@@ -141,17 +122,12 @@ pub fn checks(report: &Value) -> Vec<Value> {
             worst = Some((verb.to_string(), failed));
         }
     }
-    // ⚠ **`failed` was already in the sentence above and in no VALUE**, so a
-    // verb that started failing could only be read by hovering a latency line —
-    // charts and staleness bands are built from values, and prose is neither.
-    // One aggregate rather than a line per verb: eight more series to say a
-    // number that is almost always zero would crowd out the ones that move.
+    // ⚠ **Failures as a VALUE**: charts are built from values, and prose in
+    // a latency line is neither. One aggregate, not a series per verb, since
+    // it is almost always zero.
     //
-    // ⚠ **No verdict, deliberately.** This figure is faults alone — refusals
-    // land in the line below, which is what the `Refused` split is for — but
-    // nobody has measured what a normal day's fault count is, and a threshold
-    // picked without that fires on ordinary noise and trains everyone to ignore
-    // the one line that is supposed to mean something.
+    // ⚠ **No verdict**: this is faults alone (refusals are the next line), and
+    // without a normal day's count a threshold fires on noise.
     if !report["commands"]
         .as_array()
         .unwrap_or(&Vec::new())
@@ -172,10 +148,6 @@ pub fn checks(report: &Value) -> Vec<Value> {
         ));
         // ⚠ **Its own line, because it is not a fault** — `commands::Ended`
         // carries why declining and failing must not share a figure.
-        //
-        // ⚠ **Both series move while old rows age out**, because rows written
-        // before the split said `error` for both and are not re-attributed. Say
-        // so on the graph rather than in a comment nobody reading it will see.
         out.push(check(
             "commands the tool declined",
             format!("{refused_total} of {run_total} runs"),
@@ -199,16 +171,10 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
-        // ⚠ **A COUNT, with its denominator in the sentence — not a rate.** A
-        // speak rate that improves says nothing about which half moved: fewer
-        // checks speaking and fewer checks running look identical in a
-        // percentage and mean opposite things. The counts compose — spoke,
-        // quiet, timeout and error sum to `runs` — so the series can be read
-        // against each other.
-        //
-        // This is the number that refutes turning the density advice into a
-        // refusal: it speaks on most of what it reads. Measured by hand out of
-        // `check_run` the first time, because nothing charted it.
+        // ⚠ **A COUNT, with its denominator in the sentence — not a rate.** An
+        // improving rate cannot say which half moved: fewer checks speaking and
+        // fewer running look identical in a percentage. Spoke, quiet, timeout
+        // and error sum to `runs`, so the series read against each other.
         out.push(check(
             &format!("{kind} checks that spoke"),
             format!("{spoke} of {runs}"),
@@ -216,10 +182,6 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "",
             "pass",
         ));
-        // ⚠ **Every kind, and it used to be `filing` alone**, so the one number
-        // saying how often a check simply does not happen was invisible for the
-        // kind that runs most.
-        //
         // ⚠ **A timeout and an error are summed HERE and nowhere else.** They
         // have different causes and the tally keeps them apart, but both mean
         // the same thing to a reader of this line: the input was never judged.
@@ -236,9 +198,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
             format!("{timeout} timed out, {errored} errored, of {runs}"),
             unanswered as f64,
             "",
-            // ⚠ From [`checks::Kind`], not spelled: this is the one place the
-            // filing check's name is compared outside the module that defines
-            // it, and a rename there would silently stop this warning firing.
+            // ⚠ From [`checks::Kind`], not spelled, or a rename would silently
+            // stop this warning firing.
             if kind == checks::Kind::Filing.as_str() && unanswered > 0 {
                 "warn"
             } else {
@@ -246,18 +207,15 @@ pub fn checks(report: &Value) -> Vec<Value> {
             },
         ));
     }
-    // ⚠ **The WORK.** Everything above measures the tracker's machinery; this
-    // measures what it is holding.
-    // Absent when the service could not count — a section that reported zeros on
-    // a failed query would publish "the backlog is clear" as a finding.
+    // ⚠ **The WORK**, where everything above measures the machinery. Absent
+    // when the service could not count, rather than zeros.
     if let Some(work) = report.get("work").filter(|w| w.is_object()) {
         for (label, key) in [
             ("open tasks", "open"),
             ("tasks in the pile", "unheld"),
             ("tasks at P0 or P1", "urgent"),
             ("tasks blocked on open work", "blocked"),
-            // The number the digest mark exists to move. Uncharted, whether the
-            // mark changes any behaviour is unanswerable.
+            // The number the digest's sprawl mark exists to move.
             ("bodies carrying an unaddressed finding", "sprawling"),
         ] {
             let Some(count) = work[key].as_u64() else {
@@ -265,13 +223,9 @@ pub fn checks(report: &Value) -> Vec<Value> {
             };
             out.push(check(label, format!("{count}"), count as f64, "", "pass"));
         }
-        // ⚠ **The one line here that claims a bound, on the same ground the
-        // filing line does: zero is defensible.** A deadline is the only thing
-        // in this tracker that anybody outside it set, the digest already SHOUTS
-        // `OVERDUE`, and the rank escalates to `P0` a week out — three places
-        // that already treat a missed date as a state change rather than a
-        // level. The rest stay values: their distributions have no derived
-        // bounds and inventing one now would publish a guess as a measurement.
+        // ⚠ **A bound, because zero is defensible**: a deadline was set from
+        // outside the tracker, and the digest and the rank already treat a
+        // missed date as a change of state.
         if let Some(overdue) = work["overdue"].as_u64() {
             out.push(check(
                 "tasks past their deadline",
@@ -310,13 +264,9 @@ pub async fn send(http: &reqwest::Client, report: &Value) -> Result<()> {
         .send()
         .await
         .context("sending the timings to fleetwatch")?;
-    // ⚠ **Silent on success, LOUD on failure, and the asymmetry is the
-    // point.** This started out silent both ways, which is the failure this
-    // whole path exists to end: a push nobody can see failing looks exactly
-    // like a quiet day, and the numbers would stop arriving with nothing
-    // anywhere saying so. It still cannot fail the command — the work is
-    // done and printed by now — so the note goes to stderr and the caller
-    // carries on.
+    // ⚠ **Silent on success, LOUD on failure**: a push nobody sees failing
+    // looks like a quiet day. It still cannot fail the command — the work is
+    // done — so the note goes to stderr.
     if !answer.status().is_success() {
         eprintln!(
             "(the timings did not reach fleetwatch: HTTP {})",

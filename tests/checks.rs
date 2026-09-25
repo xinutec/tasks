@@ -1,5 +1,4 @@
-//! What a model check did, recorded — the instrument the two open questions
-//! about this tool need.
+//! What a model check did, recorded.
 //!
 //! ⚠ **`Quiet` and `Timeout` are the pair worth a test.** Both leave the caller
 //! with no advice and the write already done, so from outside they look
@@ -214,12 +213,9 @@ async fn what_is_read_back_is_the_window_asked_for() {
 
 // The wiring, through the real router.
 //
-// ⚠ **The route table is the one line that can be wrong while every test above
-// passes.** `record` and `recent` are proved by the tests over the pool; what
-// decides whether a session's report ever reaches them is one entry in
-// `routes::mod`, and a CLI that swallows its own failure — deliberately, since
-// a check must never cost a write — would report nothing at all if it pointed
-// at a path that 404s. That silence is exactly what this table exists to end.
+// ⚠ **The route table can be wrong while every test above passes**, and the
+// CLI deliberately swallows a failed report, so a path that 404s would record
+// nothing, silently.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -326,9 +322,7 @@ async fn a_browser_has_no_check_to_report() {
 }
 
 /// ⚠ **`--no-duplicate-check` may only overrule a refusal you have already
-/// seen.** Measured over every transcript: 63 of 644 filings passed the flag on
-/// the way IN and only 16 followed a refusal, so for 47 sessions the check never
-/// ran and the trade the module rests on never happened.
+/// seen**; passed pre-emptively, the check never runs.
 #[tokio::test]
 async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
     let pool = common::fresh_db().await;
@@ -421,15 +415,10 @@ fn the_licence_ignores_what_a_retype_varies() {
     );
 }
 
-/// The flag a density read leaves behind, and the one edit that takes it away.
+/// The flag a density read leaves behind, and what retires it.
 ///
-/// ⚠ **This is the half that used to not exist.** `check_run` recorded that a
-/// read SPOKE and what it cost, and threw away what it said — so a finding
-/// survived only as long as the transcript of whichever session ran the edit,
-/// addressed to a session doing something else. Measured over the 5.6 days to
-/// 2026-08-29: 229 of 268 reads spoke, and of the 43 tasks read more than once,
-/// 28 only ever grew. These pin that the words outlive the tool result and that
-/// exactly one thing retires them.
+/// These pin that the words outlive the tool result, and that only a shrinking
+/// edit or a later quiet read retires them — never a timeout.
 mod sprawl {
     use super::*;
     use sqlx::MySqlPool;
@@ -551,10 +540,9 @@ mod sprawl {
 
     #[tokio::test]
     async fn a_timeout_must_not_retire_a_finding_nobody_addressed() {
-        // 37 of 268 reads timed out. A timeout means the body was never judged,
-        // so treating it as silence would let a slow model clear a flag — the
-        // exact `Quiet` versus `Timeout` confusion this file opens with, now
-        // with a write behind it.
+        // A timeout means the body was never judged, so treating it as silence
+        // would let a slow model clear a flag — the `Quiet` versus `Timeout`
+        // confusion this file opens with, with a write behind it.
         let pool = common::fresh_db().await;
         let id = filed(&pool, &"x".repeat(4_000)).await;
         read_said(&pool, id, Outcome::Spoke, Some("this sprawls")).await;
@@ -603,8 +591,7 @@ mod sprawl {
         );
 
         // DENSE is a verdict about the body as it stands, and outranks the older
-        // one. It cannot be summoned: the read only fires on 3,000 characters of
-        // fresh accretion, so the cheapest route to it is making the body worse.
+        // one — see `checks::remember` for why it cannot be summoned.
         read_said(&pool, id, Outcome::Quiet, None).await;
         let quiet = repo::get(&pool, id)
             .await

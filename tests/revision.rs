@@ -1,10 +1,8 @@
 //! What an edit replaced, and getting it back.
 //!
-//! ⚠ **These exist because the loss happened.** 2026-08-14: a session rewrote
-//! #25's body from a snapshot it had read three days earlier and never
-//! re-read. `task_events` said the body had changed and could not say to what —
-//! `detail` is one rendered line — so the only copy of the replaced text was in
-//! the writer's own transcript. It was recovered by grep. That is luck.
+//! ⚠ **The loss this prevents**: a session rewrites a body from a stale
+//! snapshot, and `task_events` — one rendered line — can say the body changed
+//! but not from what.
 //!
 //! The property under test is that a task has a *previous version*: a complete
 //! subject and body as they stood, restorable as a unit. Half of these pin the
@@ -252,9 +250,7 @@ async fn putting_a_version_back_is_an_edit_like_any_other() {
 #[tokio::test]
 async fn an_edit_reports_the_text_it_landed_on() {
     // The half that refuses nothing: a writer is told, at the moment of the
-    // write, whose text it just replaced and when. The loss this answers was a
-    // session that believed a body was three days old when it had been
-    // rewritten the day before by somebody else.
+    // write, whose text it just replaced and when.
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "0123456789").await;
     let done = edit(&pool, id, body("shorter")).await;

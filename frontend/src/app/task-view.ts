@@ -98,12 +98,10 @@ export class TaskView {
   /**
    * Show what putting it back would put back.
    *
-   * ⚠ **Two taps, and the first one only reads.** Undo overwrites the text
-   * currently on the page, so an accidental brush against a one-tap control
-   * would be the same class of accident this whole feature exists to repair —
-   * on a phone, where the thumb is imprecise, most of all. Showing the content
-   * rather than asking "are you sure?" also answers the question a reader
-   * actually has, which is *what would come back*.
+   * ⚠ **Two taps, and the first one only reads**: undo overwrites the text on
+   * the page, and a one-tap control brushed by a thumb would be the accident it
+   * exists to repair. Showing the content rather than "are you sure?" answers
+   * what a reader actually asks: *what would come back*.
    */
   peek(): void {
     const task = this.task();
@@ -166,9 +164,8 @@ export class TaskView {
     this.change({ status });
   }
 
-  /** ⚠ **No "unranked" item, matching the CLI.** Absence means *leave it alone*
-   *  for every field on this endpoint, so there is nothing to send that would
-   *  clear one; a task ranked wrongly is corrected by ranking it again. */
+  /** ⚠ **No "unranked" item, matching the CLI**: nothing on this endpoint
+   *  clears a rank; a wrong one is corrected by ranking again. */
   setPriority(priority: Priority): void {
     this.change({ priority });
   }

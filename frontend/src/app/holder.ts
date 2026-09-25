@@ -18,32 +18,23 @@ export const STATUS_LABEL: Record<Status, string> = {
 };
 
 /**
- * What each rank means, in one line.
+ * What each rank means, in one line: a TEST that can fail, applied as a cascade
+ * — see `Priority::gloss` in Rust.
  *
- * ⚠ **Each is a TEST that can fail, not a degree of feeling** — applied as a
- * cascade, first one that passes wins. A single axis with no anchor is what
- * inflates a scale until everything is `P0` and somebody invents `P-1`; asking
- * *is damage accruing*, *is something waiting*, *is there a workaround in use*
- * is answerable about a ticket rather than felt about it.
+ * ⚠ **A second copy of `Priority::gloss`, and it has to say the same thing**,
+ * or Pippijn and the sessions read the levels differently. Nothing checks this
+ * at build time, so change both or neither. (P4's session-only clause about
+ * the prompt is left out here.)
  *
- * ⚠ **A second copy of `Priority::gloss` in the Rust side, and it has to say the
- * same thing.** The point of five named levels is that Pippijn and every session
- * read them the same way; two surfaces glossing them differently would be worse
- * than no gloss at all, since each reader would believe theirs. `--help` on the
- * CLI is the other copy. Nothing checks this at build time — the wire mirror
- * covers shapes, not prose — so change both or neither.
- *
- * ⚠ **There is no entry for "unranked", deliberately.** Absence is not a sixth
- * level: it sorts where `P2` does, which is what lets `P3` and `P4` mean *below
- * the untriaged*. Anywhere this map is used, the absent case is drawn as nothing
- * at all rather than as a word.
+ * ⚠ **No entry for "unranked", deliberately**: absence sorts where `P2` does,
+ * and is drawn as nothing at all.
  */
 export const PRIORITY_GLOSS: Record<Priority, string> = {
   P0: 'damage is accruing — every hour it stays open costs more',
   P1: 'nothing is accruing, but other work is waiting on this',
   P2: 'ordinary work, nothing waiting on it — where UNRANKED sits',
   P3: 'a workaround exists and is in use; what it costs is friction',
-  P4: 'kept as a record rather than a plan; it may never happen',
+  P4: 'nothing is being paid for it today',
 };
 
 /** Most urgent first, which is the order they are offered in. */
@@ -53,18 +44,14 @@ export const STATUS_ICON: Record<Status, string> = {
   open: 'radio_button_unchecked',
   doing: 'pending',
   done: 'check_circle',
-  // Not a second tick in another colour: a glance at a closed task has to say
-  // which of the two closings it was, and a cross is the only shape that reads
-  // as "this did not happen" without being read as "this failed".
+  // Not a second tick in another colour: a glance has to say which closing it
+  // was, and a cross reads as "did not happen" without reading as "failed".
   dropped: 'cancel',
 };
 
 /**
- * A field that is present but blank is absent.
- *
- * The distinction matters one line below: `??` alone would return an empty
- * name, leaving a blank chip — which reads as unassigned, and is a lie about a
- * task somebody is holding.
+ * A field that is present but blank is absent: `??` alone would draw a blank
+ * chip, which reads as unassigned.
  */
 export function said(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -96,14 +83,8 @@ export const WHO_LABEL: Record<Bucket, string> = {
 };
 
 /**
- * What the list is filtered to: one of the buckets, or ONE named holder.
- *
- * ⚠ **The single-holder form is the whole of #657.** `with a session` means
- * every session at once — around a hundred rows with the holder in a chip, to
- * be read off by eye — so the app could say `hardware 6/31` on `/who` and had
- * no way at all to show you which six. The backend has answered this since
- * `0001` (`GET /api/tasks?session=<id>`, which is what `task list --mine
- * --session <id>` spends); nothing in the app asked.
+ * What the list is filtered to: one of the buckets, or ONE named holder — so
+ * `/who`'s `hardware 6/31` can open onto those six.
  *
  * **Prefixed, rather than bare ids.** `session:<id>` and `person:<id>` cannot
  * collide with a bucket word, and a bare id could: `pippijn` is a person today,
@@ -113,14 +94,9 @@ export const WHO_LABEL: Record<Bucket, string> = {
  * There is no `nobody:` — the pile is a bucket already, and two spellings for
  * one selection is how they drift apart.
  *
- * ⚠ **Parsed, not asserted.** This was a string union — `Bucket |
- * \`session:${string}\`` — with the query parameter cast into it, and
- * `no-unsafe-type-assertion` was right to refuse: `?who=garbage` would have
- * been *typed* as a valid selection and fallen through the switch to
- * `undefined`, which filters nothing and draws an empty list. A shape the
- * compiler can check end to end costs one parse at the edge and makes
- * "anything unrecognised is everything" a behaviour with a test rather than an
- * accident of a cast.
+ * ⚠ **Parsed, not asserted.** Casting the query parameter into a union would
+ * type `?who=garbage` as a valid selection that filters nothing; one parse at
+ * the edge makes "anything unrecognised is everything" a tested behaviour.
  */
 export type Who =
   | { kind: 'bucket'; bucket: Bucket }
@@ -189,9 +165,8 @@ export function inBucket(assignee: Assignee, who: Who, me: string | null): boole
         case 'all':
           return true;
         case 'mine':
-          // Compared against the signed-in id rather than hard-coding
-          // `pippijn`: the allow-list is configuration, and a view that assumes
-          // a username is one that breaks silently the day it changes.
+          // The signed-in id, not a hard-coded `pippijn`: the allow-list is
+          // configuration.
           return assignee.kind === 'person' && (me === null || assignee.id === me);
         case 'sessions':
           return assignee.kind === 'session';

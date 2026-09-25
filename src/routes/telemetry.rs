@@ -8,16 +8,15 @@
 //! phone, where that report is the only one there is.
 //!
 //! The events fold into the **same** log stream as the API requests, so a
-//! session reads as one timeline: `client-event kind=nav path=/graph`, then
-//! `client-event kind=tap label="project_dev_lint"`, then the
-//! `GET /api/memory/... 200` the tap caused.
+//! session reads as one timeline: `client-event kind=nav path=/t/12`, then
+//! `client-event kind=tap label="Done"`, then the `PATCH /api/tasks/12 200`
+//! the tap caused.
 //!
 //! **There is no storage here.** These are logs, not data. The endpoint moves
 //! the client's events into the backend log and forgets them.
 //!
-//! Copied from memview's, which was ported from `fleetwatch`, which took it
-//! from `life`. The one part worth reading before changing anything is
-//! [`one_line`]: it is the security boundary, and it is the same everywhere.
+//! The part to read before changing anything is [`one_line`]: it is the
+//! security boundary, shared with the other apps' copies of this endpoint.
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -50,17 +49,14 @@ const MAX_EVENTS: usize = 100;
 
 /// Longest label kept, in characters.
 ///
-/// Labels are verbatim UI text, and in this app that text is often a task
-/// subject — capped at 200 characters, so 160 keeps nearly all of one. Counted
-/// in `chars` rather than bytes so a multi-byte glyph is never split down the
-/// middle.
+/// Labels are verbatim UI text, often a task subject, so this keeps most of
+/// one. Counted in `chars`, so a multi-byte glyph is never split.
 const MAX_LABEL: usize = 160;
 
 /// Format characters that are invisible, or that reorder what is displayed.
 ///
-/// `char::is_control` covers category Cc and nothing else, and Rust's std has no
-/// Unicode category table — so these are named explicitly. Two reasons they
-/// matter here, and the second is the sharper one:
+/// `char::is_control` covers category Cc only, and std has no Unicode category
+/// table, so these are named explicitly:
 ///
 /// - **Zero-width characters** (U+200B, U+FEFF, the word joiners) are invisible,
 ///   so a label made of them reads as empty while occupying the whole cap.
@@ -69,9 +65,8 @@ const MAX_LABEL: usize = 160;
 ///   something other than what it says — the Trojan Source trick, pointed at the
 ///   record rather than at source code.
 ///
-/// A deny-list of what can deceive rather than all of category Cf, because
-/// pulling in a Unicode tables crate for this would be disproportionate. Stated
-/// so the limit is known rather than assumed.
+/// A deny-list of what can deceive, not all of category Cf: a Unicode tables
+/// crate would be disproportionate. Stated so the limit is known.
 fn is_deceptive_format(c: char) -> bool {
     matches!(c,
         '\u{00ad}'
@@ -85,20 +80,17 @@ fn is_deceptive_format(c: char) -> bool {
 
 /// Flatten a client-supplied label to a single harmless log field.
 ///
-/// **This is the security boundary of the endpoint, not tidiness.** A label is
-/// verbatim UI text and it is written into a log line as `label=…`. A label
-/// containing a newline therefore forges *whole log lines* — including further
-/// `client-event` lines attributed to someone else, or lines that look like they
-/// came from another component entirely. The log stops being evidence, which is
-/// the one thing it exists to be.
+/// **The security boundary of the endpoint, not tidiness.** A label is written
+/// into a log line as `label=…`, so one containing a newline forges *whole log
+/// lines* — attributed to someone else, or to another component — and the log
+/// stops being evidence.
 ///
 /// Control characters become spaces, runs of whitespace collapse, and the result
 /// is capped. `char::is_control` covers C0 and C1 but *not* U+2028 and U+2029,
 /// which end a line in some renderers; `split_whitespace` catches those, so the
 /// two passes together cover both.
 ///
-/// Public so `tests/telemetry.rs` can exercise it directly: it is the one part
-/// of this endpoint whose input an attacker chooses.
+/// Public so `tests/telemetry.rs` can exercise it: its input is the attacker's.
 pub fn one_line(label: &str, max: usize) -> String {
     let unbroken: String = label
         .chars()
@@ -125,10 +117,8 @@ pub fn one_line(label: &str, max: usize) -> String {
 /// nor retries, because a trace that interferes with the app it observes is
 /// worse than no trace.
 ///
-/// Owner-gated. A session drives this service through the CLI and has no browser
-/// to trace, so the only caller is the person's own page — and gating it there
-/// means a leaked agent token cannot be used to write arbitrary lines into the
-/// log this exists to keep trustworthy.
+/// Owner-gated: a session has no browser to trace, and the gate stops a leaked
+/// agent token writing lines into the log.
 pub async fn record(
     OwnerOnly(user): OwnerOnly,
     Json(events): Json<Vec<TelemetryEvent>>,

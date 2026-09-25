@@ -1,10 +1,8 @@
 //! What the CLI recorded about itself.
 //!
-//! ⚠ **Every row this models is a command somebody actually ran.** The first
-//! version of this measurement was a launchd timer running `task list --all`
-//! every 15 minutes — a command no session runs, from a process with no session
-//! id and a cold cache — and reporting those numbers as latency. Pippijn refused
-//! that shape on 2026-08-25: measure what is actually going on, and do not poll.
+//! ⚠ **Every row this models is a command somebody actually ran** — Pippijn's
+//! rule: measure what is actually going on, and do not poll. See
+//! `tasks::commands`.
 
 use tasks::tasks::commands::{Ended, Ran, Tally, tally};
 
@@ -28,10 +26,8 @@ fn ran_waiting(verb: &str, ms: u32, waited: bool) -> Ran {
     }
 }
 
-/// ⚠ **The error path is usually the FAST one.** A refusal prints and returns
-/// without a round trip, so folding it into the percentiles reports the tool as
-/// quicker than any session experiences it — and fastest on the day it starts
-/// refusing everything. `failed` carries that half beside the timings instead.
+/// ⚠ **The error path is usually the FAST one**, so folding it into the
+/// percentiles would report the tool fastest on the day it refuses everything.
 #[test]
 fn a_failed_run_is_counted_but_never_timed() {
     // ⚠ TWO refusals, not one, and that is what makes this test discriminate.
@@ -55,9 +51,7 @@ fn a_failed_run_is_counted_but_never_timed() {
     assert_eq!(line.worst_ms, 11_000);
 }
 
-/// ⚠ **Busiest first, because the run count is the weight.** A command run four
-/// times with a bad worst case matters less than the one every session runs all
-/// day being slower.
+/// ⚠ **Busiest first, because the run count is the weight.**
 #[test]
 fn the_busiest_command_leads() {
     let mut runs = vec![ran("edit", 60_000, Ended::Ok)];
@@ -72,8 +66,7 @@ fn the_busiest_command_leads() {
     assert_eq!(lines[1].verb, "edit");
 }
 
-/// Two verbs run equally often keep a stable order, or a diff of two days is
-/// unreadable for a reason that has nothing to do with the tracker.
+/// Two verbs run equally often keep a stable order between readings.
 #[test]
 fn an_equal_tally_is_ordered_by_name() {
     let runs = vec![
@@ -108,12 +101,10 @@ fn a_command_that_only_ever_failed_is_still_reported() {
     );
 }
 
-/// ⚠ **Five days is the requirement, and the constant is worked back from
-/// fleetwatch's bands rather than picked.** It grades a report `Fresh` within
-/// 1.5× the declared interval, `Overdue` to 3×, and `Silent` — rendered as a
-/// FAILURE — beyond. Pippijn, 2026-08-25: five days of nothing is a problem,
-/// anything short of it is not. So 3× must land exactly on five days, and a
-/// normal quiet weekend must stay inside `Fresh`.
+/// ⚠ **Five days is the requirement** — Pippijn: five days of nothing is a
+/// problem, anything short of it is not. fleetwatch grades `Silent` beyond 3×
+/// the declared interval, so 3× must land exactly on five days, and a quiet
+/// weekend must stay inside `Fresh` (1.5×).
 #[test]
 fn the_declared_interval_puts_the_failure_at_five_days() {
     use tasks::tasks::commands::REPORTING_INTERVAL_S;
@@ -131,13 +122,9 @@ fn the_declared_interval_puts_the_failure_at_five_days() {
 
 /// Splitting the latency by the variable that actually explains it.
 ///
-/// ⚠ **`edit p90` was reporting the CHECK RATE.** Measured over the four days to
-/// 2026-08-29, aligned so the two tables cover the same window, slow edits and
-/// density reads are 1:1 — 161 and 161. An unchecked edit ran 235 ms at the
-/// median, a checked one 39,351 ms, and the service's own share of the checked
-/// one was ~337 ms: the same flat cost. So the one reported figure of 58,415 ms
-/// described neither population. It moves when the check rate moves and when the
-/// model slows down, and cannot say which happened.
+/// ⚠ **Over both populations, `edit p90` reports the CHECK RATE**: slow edits
+/// and density reads match one for one, and the service's share of a checked
+/// edit is the same flat cost as an unchecked one.
 mod waited {
     use super::*;
 
@@ -166,9 +153,8 @@ mod waited {
 
     #[test]
     fn a_run_that_never_said_is_counted_as_unknown_and_not_as_fast() {
-        // ⚠ Rows written before `0015` know nothing. Folding them into the
-        // unchecked population would file 39-second edits as 235 ms ones —
-        // inventing the very number the split exists to measure.
+        // ⚠ Rows that do not say know nothing. Folding them into the unchecked
+        // population would file slow edits as fast ones.
         let runs = vec![
             ran("edit", 39_000, Ended::Ok),
             ran("edit", 90_000, Ended::Ok),
@@ -197,8 +183,8 @@ mod waited {
 
     #[test]
     fn a_failed_run_stays_out_of_both_timings() {
-        // The existing rule: a refusal returns without a round trip, so folding
-        // the error path in makes the tool look fastest when it refuses most.
+        // A refusal returns without a round trip, so folding the error path in
+        // makes the tool look fastest when it refuses most.
         let runs = vec![
             ran_waiting("add", 12_000, true),
             Ran {
@@ -215,14 +201,8 @@ mod waited {
     }
 }
 
-/// A refusal is the tool working, and it used to be counted as breakage.
-///
-/// ⚠ **`add` ended badly on 149 of 272 runs, which reads as a broken command.**
-/// Split by how long they took, 76 ended in **0-14 ms** — a round trip costs
-/// ~200 ms, so those never reached the service: they are the CLI declining a
-/// malformed invocation. The rest took 5-20 s and are the duplicate check
-/// refusing. Both are the tool doing its job, and one number was carrying them
-/// and any real fault together.
+/// A refusal is the tool working, not breakage: most of `add`'s bad endings
+/// are the CLI declining a malformed invocation or the duplicate check refusing.
 mod declined {
     use super::*;
 
@@ -249,9 +229,7 @@ mod declined {
 
     #[test]
     fn a_refusal_is_never_timed_any_more_than_a_fault_is() {
-        // The existing rule, which the new arm must not slip past: a refusal
-        // returns without a round trip, so folding it into the percentiles makes
-        // the tool look fastest on the day it refuses everything.
+        // Refusals stay out of the percentiles too, for the same reason.
         let runs = vec![ran_waiting("add", 12_000, true), refused("add", 3)];
         let add = &tally(&runs)[0];
         assert_eq!(add.median_ms, 12_000, "a 3 ms refusal entered the timings");
@@ -271,10 +249,8 @@ mod declined {
 
     #[test]
     fn an_older_clients_rows_stay_faults_and_are_not_reattributed() {
-        // ⚠ Rows written before 2026-08-29 said `error` for both. Nothing
-        // recorded which they were, so guessing would invent the very split this
-        // exists to measure — `failed` falls as that window ages out, and that
-        // is not an improvement.
+        // ⚠ An older client said `error` for both, and guessing would invent
+        // the very split this exists to measure.
         let runs = vec![
             ran("add", 3, Ended::Error),
             ran("add", 12_000, Ended::Error),
@@ -287,11 +263,8 @@ mod declined {
 
 /// Reading the outcome off the error, and never off its wording.
 ///
-/// ⚠ **This lives in the library so that `tests/` can reach it.** The same
-/// classification for the two model checks sat inside `src/bin/task.rs` until
-/// 2026-08-26, where nothing could exercise it, and a `minted()` that produced a
-/// 32-character "ULID" had every push refused for a day while the whole suite
-/// stayed green. A private function in a binary is a function with no seam.
+/// ⚠ **In the library so `tests/` can reach it**: a private function in a
+/// binary has no seam.
 mod classifying {
     use tasks::tasks::commands::{Ended, declined, ended};
 
@@ -342,11 +315,8 @@ mod classifying {
 
 /// What a caller reads when a command ends badly.
 ///
-/// ⚠ **The chain is noise on a refusal and it is what a `tail -3` keeps.**
-/// `declined` puts the sentence in the context and a `Refused` marker under it,
-/// and anyhow's default rendering prints both — so a one-line refusal came out
-/// as four lines, of which the last three were a blank, `Caused by:` and `the
-/// tool declined`. The marker is for the classifier; it was never a message.
+/// ⚠ **The chain is noise on a refusal, and it is what a `tail -3` keeps** —
+/// see `commands::said`.
 mod what_a_bad_ending_prints {
     use tasks::tasks::commands::{declined, said};
 
@@ -364,11 +334,9 @@ mod what_a_bad_ending_prints {
         );
     }
 
-    /// ⚠ **The other half of the same fix, and the half with a number on it.**
-    /// The model arm — the refusal that fires most often — used `bail!`, so it
-    /// carried no `Refused` marker and every one of them was counted as a
-    /// failed command. That is the exact measurement the marker was introduced
-    /// to make readable, and it was being corrupted by its busiest source.
+    /// ⚠ **The commonest refusal must carry the marker**: the duplicate check's,
+    /// counted as a failed command, would corrupt the measurement from its
+    /// busiest source.
     #[test]
     fn a_refused_filing_is_never_counted_as_a_fault() {
         use tasks::tasks::commands::{Ended, ended};

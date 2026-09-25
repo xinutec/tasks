@@ -30,15 +30,12 @@
                 autocomplete="off"
                 cdkFocusInitial
               />
-              <!-- WHICH conversation, which the row was saying until the form
-                   replaced it. It matters most exactly here: an unnamed
-                   session's whole label is this uuid, so without it the screen
-                   asks for a name and does not say whose.
+              <!-- WHICH conversation, which the row was saying until the form replaced
+                   it: an unnamed session's whole label is this uuid.
 
-                   And what it is worth: since 2026-08-10 the name comes from
-                   what Claude Code calls the conversation, sent by the CLI on
-                   every command, so a name set here lasts until that session
-                   next runs one. Saying so beats a form that appears to work. -->
+                   And what it is worth: the name comes from what Claude Code
+                   calls the conversation, sent by the CLI on every command, so
+                   a name set here lasts until that session next runs one. -->
               <mat-hint>{{ row.id }} — replaced when this session next runs a command</mat-hint>
             </mat-form-field>
             <button mat-icon-button type="button" (click)="cancelRename()" aria-label="Cancel">
@@ -57,8 +54,7 @@
             </button>
           </form>
         } @else {
-          <!-- The count was the end of the road until #657: this screen could say
-               `hardware 6/31` and there was nowhere to go to see which six. -->
+          <!-- The count opens onto that holder's work in the list. -->
           <a [routerLink]="['/']" [queryParams]="{ who: row.focus }">
             <mat-icon aria-hidden="true">
               {{ row.kind === 'person' ? 'person' : row.kind === 'nobody' ? 'inbox' : 'smart_toy' }}
@@ -101,7 +97,7 @@
        ever asked for a digest, and all but a handful have never been given
        anything. `task sessions --all` is the whole table. -->
   <p class="key">
-    open / everything ever held — a finished task keeps its holder. Conversations
-    that have never held anything are not listed.
+    open / everything ever held — a finished task keeps its holder. Conversations that have never
+    held anything are not listed.
   </p>
 }

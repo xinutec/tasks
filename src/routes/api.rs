@@ -23,22 +23,17 @@ use crate::wire::{RequiredKeys, Wire};
 
 /// Every `/api` path that is not a route.
 ///
-/// Answers as the API rather than as the app: a caller here wants JSON and an
-/// error it can read, not the page. Deliberately *before* the credential check —
-/// there is nothing behind a path that does not exist, and a 401 for a typo
-/// sends the reader to look at their token.
+/// Answers as the API, not the page. Deliberately *before* the credential
+/// check: a 401 for a typo sends the reader to look at their token.
 pub async fn not_found() -> AppError {
     AppError::NotFound
 }
 
 /// The name to record, which is a name only when the caller is naming itself.
 ///
-/// ⚠ **The digest is the one place these can come apart.** A person may read a
-/// session's digest by passing `?session=`, and their browser is not that
-/// conversation — so the header they are not sending must not become that
-/// session's name, and a header they *are* sending must not either. Same
-/// reasoning as the line above it: a caller cannot mark another session as
-/// alive, and it cannot rename one here either.
+/// ⚠ **The digest is where these come apart.** A person may read a session's
+/// digest with `?session=`, and their browser is not that conversation, so no
+/// header of theirs may rename it.
 fn own_name<'a>(viewer: &Viewer, called: &'a Option<String>) -> Option<&'a str> {
     match viewer {
         Viewer::Session(_) => called.as_deref(),
@@ -61,27 +56,23 @@ pub async fn me(Access(viewer): Access) -> Json<serde_json::Value> {
 
 #[derive(Deserialize)]
 pub struct DigestQuery {
-    /// The conversation asking. Optional — a person can read a digest too — and
-    /// when present the session is recorded as seen, which is the only way a
-    /// row for it ever comes to exist.
+    /// The conversation asking. Optional — a person can read a digest too. When
+    /// present the session is recorded as seen.
     session: Option<String>,
 }
 
 /// The index a prompt receives: one line per open task, and nothing else.
 ///
-/// **`text/plain`, and that is not laziness.** Its consumer is a
-/// `UserPromptSubmit` hook whose entire contract is to print this and print
-/// nothing else, on every prompt, on the machine whose message latency is
-/// already the complaint. Handing it JSON would put a parser on that path to
-/// produce the same eight lines.
+/// **`text/plain`**: its consumer is a `UserPromptSubmit` hook that prints it on
+/// every prompt, and JSON would put a parser on that path.
 pub async fn digest(
     Access(viewer): Access,
     SeenAs(called): SeenAs,
     State(app): State<AppState>,
     Query(q): Query<DigestQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Whoever the credential says is asking wins over the query parameter — a
-    // session must not be able to mark another one as alive.
+    // The credential wins over the query parameter: a session must not mark
+    // another one as alive.
     let session = match &viewer {
         Viewer::Session(id) => Some(id.clone()),
         Viewer::Owner(_) => q.session.clone(),
@@ -89,29 +80,14 @@ pub async fn digest(
     if let Some(id) = &session {
         sessions::touch(&app.db, id, own_name(&viewer, &called)).await?;
     }
-    // What a session is shown: its own open tasks and the pile — not the ones
-    // another conversation is holding.
-    //
-    // ⚠ **This used to also narrow by the repositories the session had
-    // claimed, and that half was inherited from the storage rather than
-    // chosen.** One `TASKS.md` per repository meant both parties' work sat in
-    // one file, so seeing across holders was a side effect of there being
-    // nowhere else to put it. Worse, it made the empty digest ambiguous: a
-    // session that had claimed nothing saw exactly what a broken service looks
-    // like. Dropped in `0004`, and the pile is global now — 3 unheld of 134
-    // open when that was measured, which is what makes it affordable.
-    //
-    // A person reading a digest without naming a session gets everything: that
-    // path is `task digest` for checking the cost, and there is no "own" to
-    // narrow to.
+    // A person naming no session gets everything: there is no "own" to narrow
+    // to, and that path is for checking the cost.
     let filter = match &session {
         Some(id) => Filter::digest_for(id),
         None => Filter::default(),
     };
     let tasks = repo::list(&app.db, &filter).await?;
-    // What this session said it was working on, if it said so and the hour has
-    // not passed. A person reading a digest without naming a session has no
-    // focus to apply — there is no conversation whose afternoon it is.
+    // A focus belongs to a conversation, so a person naming none has none.
     let focus = match &session {
         Some(id) => focus::current(&app.db, id).await?,
         None => None,
@@ -129,19 +105,17 @@ pub async fn digest(
 #[derive(Deserialize)]
 pub struct NewFocus {
     tasks: BTreeSet<u64>,
-    /// How long, in minutes. A number rather than `4h`: the spelling is the
-    /// CLI's business and [`focus::parse`] is where it is read, so the wire
-    /// carries the quantity and one side does the reading.
+    /// How long, in minutes. The wire carries the quantity; the spelling (`4h`)
+    /// is the CLI's, read by [`focus::parse`].
     minutes: i64,
 }
 
 /// Enter a focus period.
 ///
-/// ⚠ **A session may only focus itself.** A focus is a claim about what one
-/// conversation is doing this afternoon, so there is nobody else who could make
-/// it — and a route that let one session quiet another's prompt would be the
-/// worst-shaped feature in the service. The person reading the app has no focus
-/// for the same reason: a browser is not a conversation.
+/// ⚠ **A session may only focus itself.** A focus claims what one conversation
+/// is doing, and letting one session quiet another's prompt would be the
+/// worst-shaped feature in the service. A browser is not a conversation, so the
+/// person has no focus either.
 pub async fn start_focus(
     Access(viewer): Access,
     State(app): State<AppState>,
@@ -190,36 +164,28 @@ fn own_session(viewer: &Viewer) -> Result<String, AppError> {
 
 #[derive(Deserialize)]
 pub struct ListQuery {
-    /// Include closed tasks — the done and the dropped alike. Off unless asked,
-    /// everywhere. Still spelled `done` on the wire: it is what every existing
-    /// caller sends, and "show me the closed ones too" is what it always meant.
+    /// Include closed tasks — done and dropped alike. Spelled `done` on the wire
+    /// because that is what callers send.
     #[serde(default)]
     done: bool,
     session: Option<String>,
     person: Option<String>,
     /// Widen `session` to *and the ones nobody holds*.
     ///
-    /// Asked for rather than assumed, because the two questions are different
-    /// and both are wanted: "what am I holding" is a plate, and "what could I
-    /// pick up" is a plate plus the pile. `--mine` is the first; the CLI's bare
-    /// `task list` is the second, which is the digest's own rule and the reason
-    /// this parameter exists at all. Ignored without `session`, exactly as
-    /// [`Filter::or_unheld`] is — on its own it would mean every task there is.
+    /// "What am I holding" (`--mine`) and "what could I pick up" (bare `task
+    /// list`, the digest's rule) are both asked. Ignored without `session`, as
+    /// [`Filter::or_unheld`] is.
     #[serde(default)]
     pile: bool,
     /// Strictly the tasks nobody holds. Wins over `session` and `person`.
     ///
-    /// The narrow twin of `pile`, which *widens*. Both names are on the wire
-    /// because both questions are asked, and telling them apart in one word is
-    /// what the CLI's `--pile` spends its own flag on.
+    /// The narrow twin of `pile`, which *widens*; the CLI's `--pile` is this one.
     #[serde(default)]
     unheld: bool,
     /// Tasks this session filed and does not hold — see
     /// [`Filter::handed_out_by`].
     ///
-    /// A session id rather than a flag, because the caller naming it is not
-    /// necessarily its subject: Pippijn can ask what any session handed out
-    /// from a shell holding no session at all.
+    /// A session id, not a flag: the caller need not be its subject.
     handed_out: Option<String>,
 }
 
@@ -252,15 +218,11 @@ pub async fn detail(
 
 /// The task as it stood before its most recent edit.
 ///
-/// ⚠ **A separate path rather than a field on `detail`.** A previous version is
-/// a second whole body, and `GET /api/tasks/{id}` is what the app opens a task
-/// with — putting it there would double that payload for every reader to serve
-/// the rare one who is undoing something. Asked for by id, it costs nothing
-/// until it is wanted.
+/// ⚠ **A separate path, not a field on `detail`**, which every reader opens: a
+/// second whole body there would serve only the rare undo.
 ///
-/// 404 when nothing has overwritten this task, which is the same answer as a
-/// task that does not exist and means the same thing to a caller: there is
-/// nothing here to put back.
+/// 404 when nothing has overwritten this task — to a caller the same as no
+/// task: nothing to put back.
 pub async fn previous(
     Access(who): Access,
     State(app): State<AppState>,
@@ -287,14 +249,10 @@ pub async fn create(
     Wire(new): Wire<NewTask>,
 ) -> Result<Json<Task>, AppError> {
     let actor = viewer.actor();
-    // ⚠ **Before the write and before `touch`.** A filing that skipped the check
-    // without having been refused is not filed at all, so nothing about it may
-    // land first — and a session must not be marked alive by a request that is
-    // about to be turned away.
-    //
-    // Measured over every transcript: 63 of 644 filings passed the flag on the
-    // way in and only 16 followed a refusal. For the other 47 the check never
-    // ran, so the trade this whole module rests on never happened.
+    // ⚠ **Before the write and before `touch`.** Skipping the duplicate check is
+    // licensed only by a recent refusal of the same subject; without one
+    // nothing lands, not even the session's `last_seen`. Sessions otherwise
+    // pass the skip flag pre-emptively, and the check never runs.
     if !new.checked {
         let Viewer::Session(id) = &viewer else {
             return Err(AppError::BadRequest(
@@ -342,20 +300,15 @@ pub struct Rename {
     pub name: String,
 }
 
-/// `name` is not listed, and that is the proportionate answer rather than an
-/// omission. The type refuses a rename that names nothing either way; what
-/// listing a key buys is a sentence explaining an answer a caller would not
-/// guess, and here there is only one thing to send. Compare `NewTask`, where
-/// the unguessable answer — `null`, for *nobody has judged this* — is the whole
-/// reason the key is required at all.
+/// `name` is not listed: the type refuses a rename without one anyway, and
+/// listing a key only buys a sentence about an unguessable answer, which here
+/// there is none.
 impl RequiredKeys for Rename {}
 
 /// Tell the service what a session now calls itself.
 ///
-/// ⚠ **A rename is an UPDATE of one column and moves nothing.** The id is the
-/// identity; this is why. A session may only rename itself — the id in the path
-/// has to be the one it authenticated as — because a session renaming another
-/// is a way to make a list unreadable and there is no reason to want it.
+/// ⚠ **One column, and nothing moves**: the id is the identity. A session may
+/// only rename itself — renaming another only makes a list unreadable.
 pub async fn rename(
     Access(viewer): Access,
     State(app): State<AppState>,
@@ -367,12 +320,9 @@ pub async fn rename(
     {
         return Err(AppError::Forbidden);
     }
-    // ⚠ **Blank is refused rather than passed on.** `touch` reads an empty name
-    // as *no name given* — it trims and filters, and its `COALESCE(VALUES(name),
-    // name)` then keeps whatever was there. That is correct for a touch, which
-    // runs on every request and must never wipe a name; here it made the route
-    // answer 204 to a write that changed nothing. Somebody clearing the field
-    // means to clear it, and has to be told that is not on offer.
+    // ⚠ **Blank is refused, not passed on.** `touch` reads an empty name as *no
+    // name given* and keeps the old one, which would answer 204 to a write
+    // that changed nothing.
     let name = body.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest(
@@ -388,16 +338,12 @@ pub async fn rename(
 
 /// Record what a model check did.
 ///
-/// ⚠ **A conversation's report about its own tooling, so a browser has nothing
-/// to say here.** The person reading the app never runs a check: the two that
-/// exist are spawned by the CLI, on the caller's machine, either side of a
-/// write. Refusing the owner keeps the table what it claims to be — every row a
-/// check that actually ran.
+/// ⚠ **A conversation's report on its own tooling.** Checks are spawned by the
+/// CLI around a write; a browser never runs one, so the owner is refused and
+/// every row is a check that ran.
 ///
-/// The clock and the session are taken from the request rather than from the
-/// body, because a caller that could name either could file a run as somebody
-/// else's or date it to a week ago, and both would be invisible in the numbers
-/// the table exists to produce.
+/// Clock and session come from the request, not the body, so a run cannot be
+/// filed as somebody else's or backdated.
 pub async fn check_ran(
     Access(viewer): Access,
     State(app): State<AppState>,
@@ -426,11 +372,8 @@ fn a_week() -> u32 {
 
 /// What the checks have been doing, as rows.
 ///
-/// **Rows rather than the summary.** `task checks` folds them into two lines,
-/// and the questions that made this table — what the density read fires on,
-/// where `PATIENCE` should sit — are asked of a distribution. A route that
-/// answered only in averages would have to be replaced by the first person who
-/// wanted a percentile.
+/// **Rows, not the summary** `task checks` folds them into: questions like
+/// where `PATIENCE` should sit are asked of a distribution.
 pub async fn checks_ran(
     Access(_viewer): Access,
     State(app): State<AppState>,
@@ -441,9 +384,7 @@ pub async fn checks_ran(
 
 /// Record one command the CLI ran.
 ///
-/// ⚠ **A session's, like a check's.** The holder of a command is the
-/// conversation that typed it, and a person browsing the web UI is not running
-/// the CLI — so there is no arm here for a cookie.
+/// ⚠ **A session's, like a check's**: a person in the web UI runs no CLI.
 pub async fn command_ran(
     Access(viewer): Access,
     State(app): State<AppState>,
@@ -456,21 +397,16 @@ pub async fn command_ran(
         ));
     };
     commands::record(&app.db, session, &run).await?;
-    // ⚠ **The answer to a write, not a second request.** The caller is already
-    // here and the service already knows both things it needs — whether anybody
-    // has reported lately, and what the numbers are. Making it ask separately
-    // would put two more round trips on a path whose whole discipline is
-    // costing the command nothing.
+    // ⚠ **The answer to a write, not a second request**: this path must cost
+    // the command nothing, and the service already knows what to answer.
     let due = commands::due_to_report(&app.db).await.unwrap_or(false);
     if !due {
         return Ok(Json(Carry { report: None }));
     }
     let window = commands::recent(&app.db, 1).await.unwrap_or_default();
     let checks = checks::recent(&app.db, 1).await.unwrap_or_default();
-    // ⚠ **Absent rather than zeroed when the count fails.** A tally of zero open
-    // tasks is a legitimate reading — it is what an empty tracker looks like —
-    // so answering with one because a query errored would publish "the backlog
-    // is clear" as a measurement. `checks()` skips the section it cannot see.
+    // ⚠ **Absent, not zeroed, when the count fails**: zero open tasks is a real
+    // reading, and an error must not publish "the backlog is clear".
     let work = work::standing(&app.db).await.ok();
     Ok(Json(Carry {
         report: Some(Report {
@@ -484,10 +420,9 @@ pub async fn command_ran(
 
 /// What a caller is handed back after recording a command.
 ///
-/// ⚠ **`report` is absent almost every time, and that is the shape.** One
-/// caller an hour is told to carry the numbers out; every other command gets an
-/// empty object and does nothing. An arm that always carried the tally would put
-/// a day of rows on the wire for every `task list` anybody runs.
+/// ⚠ **`report` is absent almost every time.** One caller per reporting window
+/// ([`commands::due_to_report`]) is told to carry the numbers out; every other
+/// command gets an empty object.
 #[derive(Serialize)]
 pub struct Carry {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -497,24 +432,20 @@ pub struct Carry {
 /// The numbers to carry, and the cadence to declare with them.
 #[derive(Serialize)]
 pub struct Report {
-    /// Passed through rather than decided by the caller: how long silence is
-    /// tolerated is a property of the measurement, not of whichever session
-    /// happened to run a command at the right moment.
+    /// Passed through, not decided by the caller: how long silence is tolerated
+    /// belongs to the measurement.
     interval_s: u64,
     commands: Vec<commands::Tally>,
     checks: Vec<checks::Tally>,
-    /// What is standing in the tracker — the half that is about the WORK rather
-    /// than about the tool. Absent when the count could not be taken, which is
-    /// not the same as a tracker with nothing in it.
+    /// What is standing in the tracker — the WORK, not the tool. Absent when the
+    /// count could not be taken.
     #[serde(skip_serializing_if = "Option::is_none")]
     work: Option<work::Tally>,
 }
 
 /// What the CLI has been doing, newest first.
 ///
-/// Rows rather than a summary, for the reason `checks_ran` gives: the caller
-/// decides what question to ask of them, and a tally computed here would be the
-/// only shape anybody could get.
+/// Rows, not a summary, for the reason [`checks_ran`] gives.
 pub async fn commands_ran(
     Access(_viewer): Access,
     State(app): State<AppState>,

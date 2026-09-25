@@ -1,5 +1,4 @@
 //! Post-login redirect allowlist — must not become an open redirect.
-//! The same three cases `life` and `memview` pin, for the same copied function.
 
 use tasks::routes::auth::validate_return_to;
 
@@ -22,10 +21,8 @@ fn rejects_open_redirects_and_falls_back_to_root() {
 /// Which pending sign-in a callback answers, when the identity provider may or
 /// may not hand back the `state` it was given.
 ///
-/// ⚠ This is the security-relevant half of the sign-in and it is a pure
-/// function precisely so it can be pinned here: the live flow needs Nextcloud,
-/// which no test has, and a decision nobody can exercise is a decision nobody
-/// checks.
+/// ⚠ The security-relevant half of the sign-in, and a pure function so it can
+/// be pinned here: the live flow needs Nextcloud, which no test has.
 mod which_signin {
     use tasks::routes::auth::state_to_consume;
 

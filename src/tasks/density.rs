@@ -30,13 +30,11 @@
 //! semantic: a body can be mostly superseded by its own later layers, and no
 //! threshold can see that.
 //!
-//! ⚠ **Never a refusal.** `duplicates.rs` refuses, and the difference is what
-//! is being judged: whether a title is already on a list is a fact about that
-//! list, and whether prose is dense is taste. A gate on taste that fires on one
-//! edit and not the identical next one teaches sessions to edit again until it
-//! goes quiet. The write has already landed by the time this runs, which is the
-//! same reason: advice after the fact is advice, and a refusal after the fact is
-//! nothing at all.
+//! ⚠ **Never a refusal.** `duplicates.rs` refuses because whether a title is
+//! already on a list is a fact about that list; whether prose is dense is
+//! taste. A gate on taste that fires on one edit and not the identical next
+//! teaches sessions to edit until it goes quiet. And the write has landed by
+//! the time this runs.
 //!
 //! ⚠ **Never "as few words as possible".** Told to compress, a model drops the
 //! numbers and keeps the prose, because prose reads like the argument — and a
@@ -46,10 +44,9 @@
 
 /// Characters of unconsolidated growth before the question is worth asking.
 ///
-/// **From the distribution rather than from taste**: roughly two ordinary
-/// additions. The rate is the point — the check spends the caller's own clock
-/// and allowance, and asking on every edit buys nothing for the great majority,
-/// which are one paragraph landing on a body somebody wrote this morning.
+/// **From the distribution, not taste**: roughly two ordinary additions. The
+/// check spends the caller's clock and allowance, and most edits are one
+/// paragraph on a body that was recently whole.
 pub const SAMPLER: usize = 3_000;
 
 /// Whether this much unconsolidated growth is worth a model's opinion.
@@ -60,10 +57,8 @@ pub fn worth_asking(accreted: usize) -> bool {
 /// The standard a body is held to, stated once and used twice.
 ///
 /// ⚠ **The judge applies it and `task edit --help` prints it, from this same
-/// string.** A standard stated only to the judge arrives after the writing;
-/// stated in the help it arrives before, which is the only place it can prevent
-/// anything. Two copies would drift, and the copy that drifts is the one nobody
-/// is grading against.
+/// string.** Stated only to the judge it arrives after the writing; in the help
+/// it arrives before, where it can prevent something.
 pub const RUBRIC: &str = "\
 1. Every paragraph earns its place one of three ways: it tells the holder what \
 to do, it is the evidence for that, or it records a refutation that stops \
@@ -71,9 +66,9 @@ somebody redoing dead work. Nothing else stays. Completeness here is relative \
 to ONE reader — the holder, about to do the work — and ONE question: what do I \
 do, and why is that right?
 2. No claim without its measurement, and no sentence that only restates one.
-3. Deletion beats compression. Rewording caps out around 20%; #749 went 16,405 \
-to 3,928 characters because 76% of it was superseded, not because it was wordy. \
-So look for SUPERSESSION, not verbosity.";
+3. Deletion beats compression. Rewording saves a little; a body that is mostly \
+superseded by its own later text can lose most of its length. So look for \
+SUPERSESSION, not verbosity.";
 
 /// The single word that means there is nothing to say.
 const FINE: &str = "DENSE";
@@ -100,16 +95,12 @@ pub fn prompt(id: u64, accreted: usize, body: &str) -> String {
 
 /// What to print, if anything.
 ///
-/// ⚠ **The line bound is on the model's manners, not on the output.** Asked for
-/// four lines a model will return one wide one holding four findings, so `ONE
-/// FINDING PER LINE` in [`prompt`] is the fix. It is a request rather than a
-/// limit: truncating mid-sentence cuts the specific half of a finding, which is
-/// the half worth having.
+/// ⚠ **The line bound is on findings, not characters.** Asked for four lines a
+/// model returns one wide one holding four, so [`prompt`] asks for `ONE FINDING
+/// PER LINE`; truncating mid-sentence would cut the specific half of a finding.
 ///
-/// ⚠ **An unreadable answer is silence, not a warning.** This runs after a write
-/// that has already landed, so there is nothing for a failure to protect; a line
-/// that cannot say what is wrong with the body would be a session's attention
-/// spent on the checker rather than on the task.
+/// ⚠ **An unreadable answer is silence, not a warning**: the write has landed,
+/// and a line about the checker spends attention that belongs to the task.
 pub fn advice(said: &str, id: u64) -> Option<String> {
     let said = said.trim();
     if said.is_empty() || said.eq_ignore_ascii_case(FINE) {

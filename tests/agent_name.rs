@@ -6,9 +6,8 @@
 //! *no name* rather than a wrong one, and every assertion below is about which
 //! of several candidate names wins rather than about parsing succeeding.
 //!
-//! The shapes were established in `memview`'s `reader::transcript`, which read
-//! them out of the 2.1.221 binary rather than guessing: the labeller's chain is
-//! `agentName || customTitle || …`, and that order is what [`in_tail`] follows.
+//! The labeller's precedence is `agentName || customTitle || …`, and that order
+//! is what [`in_tail`] follows.
 
 use std::path::Path;
 
@@ -49,9 +48,8 @@ fn a_line_naming_another_session_names_nobody_here() {
 
 #[test]
 fn a_custom_title_names_a_session_no_agent_line_ever_did() {
-    // Not hypothetical: measured 2026-08-10, this is how the `tasks` session
-    // itself is named — it carries no `agent-name` line at all, and reading
-    // only that one needle reported it as unnamed.
+    // Not hypothetical: some sessions carry no `agent-name` line at all, and
+    // reading only that needle would report them unnamed.
     let text = title_line("tasks", ME);
     assert_eq!(in_tail(text.as_bytes(), ME).as_deref(), Some("tasks"));
 }
@@ -111,11 +109,7 @@ fn nothing_in_the_text_is_no_name_rather_than_an_error() {
 
 /// The read is bounded, and this is what that costs.
 ///
-/// A transcript on this machine reaches 4.0 GB, so the whole file is not an
-/// option on a path that runs before every `task` command. Measured 2026-08-10
-/// across the twelve largest: the last name line sits at most 25,376 bytes from
-/// the end, and most sit 427. [`TAIL_WINDOW`] is 1 MiB — some forty times the
-/// worst case seen — and a name older than that is simply not found.
+/// A name further than [`TAIL_WINDOW`] from the end is simply not found.
 #[test]
 fn only_the_tail_is_looked_at() {
     let mut text = agent_line("ancient", ME).into_bytes();

@@ -1,11 +1,6 @@
 {-
 tasks/gate.dhall — this repository's commit gate.
 
-Written against the shared schema from the start rather than converted from a
-`verify.sh`, so none of the failures that conversion found elsewhere are here to
-find: no `|| true`, no `&&` chain reporting one name for eleven things, and no
-build assertion pointed at a directory the build does not write.
-
 Two rows carry the weight of this repository and are worth knowing about before
 changing either.
 
@@ -13,17 +8,16 @@ changing either.
 `query_as`, not the compile-time macros — so running the queries IS the only
 check on them, and a renamed column compiles perfectly and fails on the first
 request. `with-test-db` starts a throwaway server, exports the URL, runs the
-suite and tears it down. Port 3321: fleetwatch's ephemeral server takes 3317,
-messages' 3318, coach's 3319 and life's 3320, and the fleet gate can run all
-five at once. The tests themselves PANIC rather than skip when the variable is
-absent, so a hand-run cannot report green with none of the SQL exercised — the
-state `life` sat in for months.
+suite and tears it down. The port is this repository's own, so the fleet gate
+can run every repository's server at once. The tests themselves PANIC rather
+than skip when the variable is absent, so a hand-run cannot report green with
+none of the SQL exercised.
 
 **`ui-check` is not the whole of looking at it.** It measures geometry at phone
-width, and geometry missed both defects in this app's first render (see
-`e2e/shots.spec.ts`). `pnpm run shots` is the other half and is deliberately NOT
-a row here: it asserts nothing, its output is for a person, and a check nobody
-reads is worse than none.
+width, and some defects only show in a picture (see `e2e/shots.spec.ts`).
+`pnpm run shots` is the other half and is deliberately NOT a row here: it
+asserts nothing, its output is for a person, and a check nobody reads is worse
+than none.
 
 The generated `gate.json` is committed; `the table matches its Dhall` re-renders
 and diffs it, so running the gate needs no `dhall`.
@@ -129,7 +123,7 @@ in  { name = "tasks"
         , {-  Playwright DELETES this at the start of every run, so the run made
               to investigate a failure is the run that erases it — and no option
               turns that off (`preserveOutput` is about PASSING tests). Declaring
-              it here makes the gate copy it aside when this check fails. #1545
+              it here makes the gate copy it aside when this check fails.
           -}
           artifacts = [ "test-results" ]
         , env = G.nonInteractive # G.oneAngularWorker

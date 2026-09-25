@@ -1,32 +1,24 @@
 //! What one conversation is working on right now.
 //!
-//! A session pays for every open task it holds on every turn, and on any given
-//! afternoon it is working on one or two. [`digest`](crate::digest) is the
-//! module that refuses per-turn cost; this is the one that lets a session say
-//! which cost is worth paying at all. For the period named, its digest recites
-//! the chosen tasks and **counts** the rest.
+//! A session pays for every open task it holds on every turn, while working on
+//! one or two. This lets it say which are worth paying for: for the period
+//! named, its digest recites the chosen tasks and **counts** the rest.
 //!
 //! ⚠ **This is the only thing in the service that hides an open task, so three
 //! rules hold and a change that breaks one is a regression however convenient
 //! it looks.**
 //!
-//! 1. **It expires, and there is no way to say "until I say otherwise".** The
-//!    expiry is what makes hiding safe: a focus nobody remembers to clear stops
-//!    applying at its hour. [`MAX`] is a day for the same reason — past that it
-//!    is not a focus, it is a quiet reassignment, and `task move` is how work
-//!    changes hands where everybody can see it.
+//! 1. **It expires, and there is no "until I say otherwise".** The expiry is
+//!    what makes hiding safe: a focus nobody clears stops applying at its hour.
+//!    See [`MAX`].
 //! 2. **What is hidden is counted, never silent.** The digest says how many of
-//!    each kind it left out and how to end the focus. The pile cap already
-//!    works this way, and for the same reason: the party paying for a trim is
-//!    the one who has to be told it happened.
+//!    each kind it left out and how to end the focus.
 //! 3. **The urgent breaks through** — see [`breaks_through`]. Without it a focus
 //!    buries a P0 filed minutes into it, and a P0 is the drop-everything signal.
 //!
 //! **It applies to the digest and to nothing else.** The digest is the channel
-//! nobody asked for and is re-serialised every turn; a list somebody typed is
-//! one they wanted. A focused session running `task list` is asking what to pick
-//! up next, which is the question focus must not answer with silence — and it is
-//! why `list` costs no extra request to mark anything.
+//! nobody asked for; a list somebody typed is one they wanted, and a focused
+//! session running `task list` is asking what to pick up next.
 
 use std::collections::BTreeSet;
 
@@ -42,45 +34,40 @@ type Result<T> = std::result::Result<T, AppError>;
 
 /// The shortest focus worth entering.
 ///
-/// Below this the period lapses before the work starts, and a focus that has
-/// already expired by the time the next prompt renders looks exactly like a
-/// broken one.
+/// Below this the period lapses before the work starts, and an expired focus
+/// looks exactly like a broken one.
 pub const MIN: Duration = Duration::minutes(15);
 
 /// The longest.
 ///
-/// ⚠ **Refused past this rather than clamped.** Clamping silently leaves the
-/// caller believing a number that was never applied, so the bound is named in
-/// the refusal. A focus longer than a day is not a statement about this
-/// afternoon — it is a claim that the rest is somebody else's, and the honest
-/// way to say that is `task move`.
+/// ⚠ **Refused past this, not clamped**: clamping leaves the caller believing a
+/// number that was never applied. Longer than a day is not a focus but a quiet
+/// reassignment, and `task move` is how work changes hands where everybody
+/// can see it.
 pub const MAX: Duration = Duration::hours(24);
 
 /// A session's focus period: what it is on, and when it lapses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Focus {
     pub until: DateTime<Utc>,
-    /// The task ids, ascending. A set rather than a list: focus answers *which*
-    /// tasks a prompt recites and never in what order — the digest's own id
-    /// order is the only ordering there is.
+    /// The task ids. A set: focus says *which* tasks are recited, never in what
+    /// order.
     pub tasks: BTreeSet<u64>,
 }
 
 impl Focus {
     /// Whether this focus still applies, at a given moment.
     ///
-    /// Taken as an argument rather than read from the clock so that a test can
-    /// state the hour it means; [`current`] passes `Utc::now()`.
+    /// `now` is an argument so a test can state the hour it means.
     pub fn holds_at(&self, now: DateTime<Utc>) -> bool {
         Self::live_at(self.until, now)
     }
 
     /// The rule itself, before there is a [`Focus`] to ask.
     ///
-    /// ⚠ **One spelling, for the reason `still_open!` and `due_soon!` exist.**
-    /// [`current`] decides this from a bare timestamp before it has read the
-    /// task ids, and an inline comparison there is a second copy of a rule with
-    /// no test on it.
+    /// ⚠ **One spelling of the rule**: [`current`] decides it from a bare
+    /// timestamp before reading the task ids, and an inline comparison there
+    /// would be an untested second copy.
     pub fn live_at(until: DateTime<Utc>, now: DateTime<Utc>) -> bool {
         until > now
     }
@@ -88,15 +75,12 @@ impl Focus {
 
 /// Whether a task is shown whatever the focus is.
 ///
-/// ⚠ **The effective rank, not the chosen one.** `escalated_to` is what the
-/// list sorted by — a deadline inside the week raises a task to `P0` without
-/// anything being written — so reading `priority` here would let a focus bury
-/// exactly the task the escalation exists to raise. This is the same
-/// `escalated_to ?? priority` every renderer draws.
+/// ⚠ **The effective rank, not the chosen one.** A near deadline raises a task
+/// to `P0` without anything being written, so reading `priority` would let a
+/// focus bury exactly the task the escalation exists to raise.
 ///
-/// Overdue is its own arm rather than a consequence: a task can be past its
-/// date with no rank at all, and the one thing a deadline that has already
-/// passed must not do is go quiet.
+/// Overdue is its own arm: a task can be past its date with no rank at all,
+/// and a passed deadline must not go quiet.
 pub fn breaks_through(task: &Task) -> bool {
     task.overdue || task.urgency() == Some(Priority::P0)
 }
@@ -137,17 +121,13 @@ pub async fn current(pool: &MySqlPool, session: &str) -> Result<Option<Focus>> {
 
 /// Enter a focus period, replacing whatever the session was focused on.
 ///
-/// ⚠ **Naming no task is refused.** An empty focus is not "focus on nothing", it
-/// is a digest with every task counted and none recited — the one state from
-/// which a session cannot find its way back out, because the way back is a task
-/// id it can no longer see.
+/// ⚠ **Naming no task is refused.** An empty focus counts every task and
+/// recites none, and the way back out is a task id the session can no longer
+/// see.
 ///
-/// ⚠ **Ids nobody holds are accepted on purpose.** Focusing on a task in the
-/// pile is how a session says it has picked something up before it has moved
-/// it, and refusing that would make focus a thing you can only do to work
-/// already assigned. What is refused is an id that names nothing at all, since
-/// that is a typo and the alternative is a focus quietly one task narrower than
-/// the caller asked for.
+/// ⚠ **Ids nobody holds are accepted**: focusing on a pile task is how a session
+/// says it has picked it up before moving it. An id that names nothing is
+/// refused — a typo would otherwise narrow the focus silently.
 pub async fn enter(
     pool: &MySqlPool,
     session: &str,
@@ -162,9 +142,8 @@ pub async fn enter(
         ));
     }
     if period < MIN || period > MAX {
-        // ⚠ **Two bounds, two different mistakes, and the advice for one is
-        // nonsense for the other.** A single sentence about handovers tells a
-        // caller who asked for five minutes that their focus is too long.
+        // Two bounds, two mistakes, and the advice for one is nonsense for the
+        // other.
         let why = if period > MAX {
             "Longer than a day is not a focus but a handover — `task move <id> <who>` is \
              how work changes hands where everybody can see it."
@@ -201,8 +180,8 @@ pub async fn enter(
         .execute(&mut *tx)
         .await
         .context("starting a focus")?;
-    // The whole set is replaced, which is what `--blocked-on` already means one
-    // command over: a caller states what it is on, never what to add.
+    // The whole set is replaced, as `--blocked-on` is: a caller states what it
+    // is on, never what to add.
     sqlx::query("DELETE FROM session_focus WHERE session = ?")
         .bind(session)
         .execute(&mut *tx)
@@ -251,9 +230,8 @@ pub fn spell(period: Duration) -> String {
 /// Read a period the way somebody types one: `4h`, `90m`, `2h30m`, `45`.
 ///
 /// ⚠ **A bare number is minutes**, because the unit somebody omits is the small
-/// one: `--for 30` is half an hour, and reading it as hours silently grants far
-/// more than was asked for. Both readings sit inside [`MAX`], which is what
-/// makes the wrong one quiet rather than a refusal.
+/// one. Both readings of `--for 30` sit inside [`MAX`], so the wrong one would
+/// pass silently.
 pub fn parse(text: &str) -> anyhow::Result<Duration> {
     let text = text.trim().to_ascii_lowercase();
     anyhow::ensure!(!text.is_empty(), "a focus needs a period: --for 4h");

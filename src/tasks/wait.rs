@@ -27,12 +27,10 @@ pub enum Verdict {
     Done,
     /// Everything is closed, but these were dropped rather than done.
     ///
-    /// ⚠ **A separate ending because it is a separate answer.** `drop` is
-    /// *overtaken, obsolete, or decided against* — the problem the session
-    /// stopped for was not fixed. Folding it into [`Done`](Verdict::Done) would
-    /// wake the session and tell it the opposite of what happened, which is
-    /// worse than never waking it: it resumes on a premise that has been
-    /// explicitly refused.
+    /// ⚠ **A separate answer.** `drop` is *overtaken, obsolete, or decided
+    /// against* — the problem was not fixed. Folding it into
+    /// [`Done`](Verdict::Done) would resume the session on a premise that has
+    /// been explicitly refused, which is worse than never waking it.
     Dropped(Vec<u64>),
 }
 
@@ -40,8 +38,7 @@ pub enum Verdict {
 ///
 /// ⚠ **Through [`Status::is_open`], never `== Status::Open`.** A blocker
 /// somebody has picked up is `doing` and is still a blocker; the obvious
-/// comparison ends the wait the moment the fix STARTS. That predicate exists
-/// because the same mistake was already made once in SQL.
+/// comparison ends the wait the moment the fix STARTS.
 pub fn verdict(blockers: &[(u64, Status)]) -> Verdict {
     let open: Vec<u64> = blockers
         .iter()
@@ -71,13 +68,12 @@ const KEENLY: Duration = Duration::from_secs(120);
 
 /// How long to sleep before asking again.
 ///
-/// ⚠ **Two rates, because the two cases are minutes and days apart.** A blocker
+/// ⚠ **Two rates, because the cases are minutes and days apart.** A blocker
 /// closed while somebody is at the keyboard should wake the session promptly;
-/// one closed tomorrow morning can afford a slower poll, and paying the eager
-/// rate all day to shave that is a lot of requests for nothing.
+/// one closed tomorrow can afford a slower poll.
 ///
 /// ⚠ **A ceiling, not a ramp.** A wait that has run for a week still answers
-/// within [`LAZY`]: a backoff that keeps growing makes the longest waits — the
+/// within `LAZY`: a backoff that keeps growing makes the longest waits — the
 /// ones most likely to be forgotten — the slowest to come back.
 pub fn interval(waited: Duration) -> Duration {
     if waited < KEENLY { EAGER } else { LAZY }
@@ -85,16 +81,14 @@ pub fn interval(waited: Duration) -> Duration {
 
 /// What the returning session reads.
 ///
-/// ⚠ **The ids, not just the outcome.** The session has been away — possibly for
-/// days, across a context it no longer holds — and the task number is the only
-/// thing that reconnects the wake to the work it stopped for. `asked` is what
-/// the wait was called with, so a partial ending can say which of them.
+/// ⚠ **The ids, not just the outcome.** The session may have been away for
+/// days, and the task number is what reconnects the wake to the work it stopped
+/// for. `asked` is what the wait was called with, so a partial ending can say
+/// which of them.
 pub fn said(verdict: &Verdict, asked: &[u64]) -> String {
     match verdict {
         Verdict::Done => format!("{} closed — carry on.", list(asked)),
-        // ⚠ **Said once when there is one.** Naming both ends of the same fact
-        // reads as two tasks, and the sentence a woken session reads first is
-        // not the place to work out that they are one.
+        // ⚠ **Said once when there is one**: naming it twice reads as two tasks.
         Verdict::Dropped(ids) if ids == asked => format!(
             "{} was dropped rather than done — overtaken, obsolete, or decided \
              against. Whatever this was waiting for did NOT happen; read it \

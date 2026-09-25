@@ -1,7 +1,6 @@
 //! Auth routes: Nextcloud identity login, restricted to an explicit
-//! allow-list. Copied from `messages`; sessions are stateless here, so
-//! logout is just clearing the cookie. All three routes 404 when auth is
-//! unconfigured (local dev — there is nothing to log in to).
+//! allow-list. Sessions are stateless, so logout is clearing the cookie. All
+//! three routes 404 when auth is unconfigured (local dev).
 
 use axum::extract::{Query, State};
 use axum::http::{StatusCode, header};
@@ -23,7 +22,7 @@ fn session_cookie(value: String) -> Cookie<'static> {
         .path("/")
         .http_only(true)
         // Not `Secure`: the isis deployment is plain http on the wg0
-        // hostPort (the VPN is the transport gate), matching recall.
+        // hostPort, and the VPN is the transport gate.
         .same_site(SameSite::Lax)
         .max_age(time::Duration::days(7))
         .build()
@@ -33,9 +32,7 @@ fn session_cookie(value: String) -> Cookie<'static> {
 ///
 /// ⚠ **The backslash matters.** Browsers fold `\` to `/` inside a URL, so
 /// `/\evil.example` is `//evil.example` in disguise — a protocol-relative URL,
-/// and an open redirect out of a signed-in flow. `life`'s version of this
-/// function rejects both; memview's checks only `//` and is the weaker of the
-/// two. This is life's.
+/// and an open redirect out of a signed-in flow. Both are rejected.
 pub fn validate_return_to(return_to: Option<&str>) -> String {
     match return_to {
         Some(p) if p.starts_with('/') && !p[1..].starts_with(['/', '\\']) => p.to_string(),
@@ -86,11 +83,9 @@ pub async fn login(
 /// when the provider dropped it — the one this browser is carrying.
 ///
 /// ⚠⚠ **Nextcloud loses the `state` it was given, so the URL cannot be the only
-/// source.** Observed 2026-08-30: `authorize` is handed 48 hex characters and
-/// the callback arrives as `state=&code=…`. Nextcloud stashes the value in its
-/// PHP session (`LoginRedirectorController.php:95`) and reads it back at the
-/// redirect (`ClientFlowLoginController.php:325`); a sign-in that crosses its
-/// login page in between comes back empty, and the whole flow was unusable.
+/// source.** It stashes the value in its PHP session (`LoginRedirectorController`)
+/// and reads it back at the redirect (`ClientFlowLoginController`); a sign-in
+/// that crosses its login page in between comes back as `state=&code=…`.
 ///
 /// ⚠ **What the cookie is worth, and what it is not.** `state` exists to prove
 /// the callback belongs to a flow *this browser* began. A `HttpOnly` cookie
@@ -122,10 +117,8 @@ pub fn state_to_consume<'a>(
 /// A sign-in that could not be finished, drawn for the BROWSER looking at it.
 ///
 /// ⚠ **A navigation endpoint must not answer in JSON.** `/auth/callback` is
-/// somewhere a browser is *sent*; nothing calls it as an API. On 2026-08-30 a
-/// dropped `state` put `{"error":"…"}` on the screen of a phone, and a
-/// recoverable "try again" was read as the application being broken. The
-/// sentence had been right the whole time — only its content type was wrong.
+/// somewhere a browser is *sent*; `{"error":"…"}` on a phone screen reads as the
+/// app being broken, where the sentence says "try again".
 fn sign_in_problem(status: StatusCode, said: &str) -> Response {
     let said = said
         .replace('&', "&amp;")

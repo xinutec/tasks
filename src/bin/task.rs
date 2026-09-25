@@ -13,10 +13,9 @@
 //! acting on some other conversation's behalf.
 //!
 //! ⚠ **There is no anonymous mode, for reads either.** The service refuses a
-//! request that does not say which conversation it is (`access.rs`), because
-//! the actor is derived from the credential and a change filed against nobody
-//! is the one thing the history must not contain. This CLI stops before the
-//! round trip and says which of the two halves — token, identity — is missing.
+//! request that does not say which conversation it is (`access.rs`); this CLI
+//! stops before the round trip and says which half — token, identity — is
+//! missing.
 //!
 //! **Naming a task.** Every command that takes one accepts a bare number, or the
 //! `#`-prefixed form the digest prints.
@@ -61,9 +60,8 @@ const DEFAULT_URL: &str = "https://tasks.xinutec.org";
 
 /// The two model facts a reader cannot guess, and what the five ranks mean.
 ///
-/// ⚠ **Assembled rather than written out**, because [`Priority::gloss`] is where
-/// the levels are defined and a second copy in a help string is the copy that
-/// drifts. Five names two readers interpret differently rank nothing.
+/// ⚠ **Assembled rather than written out**: [`Priority::gloss`] defines the
+/// levels, and a second copy here would drift.
 fn long_about() -> String {
     let levels: String = Priority::all()
         .iter()
@@ -99,8 +97,9 @@ has. Leaving both off is not an answer and is refused.
 THE PILE IS THE SECOND THING THAT MUST BE SAID. `--to nobody` needs
 `--spare \"<why>\"` beside it, and a bare one is refused the same way a missing
 priority is. `--to me` is the default and needs no argument; the pile is the one
-holder that does, because it was corrected 47 times out of 47. A reason without
-`--to nobody` is refused too: it would say nothing true about a held task.
+holder that does, because filings to it were almost always corrected later. A
+reason without `--to nobody` is refused too: it would say nothing true about a
+held task.
 
 UNASSESSED is not a sixth level — it sorts exactly where P2 does. So P0 and P1
 rise above it and P3 and P4 sink below, and anything nobody has judged keeps its
@@ -114,27 +113,23 @@ way — the rank stops carrying information."
 
 /// What `task edit --help` says under the flags.
 ///
-/// ⚠ **Assembled from [`density::RUBRIC`], never restated.** A second copy here
-/// is the copy that drifts, leaving sessions written to one standard and marked
-/// against another.
+/// ⚠ **Assembled from [`density::RUBRIC`], never restated**, or sessions would
+/// write to one standard and be marked against another.
 fn edit_about() -> String {
     format!(
         "Change a task's words.
 
 ⚠ **Rewriting is the moment to put the conclusion back on top.** A body grows in
-the order things happened, so what is still true sinks to the bottom: measured
-across every task with one, #704's verdict sat 98% down its 132 lines and #697's
-plan for a new machine was the last paragraph of a ticket about copying a disk.
-Lead with where it stands; the history goes under it. Better still, put the
-state in `--subject`, which is the only part anybody reads without opening the
-task.
+the order things happened, so what is still true sinks to the bottom — a verdict
+can end up at the foot of a long ticket, or a plan in the last paragraph of a
+ticket about something else. Lead with where it stands; the history goes under
+it. Better still, put the state in `--subject`, which is the only part anybody
+reads without opening the task.
 
 ⚠ **`--prepend` is how to do that in one command, and `--body` is not.** `--body`
 replaces everything; recording an outcome with it deletes the filing unless the
-old text is read out and pasted back first. On 2026-08-15 that read was skipped
-twice in one afternoon by the session that maintains this tool — once caught by
-the guard on `--body`, once under its threshold at 52% kept, where nothing
-catches it.
+old text is read out and pasted back first. That read gets skipped, and the
+guard on `--body` only catches a body cut to a fraction of itself.
 
 WHAT A BODY IS HELD TO. Once one has grown {sampler} characters since anybody
 last rewrote it, a model reads it against these three rules and says what it
@@ -168,19 +163,13 @@ struct Cli {
     session: Option<String>,
     /// Print what the service answered, verbatim, instead of the human format.
     ///
-    /// A task is `{id, subject, status, assignee, detailed, filed_by,
-    /// created_at, updated_at, closed_at}`, plus `priority` when one is set —
-    /// `P0` to `P4`, and ABSENT rather than null on the almost-everything that
-    /// has none. `status` is one of `open`, `doing`, `done`, `dropped`. THE
-    /// HOLDER IS `assignee`, an object — `{kind, id,
-    /// name}` with `kind` one of `session`, `person`, `nobody` — and there is no
-    /// top-level `session` field.
-    ///
-    /// ⚠ **That last sentence is here because guessing it cost a wrong answer.**
-    /// A session filtering `--all --json` by hand assumed a `session` field,
-    /// matched every row for lacking it, and reported a pile size wildly wrong.
-    /// `--pile` answers that question directly; this says what the shape is for
-    /// the questions with no flag.
+    /// A task carries `id`, `subject`, `status` (`open`, `doing`, `done`,
+    /// `dropped`) and `assignee`; optional fields such as `priority` (`P0` to
+    /// `P4`) are ABSENT, not null, when unset. THE HOLDER IS `assignee`, an
+    /// object — `{kind, id, name}` with `kind` one of `session`, `person`,
+    /// `nobody` — and there is no top-level `session` field: guessing one
+    /// matches every row. `--pile`, `--mine` and `--to` answer the common
+    /// questions without filtering JSON by hand.
     ///
     /// ⚠ **THAT IS THE LIST SHAPE, AND `show --json` IS A BIGGER ONE.** A list
     /// row carries no prose — `detailed` is the BOOLEAN standing in for it, so
@@ -190,9 +179,8 @@ struct Cli {
     /// string `True` over the prose. **`show <id> --body` prints the body
     /// alone**, and `--previous --body` gives the version before the last edit.
     ///
-    /// ⚠ **The service's JSON, reprinted — not rebuilt here**, or it would be a
-    /// second shape to keep level with the API by hand. That is why the human
-    /// format is free to change.
+    /// ⚠ **The service's JSON, reprinted — not rebuilt here**, so it cannot drift
+    /// from the API. The human format is the one free to change.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -211,8 +199,8 @@ enum Command {
         mine: bool,
         /// Strictly what nobody holds: the pile, and what is going spare.
         ///
-        /// Your prompt shows at most five of these, so this is where the rest
-        /// are. Needs no session id — the pile belongs to no conversation.
+        /// Your prompt shows only the first few of these, so this is where the
+        /// rest are. Needs no session id — the pile belongs to no conversation.
         #[arg(long, conflicts_with_all = ["all", "mine"])]
         pile: bool,
         /// What you FILED and somebody else is holding — what you handed out.
@@ -232,13 +220,8 @@ enum Command {
         /// What ONE other holder is carrying: a session by name or id,
         /// `pippijn`, or `nobody` for the pile.
         ///
-        /// ⚠ **Three attempts in the transcripts and the tool answered none of
-        /// them** — `--to pippijn`, `--assignee hardware`, `--pippijn`. The list
-        /// had `--mine`, `--pile` and `--all` and nothing between them, so the
-        /// answer was `task list --all | grep "(name)"`.
-        ///
-        /// Strictly that holder, with no pile folded in: the unheld tasks are
-        /// nobody's, so they are on no holder's plate.
+        /// `--assignee` and `--holder` are accepted too. Strictly that holder,
+        /// with no pile folded in: the pile is on no holder's plate.
         #[arg(long, conflicts_with_all = ["all", "mine", "pile"], aliases = ["assignee", "holder"])]
         to: Option<To>,
     },
@@ -247,8 +230,8 @@ enum Command {
     ///     task focus 849 850 --for 4h
     ///
     /// For those four hours **your prompt** recites only those tasks and counts
-    /// the rest. A session with fifty open tasks pays for all fifty on every
-    /// turn and is working on two of them; this is how to say which two.
+    /// the rest. A session pays for every open task it holds on every turn, and
+    /// is working on one or two; this is how to say which.
     ///
     /// ⚠ **`task list` is unaffected and still shows everything.** The digest is
     /// the channel nobody asked for; a list you typed is one you wanted, and the
@@ -282,9 +265,8 @@ enum Command {
     #[command(alias = "history")]
     Show {
         id: TaskRef,
-        /// Print the body alone, with no header and no history — for diffing
-        /// prose against another copy of it, which is what checking a migration
-        /// consists of.
+        /// Print the body alone, with no header and no history — for diffing, or
+        /// for editing from a faithful copy.
         #[arg(long, conflicts_with = "json")]
         body: bool,
         /// Show the task as it stood before its most recent edit.
@@ -320,9 +302,8 @@ enum Command {
     /// refused before anything reaches the service.
     #[command(group(clap::ArgGroup::new("rank").required(true).args(["priority", "unassessed"])))]
     Add {
-        /// Optional only so that leaving it out can be answered in a sentence
-        /// rather than by clap — see `--subject` below. Refused, never
-        /// defaulted.
+        /// Optional only so that leaving it out is answered in a sentence rather
+        /// than by clap. Refused, never defaulted.
         subject: Option<String>,
         /// The body. `-` reads stdin, which is how a session writes a long one
         /// without fighting shell quoting.
@@ -334,9 +315,9 @@ enum Command {
         to: Option<To>,
         /// Why this is nobody's — **required by `--to nobody`, and only by it**.
         ///
-        /// ⚠ **Every filing to the pile in the corpus was later corrected**, so
-        /// it is argued for rather than typed. `--to me` is the default and
-        /// needs no argument; this is the one holder that does.
+        /// ⚠ **Filings to the pile were almost always corrected later**, so it is
+        /// argued for rather than typed. `--to me` is the default and needs no
+        /// argument; this is the one holder that does.
         #[arg(long, value_name = "WHY")]
         spare: Option<String>,
         /// How urgent: P0 to P4. Required, unless you say `--unassessed`.
@@ -364,14 +345,10 @@ enum Command {
 
         /// Task ids this one UNBLOCKS — the mirror of `--blocked-on`.
         ///
-        /// ⚠ **Exists because the check refused a filing for resembling the task
-        /// it unblocks.** `--blocked-on` exempts what a filing waits FOR; without
-        /// this there is no way to say what waits ON it, so the one edge that
-        /// proves two tasks are different and ordered is invisible in exactly
-        /// that direction.
-        ///
-        /// Recorded on the other task after this one is filed, so the edge
-        /// survives the command rather than living only in the filer's head.
+        /// ⚠ **The duplicate check does not compare a filing with the tasks it
+        /// names here or in `--blocked-on`**: a blocker resembles what it
+        /// unblocks, and the edge proves they are different. Recorded on the
+        /// other task once this one is filed.
         #[arg(long = "blocks")]
         blocks: Vec<u64>,
         /// The day it has to be done by: YYYY-MM-DD.
@@ -380,45 +357,36 @@ enum Command {
         /// A concept this tool does not have, kept only to say so.
         ///
         /// ⚠ **A task has had no repo since migration 0004** — the holder is the
-        /// whole of an assignment. Seven filings across the transcripts reached
-        /// for `--repo` or `--project` and got clap's `unexpected argument`,
-        /// which corrects nothing: the session leaves believing the field exists
-        /// and it typed it wrong. What a task touches belongs in the subject,
-        /// where every list shows it.
+        /// whole of an assignment. Accepted only to be refused by name: clap's
+        /// `unexpected argument` would leave a session believing it mistyped a
+        /// field that exists. What a task touches belongs in the subject.
         #[arg(long, hide = true)]
         repo: Option<String>,
-        /// The same, and it is the spelling five of those seven used.
+        /// The same.
         #[arg(long, hide = true)]
         project: Option<String>,
-        /// Where the subject is NOT given: it is the first positional
-        /// argument. Two sessions passed it here and were told `unexpected
-        /// argument`, which reads as a quoting mistake rather than as the wrong
-        /// shape.
+        /// Where the subject is NOT given: it is the first positional argument.
+        /// Accepted only to be refused by name — `unexpected argument` reads as
+        /// a quoting mistake.
         #[arg(long = "subject", hide = true)]
         subject_flag: Option<String>,
         /// File it even though something open or closed already says this.
         ///
-        /// ⚠ **Every arm refuses, so this is the only way past any of them.** An
+        /// ⚠ **For overruling a refusal you have just seen, and only then.** An
         /// open task with the same subject is caught by string equality; the
-        /// ones only a reader would spot are caught by a Haiku call, which costs
-        /// 8-25 seconds before the task is filed, and it reads the closed
-        /// titles as well — a match there is refused too, and sent to
-        /// `task reopen`. None of the three is a guess you cannot overrule —
-        /// that is what this is for, and the body you were filing is still in
-        /// the command you just ran, so overruling is one re-run.
-        ///
-        /// Also the flag for filing a batch, and for a machine with no `claude`
-        /// on its PATH — though that case needs no flag, since a check that
-        /// cannot run files the task and says so.
+        /// rest by a model reading the open and closed titles, which takes
+        /// seconds — a closed match is sent to `task reopen`. The body you were
+        /// filing is still in the command you just ran, so overruling is one
+        /// re-run. Passed without a recent refusal of the same subject, the
+        /// service refuses the filing. A check that cannot run files the task
+        /// and says so.
         #[arg(long)]
         no_duplicate_check: bool,
 
         /// Ask the check what it would say, and file NOTHING.
         ///
-        /// ⚠ **This exists so the gate can be measured against its own live
-        /// behaviour.** Otherwise the only way to learn what the check does is
-        /// to file something, which means putting probe rows into a shared
-        /// tracker where they are then matched against everybody's real work.
+        /// ⚠ **So the check can be tried without filing probe rows** into a
+        /// shared tracker, where they would be matched against real work.
         ///
         /// It runs BOTH halves, exactly as a filing does: the string-equality
         /// collision and the model's reading, against open and closed alike.
@@ -429,74 +397,53 @@ enum Command {
     Start { id: TaskRef },
     /// Mark a task finished.
     ///
-    /// `close` is the same command: sessions type it and get `unrecognized
-    /// subcommand`, which clap cannot even suggest a neighbour for.
+    /// `close` is the same command.
     #[command(alias = "close")]
     Done {
         id: TaskRef,
         /// Where it goes instead. Finishing a task makes the finisher its
-        /// holder, so that every later list says who did it; this is how to
-        /// close one and hand it on in the same breath.
+        /// holder, so every later list says who did it; this closes and hands
+        /// on in one command.
         #[arg(long)]
         to: Option<To>,
         /// What came of it, written above the body before it closes.
         ///
-        /// ⚠ **The moment this removes is the one where a task closes and
-        /// nobody writes why.** Five closes in the transcripts passed a note to
-        /// `done` and were refused — `--reason` twice, `--message`, `--note`,
-        /// `--body` — and the tool's answer was two commands. Sessions kept
-        /// reaching for one, which is the tool being wrong about its own shape
-        /// rather than sessions being careless.
-        ///
-        /// `-` reads stdin, like every other prose argument here.
+        /// ⚠ **So a task does not close without anybody writing why.** `--reason`
+        /// and `--message` are accepted too. `-` reads stdin.
         #[arg(long, aliases = ["reason", "message"])]
         note: Option<String>,
     },
     /// Close a task WITHOUT doing it: overtaken, obsolete, decided against.
     ///
-    /// The counterpart to `done`, and the reason both exist: a task that has
-    /// gone out of date has to be able to leave the list without anybody being
-    /// credited with having done it. If why it went matters, write it — `task
-    /// edit <id> --body -` — because that is prose and there is no field for it.
+    /// The counterpart to `done`: an obsolete task leaves the list without
+    /// anybody being credited with doing it. `--reason` says why.
     Drop {
         id: TaskRef,
         /// Why it is being dropped, written above the body before it closes.
         ///
-        /// ⚠ **A dropped task with no reason cannot be told from a decision.**
-        /// `drop` records a status and nothing else, so a dropped task says
-        /// nowhere that anybody rejected it — and a model asked will confidently
-        /// report a decision the row never makes. That is why a closed match
-        /// sends the filer to the TASK rather than to its status.
+        /// ⚠ **A dropped task with no reason cannot be told from a decision**: the
+        /// status says nothing about why, and a model asked will confidently
+        /// invent one. That is why a closed match sends the filer to the TASK.
         #[arg(long, aliases = ["note", "message"])]
         reason: Option<String>,
     },
     /// Put a closed or started task back to open.
     ///
-    /// `done` and `drop` close a task and `start` moves it along; without this
-    /// nothing comes back, so un-closing one means a hand-rolled PATCH — or
-    /// dropping and refiling it, which throws the history away.
-    ///
-    /// ⚠ **It leaves the holder alone**, which is the service's rule and not
-    /// this command's: whoever last had it is a better guess than nobody. So
-    /// reopening something you finished puts it back on your own plate rather
-    /// than in the pile — `task move <id> nobody` is how it goes back for
-    /// whoever picks it up.
+    /// ⚠ **It leaves the holder alone**: whoever last had it is a better guess
+    /// than nobody, so reopening something you finished puts it back on your
+    /// own plate. `task move <id> nobody` sends it to the pile.
     Reopen { id: TaskRef },
     /// Hand a task over: `me` (this conversation), `pippijn`, `nobody`, or a
     /// session — **by name or by id**, whichever you have.
     ///
-    /// A name works because every list prints one; accepting only ids would make
-    /// this tool's own output invalid input to it. A name that matches nothing,
-    /// or matches two conversations, is refused rather than guessed — names are
-    /// reused, and the service's own answer to an id it does not know is a 500
-    /// reading `moving a task`, which says nothing about what was wrong.
+    /// A name works because every list prints one. A name that matches nothing,
+    /// or matches two conversations, is refused rather than guessed — names
+    /// are reused.
     ///
     /// ⚠ **Handing work to a quiet conversation is queueing, not stranding.** A
-    /// session never ends — it goes offline and comes back — so there is no such
-    /// thing as giving a task to one that has "gone", and its open list is the
-    /// work waiting for it rather than work it is doing. Pick the holder by
-    /// whose subject it is; whether anybody is at that keyboard now is not a
-    /// property of the task and does not belong in the decision.
+    /// session never ends — it goes offline and comes back — and its open list
+    /// is the work waiting for it. Pick the holder by whose subject it is, not
+    /// by who is at a keyboard now.
     ///
     /// `nobody` is for work that genuinely suits whichever conversation is
     /// around next. It is not the safe default for "I am not sure they are
@@ -515,10 +462,8 @@ enum Command {
     /// notification — nothing is delivered to the session and no conversation
     /// addresses another.
     ///
-    /// ⚠ **Because the thing that already knows is a channel that cannot
-    /// reach.** The digest marks a waiting task and drops the mark the moment
-    /// the blocker closes, but a digest renders when the session takes a turn,
-    /// and a blocked session is not taking turns.
+    /// The digest drops the `⛔` when the blocker closes, but only renders when
+    /// the session takes a turn, and a blocked session is not taking turns.
     ///
     /// It ends when EVERY named task is closed. Exit `0` means they were done;
     /// anything else means carry on at your peril, and the reason is on stderr —
@@ -535,22 +480,19 @@ enum Command {
         /// How long to wait before giving up: `4h`, `90m`, `2h30m`. A bare
         /// number is minutes.
         ///
-        /// ⚠ **There is a bound and it cannot be removed**, because a wait that
-        /// can hang for ever is one nobody ever finds out about. Giving up is
-        /// not failure: it wakes the session, says what is still open, and the
-        /// session can start another wait.
+        /// ⚠ **There is a bound and it cannot be removed**: a wait that can hang
+        /// for ever is one nobody finds out about. Giving up wakes the session,
+        /// says what is still open, and it can wait again.
         #[arg(long = "for", default_value = "24h")]
         period: String,
     },
     /// Change a task's words.
     ///
-    /// `update` is the same command, and so is `rank`: both are what sessions
-    /// reach for when they mean this one.
+    /// `update` and `rank` are the same command.
     #[command(long_about = edit_about(), aliases = ["update", "rank"])]
     Edit {
         id: TaskRef,
-        /// `--title` is accepted for the same reason the aliases above are: it
-        /// is what a session reached for, and there is one subject either way.
+        /// The one-line subject. `--title` is accepted too.
         #[arg(long, alias = "title")]
         subject: Option<String>,
         /// `-` reads stdin. REPLACES the whole body — `--prepend` is how to
@@ -561,10 +503,8 @@ enum Command {
         ///
         ///     task edit 42 --prepend "DONE in a2c3ab6 — deployed and verified."
         ///
-        /// ⚠ **This is almost always the one you want**, and not only because
-        /// it is safe: a body grows in the order things happened, so what is
-        /// still true sinks to the bottom. Lead with where it stands and let
-        /// the history sit under it.
+        /// ⚠ **This is almost always the one you want**: lead with where it stands
+        /// and let the history sit under it.
         #[arg(long)]
         prepend: Option<String>,
         /// Put text BELOW the body, keeping every word of it. `-` reads stdin.
@@ -584,16 +524,14 @@ enum Command {
         /// one.
         ///
         /// That write is refused by default, because it is far more often a
-        /// mistake than an edit — a session takes `detailed` from `--json` for
-        /// the prose and writes `True` over the lot. Emptying a body on purpose
-        /// is what this flag is for.
+        /// mistake than an edit — `detailed` from `--json` taken for the prose
+        /// and written over the lot.
         #[arg(long = "replace-body")]
         replace_body: bool,
         /// Rank it: P0 to P4, listed under `task --help`.
         ///
-        /// There is no way to UNRANK from here, deliberately: absence means
-        /// "leave it alone" for every other field on this command, and a task
-        /// ranked wrongly is corrected by ranking it again.
+        /// There is no way to UNRANK: a task ranked wrongly is corrected by
+        /// ranking it again.
         #[arg(long)]
         priority: Option<Priority>,
         /// What this task waits for. Repeat for several; the whole set is
@@ -609,10 +547,9 @@ enum Command {
         unblock: bool,
         /// The day it has to be done by: YYYY-MM-DD.
         ///
-        /// A deadline does NOT reorder anything — the list is still ordered by
-        /// priority. It is evidence for a rank, not a substitute for one. What
-        /// it does refuse is a date earlier than something this task is blocked
-        /// on, which cannot be met whatever anybody decides.
+        /// A deadline is evidence for a rank, not a substitute for one — until
+        /// the last week, when the task sorts and shows as `P0!`. A date earlier
+        /// than an open blocker's is refused: it cannot be met.
         #[arg(long, conflicts_with = "no_due")]
         due: Option<NaiveDate>,
         /// Take the deadline off.
@@ -623,10 +560,9 @@ enum Command {
     Digest,
     /// Who holds what: each session that has, Pippijn, and the pile — open/total.
     Sessions {
-        /// Every conversation there has ever been, including those that have
-        /// never been given anything — which is most of them, since a row is
-        /// created by a session's first prompt. This is where a brand-new
-        /// conversation's id can be found to hand it work.
+        /// Every conversation there has ever been, including the many never
+        /// given anything — where a brand-new conversation's id can be found to
+        /// hand it work.
         #[arg(long)]
         all: bool,
     },
@@ -640,9 +576,8 @@ enum Command {
     },
     /// How long the commands themselves have been taking, from real use.
     ///
-    /// ⚠ **Every row here is a command somebody actually ran.** Nothing polls
-    /// and nothing is sampled on a timer, so a quiet day reads as quiet rather
-    /// than as a tool nobody waits for.
+    /// ⚠ **Every row here is a command somebody actually ran**; nothing polls,
+    /// so a quiet day reads as quiet.
     Timings {
         /// How far back to look.
         #[arg(long, default_value_t = 7)]
@@ -677,10 +612,9 @@ fn token() -> Option<String> {
 
 /// Which conversation this is, when it was not passed on the command line.
 ///
-/// `$CLAUDE_CODE_SESSION_ID` is set in every shell Claude Code runs, which is
-/// why there is nothing to configure: a session cannot forget to say who it is,
-/// and — more to the point — cannot mistype *another* conversation's id into its
-/// own history. `$TASKS_SESSION` still wins, for a script standing in for one.
+/// `$CLAUDE_CODE_SESSION_ID` is set in every shell Claude Code runs, so a
+/// session cannot forget to say who it is or mistype another conversation's
+/// id. `$TASKS_SESSION` wins, for a script standing in for one.
 fn session_id() -> Option<String> {
     ["TASKS_SESSION", "CLAUDE_CODE_SESSION_ID"]
         .into_iter()
@@ -694,10 +628,8 @@ fn session_id() -> Option<String> {
 
 /// What Claude Code is calling this conversation, right now.
 ///
-/// ⚠ **This is why a session no longer has to name itself.** The name is on
-/// this disk already, written into the transcript, so asking a conversation to
-/// type `task rename` was asking it to do a computer's job. See
-/// [`tasks::agent_name`] for the shapes.
+/// Read from the transcript, so a session need not run `task rename`. See
+/// [`tasks::agent_name`].
 ///
 /// Silent on every failure — no `HOME`, no transcript, a changed format: the
 /// service keeps whatever name it had.
@@ -766,11 +698,8 @@ impl Client {
                 // IS the message there, so nothing is being defaulted away.
                 Err(_) => body,
             };
-            // ⚠ **A 4xx is the service DECIDING; a 5xx is it falling over.**
-            // Both used to reach `clocked` as one word. `unlicensed()` — the
-            // guard that refuses `--no-duplicate-check` from a session nothing
-            // has refused — answers 400 with no work done, and counting that as
-            // breakage is what made the failure rate unreadable.
+            // ⚠ **A 4xx is the service DECIDING; a 5xx is it falling over**, and
+            // the timings count them apart — see `commands::Ended`.
             if status.is_client_error() {
                 return Err(commands::declined(format!("{status}: {said}")));
             }
@@ -806,11 +735,8 @@ impl Client {
     /// The rule and the reason are [`holder::resolve`]'s; this fetches the list
     /// it needs and renders its refusals.
     ///
-    /// ⚠ **It refuses rather than falling through to "probably an id".** The
-    /// write itself would not land — a foreign key stands behind
-    /// `assignee_session` — but it fails as a 500 whose whole message is
-    /// `moving a task`, which sends the reader to look at the service. Refusing
-    /// here answers the actual question, with the names to hand.
+    /// ⚠ **It refuses rather than falling through to "probably an id"**, with the
+    /// known names to hand.
     async fn resolve(&self, to: To) -> Result<To> {
         let To::Session(typed) = &to else {
             return Ok(to);
@@ -824,8 +750,8 @@ impl Client {
                 .unwrap_or(json!([])),
         );
         if !known.iter().any(|(id, name)| matches(id, name, typed)) {
-            // Every row there is — 717 against 14 when that was split — asked
-            // for only when the cheap list did not answer.
+            // Every session there is — far longer — only when the short list
+            // did not answer.
             known = known_sessions(
                 &self
                     .send(self.request(reqwest::Method::GET, "/api/sessions"))
@@ -856,9 +782,8 @@ impl Client {
 
     /// Drop the prompt hook's copy, so the next prompt shows what just changed.
     ///
-    /// Silent on every failure, including no `HOME`: this runs after a write
-    /// that has already succeeded, and the cost of missing it is that one
-    /// prompt is up to a minute behind.
+    /// Silent on every failure, including no `HOME`: the write has succeeded,
+    /// and missing this only leaves one prompt briefly behind.
     fn forget_cached_digest(&self) {
         let (Some(session), Ok(home)) = (&self.session, std::env::var("HOME")) else {
             return;
@@ -868,21 +793,17 @@ impl Client {
 
     /// Refuse before the round trip when this CLI holds half a credential.
     ///
-    /// ⚠ Only that one shape. A token with nobody behind it is a guaranteed 401
-    /// from any deployment, and the message would be about the service rather
-    /// than about this machine. Holding **neither** is left to the service,
-    /// which is the only thing that knows whether it is guarded — an unguarded
-    /// dev server answers everybody as the owner.
+    /// ⚠ Only that one shape: a token with nobody behind it is a guaranteed 401,
+    /// and the service's message would not be about this machine. Holding
+    /// **neither** is left to the service, which alone knows whether it is
+    /// guarded.
     ///
-    /// ⚠ **Called from the request path, never from `main`.** This says what a
-    /// REQUEST would get back, so it has no business ending a command that never
-    /// makes one: a removed flag name is refused by the field that removed it,
-    /// and needs nobody's identity to say so.
+    /// ⚠ **Called from the request path, never from `main`**, so a command that
+    /// makes no request — a refused flag name — needs no identity.
     ///
-    /// ⚠ **A test that supplies `--session` to get past this tests nothing.**
-    /// That is how the guard stayed invisible — green by hand, where the session
-    /// variable is set, and red under a scheduler where it is not. The tests
-    /// clear both variables instead.
+    /// ⚠ **A test that supplies `--session` to get past this tests nothing**:
+    /// it passes by hand, where the variable is set, and fails under a
+    /// scheduler. The tests clear both variables instead.
     fn identified(&self) -> Result<()> {
         if self.token.is_some() && self.session.is_none() {
             bail!(
@@ -925,11 +846,8 @@ impl Client {
 
 /// Who a task is being handed to.
 ///
-/// Parsed once, at the argument boundary, rather than matched as a string where
-/// it is used: clap rejects nothing here — anything that is not one of the three
-/// words is a session id — but having the type means the destinations are
-/// enumerated in one place and `assignee` cannot be handed a fourth spelling of
-/// "nobody" that nothing recognises.
+/// Parsed once, at the argument boundary: anything that is not one of the
+/// words is a session, and the destinations are enumerated in one place.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum To {
     /// Back in the pile, for whoever picks it up.
@@ -1040,17 +958,11 @@ const READING: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// Every open task, as the id and title a duplicate would be spotted by.
 ///
-/// ⚠ **Every open task, not this session's.** The duplicate that matters is the
-/// one another conversation filed — it is the only kind nobody can see — so this
-/// deliberately asks the widest question the list supports, and is the one place
-/// in this CLI that does. `--all`'s reasoning in `selection.rs` is about what
-/// costs a prompt its bytes; this costs one command's stderr.
+/// ⚠ **Every open task, not this session's**: the duplicate that matters is the
+/// one another conversation filed, which nobody else can see.
 ///
-/// ⚠ **Read before the POST, not after.** It used to run afterwards and filter
-/// the new id back out of its own answer. Reading it first is what lets
-/// [`duplicates::same_subject`] refuse a collision while there is still nothing
-/// to undo; the slow half is unaffected, because it runs against this same list
-/// once the filing has landed.
+/// ⚠ **Read before the POST**, so both halves of the check refuse while there
+/// is still nothing to undo.
 async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
     let query = list_query(true, false, false, false, false, None, None)?;
     let req = client
@@ -1068,9 +980,8 @@ async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
 
 /// Every closed task worth reading, as the block that gets cached.
 ///
-/// ⚠ **Failure here must not cost the filing.** Losing the closed corpus falls
-/// back to checking the open list, which is the whole of what this did before,
-/// so the error is swallowed and the list comes back empty.
+/// ⚠ **Failure here must not cost the filing**: the check falls back to the
+/// open list, so the error is swallowed and the list comes back empty.
 ///
 /// ⚠ **Filtered on the way out, and the count is reported** — see
 /// [`duplicates::worth_reading`]. A corpus that silently shrinks reads as
@@ -1114,10 +1025,8 @@ async fn settled_now(client: &Client) -> (Vec<duplicates::Settled>, usize) {
     (kept, skipped)
 }
 
-/// Whether anything open already says what is about to be filed.
-///
-/// `corpus` is read before the filing and so cannot contain it, which is what
-/// lets this refuse: there is nothing to undo yet.
+/// What a model names, open or closed, as already saying what is about to be
+/// filed.
 async fn already_filed(
     client: &Client,
     corpus: &[(u64, String)],
@@ -1128,10 +1037,9 @@ async fn already_filed(
         return Ok(Vec::new());
     }
     let asked = duplicates::prompt(subject, corpus, !settled.is_empty());
-    // The closed list is deliberately NOT counted here: `input_chars` is what
-    // this filing put in front of the model, and the cached prefix is the same
-    // bytes for every filing. Adding it would make every row in `check_run`
-    // jump by 25k on the day this shipped and look like a regression.
+    // The closed list is deliberately NOT counted: `input_chars` is what this
+    // filing put in front of the model, and the cached prefix is the same bytes
+    // for every filing.
     let input_chars = asked.chars().count().min(u32::MAX as usize) as u32;
     let prefix = (!settled.is_empty()).then(|| duplicates::settled_block(settled));
     let (said, elapsed_ms) = ask_with(&asked, prefix.as_deref(), PATIENCE).await;
@@ -1167,9 +1075,8 @@ async fn already_filed(
         },
     )
     .await;
-    // The failure is still the caller's to print: it is the line that says a
-    // filing went unchecked, and a row in a table nobody is reading tonight does
-    // not tell the session in front of it.
+    // The failure is still the caller's to print: it says a filing went
+    // unchecked, which a table row does not tell the session in front of it.
     said?;
     Ok(found)
 }
@@ -1187,21 +1094,17 @@ async fn recorded(client: &Client, run: checks::Run) {
 
 /// Whether this process ever waited for a model.
 ///
-/// ⚠ **The one variable that explains the `edit` distribution.** Set here rather
-/// than at either check's call site because this is the function that WAITS —
-/// both checks funnel through it, and a timeout counts: a run that waited 90
-/// seconds and got nothing belongs in the slow population, not the fast one.
-/// A process runs one command, so a flag is the whole of the state needed.
+/// ⚠ **Set where the waiting happens**, which both checks funnel through, so a
+/// timeout counts: a run that waited and got nothing belongs in the slow
+/// population. A process runs one command, so a flag is all the state needed.
 static WAITED_FOR_A_MODEL: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 /// Put the question to a one-shot session and leave nothing behind.
 ///
-/// ⚠ **Every call is a conversation, and a conversation is a file that outlives
-/// it.** A `claude -p` call files a transcript like any other session, and left
-/// alone they accumulate without bound. So the id is named here rather than left
-/// to the CLI, and the file goes the moment the answer is in hand — including on
-/// the failing paths, which leave exactly the same file as the working one.
+/// ⚠ **Every call is a conversation, and leaves a transcript.** Left alone they
+/// accumulate without bound, so the id is named here and the file goes the
+/// moment the answer is in hand — on the failing paths too.
 ///
 /// ⚠ **`prefix` is where a cached prefix goes, and it must not vary per call** —
 /// see [`duplicates::settled_block`].
@@ -1329,18 +1232,13 @@ fn body(arg: &str) -> Result<String> {
 /// different systems.
 ///
 /// ⚠ **One deliberate difference: a pile row says who filed it.** The digest
-/// stays silent there and must — every session pays for it on every turn. A list
-/// is fetched when somebody has just asked what to pick up, which is the moment
-/// the answer is worth its bytes.
+/// must not — every session pays for it every turn — but a list is fetched by
+/// somebody asking what to pick up.
 fn line(task: &Task) -> String {
     let marker = task.status.marker();
-    // Before the subject rather than after it: a column of ranks is scannable
-    // down the left edge, and the list is already sorted so they arrive in
-    // order. Two spaces where there is no rank, so nothing shifts sideways
-    // between a ranked line and an unranked one.
-    // A near deadline raises the rank; `!` marks a level nobody chose, so the
-    // order never reads as random. `Task::urgency` is the rule and the SQL sorts
-    // by it — this only prints whichever value came back.
+    // Before the subject, so ranks scan down the left edge, padded so nothing
+    // shifts between ranked and unranked lines. `!` marks a rank a deadline
+    // raised, so the order never reads as random.
     let rank = match task.escalated_to {
         Some(raised) => format!("{}!", raised.as_str()),
         None => task
@@ -1360,25 +1258,18 @@ fn line(task: &Task) -> String {
         let ids: Vec<String> = task.blocked_on.iter().map(|v| format!("#{v}")).collect();
         out.push_str(&format!("  ⛔{}", ids.join(",")));
     }
-    // ⚠ **On `line()` rather than beside the body, because THAT is what
-    // survives.** This is the first line `task show` prints, so a reader that
-    // pipes to `head` still gets the count no matter where it cuts — a note
-    // printed above the body would be the first thing a small enough `head`
-    // removed. It costs `task list` about ten characters a row, and buys the
-    // same number in both places, which is the trade `[sprawl]` below makes.
+    // ⚠ **On the first line `task show` prints**, so a reader piping to `head`
+    // gets the count wherever it cuts.
     match task.body_lines {
         0 => {}
         1 => out.push_str("  [1 line]"),
         n => out.push_str(&format!("  [{n} lines]")),
     }
-    // The same marker the digest carries, from the same field, so a session
-    // that sees `[sprawl 18.2K]` in its prompt and then runs `task list` is not
-    // shown two different accounts of the same body.
+    // The digest's marker, from the same field, so the two agree.
     if let Some(chars) = task.sprawl_chars {
         out.push_str(&format!("  [sprawl {}]", tasks::digest::thousands(chars)));
     }
-    // `label()` is the one spelling of name-else-id, and it is why this no
-    // longer prints a blank for a holder whose name is present but empty.
+    // `label()` is the one spelling of name-else-id.
     if task.assignee.kind != AssigneeKind::Nobody {
         out.push_str(&format!("  ({})", task.assignee.label()));
     } else if let Some(from) = &task.filed_by {
@@ -1390,9 +1281,8 @@ fn line(task: &Task) -> String {
 /// Print a service answer: verbatim when `--json` was asked for, otherwise
 /// however the caller draws it.
 ///
-/// One helper rather than a check at each call site, so a command cannot be
-/// added that quietly ignores the flag — which would be worse than not having
-/// it, because a script would parse the human format believing it was JSON.
+/// One helper, so no command can quietly ignore the flag and hand a script the
+/// human format as JSON.
 fn emit(json: bool, value: &Value, human: impl FnOnce()) {
     if json {
         // `to_string_pretty` on an already-parsed Value cannot fail; the compact
@@ -1409,10 +1299,8 @@ fn emit(json: bool, value: &Value, human: impl FnOnce()) {
 impl Command {
     /// The name this command is recorded and grouped under.
     ///
-    /// ⚠ **Exhaustive on purpose — no `_ =>` arm.** `verb` is the trend key, so
-    /// a subcommand falling through to a catch-all would quietly merge two
-    /// commands' histories. Adding one without naming it here is a compile
-    /// error, which is the only reliable way this stays level with the CLI.
+    /// ⚠ **Exhaustive on purpose — no `_ =>` arm.** `verb` is the trend key, and
+    /// a catch-all would merge two commands' histories.
     fn verb(&self) -> &'static str {
         match self {
             Command::List { .. } => "list",
@@ -1457,11 +1345,8 @@ async fn clocked(
         verb: verb.to_string(),
         elapsed_ms: started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32,
         outcome,
-        // ⚠ **Always `Some`, never left absent.** This client knows the answer
-        // for every command it runs; `None` on the wire means an OLDER client
-        // that could not say, and the tally counts those apart rather than
-        // guessing. Sending nothing here would make this build indistinguishable
-        // from that one.
+        // ⚠ **Always `Some`**: `None` on the wire means an older client that
+        // could not say.
         waited_for_a_model: Some(WAITED_FOR_A_MODEL.load(std::sync::atomic::Ordering::Relaxed)),
     };
     let req = client
@@ -1483,9 +1368,8 @@ async fn clocked(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // ⚠ First statement in the process, deliberately: what a session waits for
-    // includes argument parsing and building the client, and a clock started
-    // after those reports a command faster than anybody has ever run it.
+    // ⚠ First statement in the process: what a session waits for includes
+    // argument parsing and building the client.
     let started = std::time::Instant::now();
     let cli = Cli::parse();
     let session = cli.session.clone().or_else(session_id);
@@ -1507,11 +1391,8 @@ async fn main() -> Result<()> {
     let verb = cli.command.verb();
     let done = run(cli, &client).await;
     clocked(&client, verb, started, commands::ended(&done)).await;
-    // ⚠ **Printed here rather than returned, because anyhow's own rendering is
-    // what buried the reason.** Returning the error prints the whole chain, and
-    // on a refusal the chain is a blank line, `Caused by:` and the classifier's
-    // marker — exactly the three lines a session keeps when it pipes this to
-    // `tail -3`. `commands::said` decides which endings deserve a chain.
+    // ⚠ **Printed here rather than returned**: returning prints anyhow's whole
+    // chain. `commands::said` decides which endings deserve one.
     if let Err(why) = &done {
         eprintln!("{}", commands::said(why));
         std::process::exit(1);
@@ -1531,12 +1412,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             done,
             to,
         } => {
-            // Resolved before the query is built: `--to` takes the name a person
-            // types, and only the service knows whether that name is a person, a
-            // session or the pile.
             // ⚠ Resolved through the SAME path `move` uses, so `--to hardware`
-            // and `move <id> hardware` cannot disagree about who that is. Only
-            // the service can tell a session name from a session id.
+            // and `move <id> hardware` cannot disagree about who that is.
             let holder = match to {
                 Some(to) => Some(client.resolve(to).await?),
                 None => None,
@@ -1565,17 +1442,14 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 .request(reqwest::Method::GET, "/api/tasks")
                 .query(&query);
             let tasks = client.send(req).await?.unwrap_or(json!([]));
-            // ⚠ **Decoded here rather than inside the closure**, which cannot
-            // use `?`: a list this CLI could not read is an error and says so,
-            // where the `Value` it used to draw from had a default for every
-            // field and would have printed a plausible wrong row instead.
+            // ⚠ **Decoded here, outside the closure, so it can use `?`**: a list
+            // this CLI cannot read is an error, not a plausible wrong row.
             let shown: Vec<Task> = serde_json::from_value(tasks.clone())
                 .context("the service answered with a list this CLI could not read")?;
             emit(cli.json, &tasks, || {
                 if shown.is_empty() {
-                    // Which question came back empty, because the three read
-                    // very differently: an empty pile is the fleet keeping up,
-                    // and an empty plate is this session having nothing to do.
+                    // Which question came back empty: an empty pile and an empty
+                    // plate mean different things.
                     println!(
                         "{}",
                         if pile {
@@ -1606,9 +1480,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 return Ok(());
             }
             emit(cli.json, &was, || {
-                // The header says WHEN this stopped being the task, not when it
-                // was written: a previous version's only useful timestamp is the
-                // edit that displaced it, which is what `task undo` reverses.
+                // The header says when this stopped being the task — the edit
+                // `task undo` reverses.
                 println!(
                     "#{} as it stood until {} ({})",
                     id.id(),
@@ -1637,9 +1510,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     bail!(tasks::tasks::undo::refusal(&was, id.id()));
                 }
             }
-            // `replace_body` because putting a body back is an informed
-            // replacement, and the guard on collapsing bodies would otherwise
-            // refuse the undo of an edit that had made one longer.
+            // `replace_body`: see `Change::replace_body`.
             patch(
                 &client,
                 cli.json,
@@ -1675,11 +1546,9 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 if !body.is_empty() {
                     println!("\n{body}");
                 }
-                // ⚠ **Between the body and the history, because it is about
-                // the body and it is not something that happened.** Printed on
-                // every `task show` until an edit makes the body smaller, which
-                // is the point: the shape this replaced was said once, to
-                // whoever ran an unrelated edit, and then was gone.
+                // ⚠ **Between the body and the history**: it is about the body,
+                // not something that happened. Printed on every `task show`
+                // until an edit makes the body smaller.
                 if let Some(said) = task["sprawl_said"].as_str().map(str::trim)
                     && !said.is_empty()
                 {
@@ -1755,15 +1624,10 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     ));
                 }
             };
-            // ⚠ **Before `writing()` and before the duplicate check**, which is
-            // the whole reason this is repeated here at all: the check spends a
-            // model call of several seconds, and the service would refuse the
-            // filing afterwards anyway. The service still owns the rule — see
-            // `repo::spare_note`, which refuses both directions — so this is a
-            // faster no, never the only one.
-            // ⚠ **Blank-trimmed to match the service.** `--spare ""` is
-            // `is_some()` here and is trimmed away by `spare_note` there, so
-            // testing presence alone made the two disagree about one input.
+            // ⚠ **Before the duplicate check**, which would spend a model call
+            // on a filing the service then refuses. The service owns the rule
+            // (`repo::spare_note`); this is a faster no. Blank-trimmed as the
+            // service trims, or the two would disagree about `--spare ""`.
             let reason = spare
                 .as_deref()
                 .map(str::trim)
@@ -1773,17 +1637,12 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 refused => return Err(commands::declined(refused.said_to_cli())),
             }
             client.writing()?;
-            // The list comes first, and two separate questions are asked of it:
-            // whether something open carries this exact subject, and whether a
-            // model sees the same problem in different words. Both are answered
-            // before the POST and both refuse.
+            // Two questions, both answered before the POST and both refusing:
+            // does something open carry this exact subject, and does a model
+            // see the same problem in different words. `--check-only` runs both
+            // and stops before anything is sent.
             //
             // ⚠ **A list that could not be read costs a note, never a filing.**
-            // Moving this ahead of the POST would otherwise have turned every
-            // transport failure into a refused filing.
-            // ⚠ Before anything is built or sent. `--check-only` must reach the
-            // same two checks a filing does and then stop, so it cannot be a
-            // branch further down where half the filing has already happened.
             let corpus = match no_duplicate_check {
                 true => Vec::new(),
                 false => open_now(&client).await.unwrap_or_else(|why| {
@@ -1794,22 +1653,16 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             if let Some(already) = duplicates::same_subject(&subject, &corpus) {
                 return Err(commands::declined(duplicates::collision(already)));
             }
-            // ⚠ **The model runs BEFORE the POST, because a refusal that comes
-            // after is not a refusal.** The filing pays that latency up front,
-            // which is the price of refusing by default rather than advising.
+            // ⚠ **The model runs BEFORE the POST**: a refusal after the fact is
+            // not one. A check that could not run files the task (see
+            // `duplicates`).
             //
-            // ⚠ **A check that could not run files the task.** Only a model that
-            // actually named something refuses. A missing `claude`, a timeout or
-            // an unreadable answer must never cost a filing — a session that
-            // cannot write things down is worse than any duplicate.
-            // ⚠ **After the collision check, never before it.** That one is
-            // string equality over every open title and must stay that way;
-            // this narrows only what the model is asked to judge.
+            // ⚠ **Narrowed after the collision check, never before**: string
+            // equality runs over every open title; this narrows only what the
+            // model judges.
             let candidates = duplicates::edged(&corpus, &blocked_on, &blocks);
-            // ⚠ **The closed list is read for its own sake and never narrowed by
-            // `--blocked-on`.** That exemption exists because a filing may
-            // declare it waits for an OPEN task; nothing can wait for a task
-            // that is over, so there is no edge here to honour.
+            // The closed list is never narrowed by the edges: nothing can wait
+            // for a task that is over.
             let (settled, unread) = match no_duplicate_check {
                 true => (Vec::new(), 0),
                 false => settled_now(&client).await,
@@ -1823,11 +1676,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                         // folding into work still going beats reopening work
                         // that stopped, and the closed one is still reachable.
                         //
-                        // ⚠ **`declined`, never `bail!`.** This is the arm that
-                        // refuses most often, and a plain error puts it in the
-                        // FAILED column of the very measurement the
-                        // `Refused` split exists to make readable — and denies
-                        // it the one-line printing in `commands::said`.
+                        // ⚠ **`declined`, never `bail!`**, or the commonest
+                        // refusal counts as a failure and prints its chain.
                         let said = match open.is_empty() {
                             false => duplicates::refusal(&open),
                             true => duplicates::reopen_instead(&over, settled.len(), unread),
@@ -1838,14 +1688,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     Err(why) => eprintln!("(duplicate check did not run: {why:#})"),
                 }
             }
-            // ⚠ **After both checks and before the POST**, which is the only
-            // place this can be and still describe what a filing would meet.
-            //
-            // ⚠ **Reached only when nothing was named.** All three arms refuse
-            // now — collision, open, closed — and each returns above carrying
-            // its own text, so a match reaches the caller as the refusal
-            // itself, on the exit code a real filing would have got. What is
-            // left to say here is that there was not one.
+            // Reached only when nothing was named: every match has already
+            // returned as its refusal, on the exit code a real filing gets.
             if check_only {
                 println!("NONE — nothing open or closed was named");
                 return Ok(());
@@ -1853,16 +1697,12 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             let mut payload = json!({
                 "subject": subject,
                 "body": raw.as_deref().map(body).transpose()?.unwrap_or_default(),
-                // ⚠ **Said plainly, not inferred from the flag's absence.** The
-                // service refuses a filing that skipped the check without having
-                // been refused, and it must be able to tell "skipped" from "an
-                // older client that never mentioned it".
+                // ⚠ **Said plainly**: the service must tell "skipped" from an
+                // older client that never mentioned it.
                 "checked": !no_duplicate_check,
             });
-            // Always present, and null when unassessed: the service refuses a
-            // filing that never mentions it, so there is no "leave it out" arm
-            // here to fall down. clap's group guarantees exactly one of the two
-            // arrived, which is why `unassessed` needs no test of its own.
+            // Always present, null when unassessed: the service refuses a
+            // filing that omits it. clap's group guarantees one of the two.
             payload["priority"] = match priority {
                 Some(priority) => json!(priority.as_str()),
                 None => Value::Null,
@@ -1889,10 +1729,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             let shown: Task = serde_json::from_value(task.clone())
                 .context("the service answered with a task this CLI could not read")?;
             emit(cli.json, &task, || println!("{}", line(&shown)));
-            // ⚠ **After the POST, because the edge needs this task's id**, which
-            // does not exist until the service answers. Recorded on the OTHER
-            // task — `blocked_on` belongs to the thing that waits — so the two
-            // ends agree without this filing having to carry a field for it.
+            // ⚠ **After the POST, because the edge needs this task's id.** Recorded
+            // on the OTHER task: `blocked_on` belongs to the thing that waits.
             if let Some(filed) = task["id"].as_u64() {
                 for blocked in &blocks {
                     if let Err(why) = unblocking(&client, *blocked, filed).await {
@@ -1902,20 +1740,14 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     }
                 }
             }
-            // After the filing and never before it. The task is on the list by
-            // the time a model is asked anything, so a check that hangs, fails
-            // or is not installed costs a note and never a filing.
         }
 
         Command::Start { id } => {
             patch(&client, cli.json, id, json!({ "status": "doing" })).await?;
         }
         Command::Done { id, to, note } => {
-            // ⚠ **The note lands BEFORE the close, and that order is the point.**
-            // Closing first would leave a window where the task is finished and
-            // says nothing about why — which is the state this flag exists to
-            // stop, and exactly what two separate commands produce when the
-            // second is forgotten.
+            // ⚠ **The note lands BEFORE the close**, so a task is never finished
+            // and silent about why.
             written(&client, &id, note.as_deref()).await?;
             let mut change = json!({ "status": "done" });
             if let Some(to) = to {
@@ -1949,10 +1781,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 .to_std()
                 .context("a wait cannot be negative")?;
             let asked: Vec<u64> = ids.iter().map(TaskRef::id).collect();
-            // A task that does not exist is a refusal on the FIRST pass, not a
-            // day of polling that gives up saying it is still open — which is
-            // true of nothing and reads as somebody being slow. That falls out
-            // of `statuses` erroring rather than needing a check of its own.
+            // A task that does not exist is refused on the FIRST pass, because
+            // `statuses` errors, rather than polled for a day.
             let started = std::time::Instant::now();
             let verdict = loop {
                 let verdict = wait::verdict(&statuses(&client, &ids).await?);
@@ -1963,8 +1793,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 if waited >= bound {
                     break verdict;
                 }
-                // Never sleep past the bound: a wait told to give up after 90
-                // seconds must not spend half a minute more asleep first.
+                // Never sleep past the bound.
                 tokio::time::sleep(wait::interval(waited).min(bound - waited)).await;
             };
             let said = wait::said(&verdict, &asked);
@@ -2035,9 +1864,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 bail!("nothing to change: pass --subject or --body");
             }
             let updated = patch(&client, cli.json, id, change).await?;
-            // After the write and never before it, like the duplicate check
-            // after a filing: this is advice about prose, and a check that
-            // hangs, fails or is not installed must cost a note at most.
+            // After the write: this is advice about prose, never a refusal.
             if !no_density_check && !cli.json {
                 accreting(&client, id, &updated).await;
             }
@@ -2148,25 +1975,17 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             });
         }
         Command::Sessions { all } => {
-            // Two questions, two routes. `/api/holders` is who is carrying what
-            // and leaves out the conversations that have never carried
-            // anything; `/api/sessions` is every row there is, which is every
-            // conversation that has ever run — 717 against 14 when this was
-            // split. The second answers "what is this new session's id", and
-            // nothing else, which is why it is asked for rather than given.
+            // Two questions, two routes: `/api/holders` is who is carrying what;
+            // `/api/sessions` is every conversation that ever ran, asked for
+            // only to find a new session's id.
             let path = if all { "/api/sessions" } else { "/api/holders" };
             let req = client.request(reqwest::Method::GET, path);
             let rows = client.send(req).await?.unwrap_or(json!([]));
             emit(cli.json, &rows, || {
                 for holder in rows.as_array().cloned().unwrap_or_default() {
-                    // `open/total`, not `open`: a bare zero reads as an idle
-                    // session where the pair reads as one that cleared its plate.
-                    // The id stays in the line because it is the handle for
-                    // `task move`, even though the name is what is read.
-                    //
-                    // A session row has no history to report, so `--all` prints
-                    // the open count alone rather than a pair claiming it never
-                    // finished anything.
+                    // `open/total`, not `open`: see `sessions::Holder`. The id
+                    // stays because it is the handle for `task move`. `--all`
+                    // rows carry no total, so they print the open count alone.
                     let plate = match holder["total"].as_i64() {
                         Some(total) => format!(
                             "{:>3}/{:<4} open",
@@ -2187,12 +2006,9 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
         Command::Rename { name } => {
             client.writing()?;
             let session = client.session.clone().expect("writing() checked it");
-            // ⚠ Refused rather than accepted-and-reverted. Every request this
-            // CLI makes carries the name Claude Code is using, and the service
-            // takes the newer one — so a rename to something else would print
-            // its success line and be gone by the next command. That is the
-            // exact shape this repository has now fixed three times, and the
-            // remedy is to say where the lever actually is.
+            // ⚠ Refused rather than accepted-and-reverted: every request carries
+            // the name Claude Code uses, so a different rename would be undone
+            // by the next command. Say where the lever is.
             if let Some(called) = &client.called
                 && called != &name
             {
@@ -2215,12 +2031,9 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
 
 /// What the service currently says about each of these tasks.
 ///
-/// ⚠ **One request per task, deliberately.** The list endpoint would answer in
-/// one, but it answers about a HOLDER's tasks, and what a wait names is a set of
-/// blockers held by whoever is fixing them — several sessions, in the ordinary
-/// case. Waits are counted in hours and the poll in seconds, so the round trips
-/// are free; a query shaped to make them one would have to be about the waiting
-/// task's own edges, which is a different feature.
+/// ⚠ **One request per task, deliberately**: the list endpoint answers by
+/// holder, and a wait's blockers are held by whoever is fixing them. At a poll
+/// every few seconds, the round trips cost nothing.
 async fn statuses(client: &Client, ids: &[TaskRef]) -> Result<Vec<(u64, Status)>> {
     let mut said = Vec::with_capacity(ids.len());
     for id in ids {
@@ -2238,11 +2051,9 @@ async fn statuses(client: &Client, ids: &[TaskRef]) -> Result<Vec<(u64, Status)>
 
 /// The task as it stood before its last edit, or why there is no such thing.
 ///
-/// ⚠ **The service answers 404 for two different states** — no such task, and a
-/// task nothing has overwritten — and from here they are one answer: there is
-/// nothing to put back. The message says both, because a reader who mistypes an
-/// id and a reader whose task predates the revision
-/// table would otherwise draw opposite conclusions from one line.
+/// ⚠ **The service answers 404 for two states** — no such task, and nothing
+/// overwritten — so the message names both, or a mistyped id and an unedited
+/// task would read as the same mistake.
 async fn fetch_previous(client: &Client, id: TaskRef) -> Result<Value> {
     let req = client.request(reqwest::Method::GET, &format!("{}/previous", id.path()));
     client
@@ -2260,18 +2071,15 @@ async fn fetch_previous(client: &Client, id: TaskRef) -> Result<Value> {
 
 /// The focus a route answered with, when it answered with one.
 ///
-/// `null` is the ordinary answer — almost no session is focused at any moment —
-/// so this is an absence rather than a failure, and the caller says what "not
-/// focused" reads like in its own context.
+/// `null` is the ordinary answer, an absence rather than a failure.
 fn parse_focus(value: &Value) -> Option<tasks::tasks::focus::Focus> {
     serde_json::from_value(value.clone()).ok()
 }
 
 /// A focus as one line: what, until when, and how much is left of it.
 ///
-/// ⚠ **The countdown is here and never in the digest.** This runs the moment
-/// somebody types the command, where "1h48m left" is true; the digest is cached
-/// for sixty seconds and read minutes later, so it prints the hour instead.
+/// ⚠ **The countdown is here and never in the digest**: this runs the moment
+/// somebody types the command; the digest is cached and read later.
 fn describe(focus: &tasks::tasks::focus::Focus) -> String {
     let ids: Vec<String> = focus.tasks.iter().map(|id| format!("#{id}")).collect();
     format!(
@@ -2311,19 +2119,12 @@ async fn unblocking(client: &Client, blocked: u64, filed: u64) -> Result<()> {
 
 /// Put the outcome above the body, before the task closes.
 ///
-/// ⚠ **`--prepend`, never `--body`.** The note is the conclusion and the body is
-/// the history that earned it; replacing one with the other is how a body gets
-/// lost. The same write `task edit --prepend` makes, taken in the same call as
-/// the close so the two cannot come apart.
+/// ⚠ **`--prepend`, never `--body`**: the note is the conclusion and the body the
+/// history that earned it.
 ///
-/// ⚠ **The density read does not run on this path, and that is correct rather
-/// than an oversight.** It lives in the `Edit` arm and is invoked there; this
-/// writes through the same endpoint without going near it. Which is what should
-/// happen: it advises on a body that has grown without being consolidated, and
-/// a task being closed is not one anybody is about to rewrite. An edit that
-/// trips the read costs two orders of magnitude more than one that does not, so
-/// paying it here would make `--note` slower than the two commands it replaces,
-/// which is the whole reason it exists.
+/// ⚠ **The density read deliberately does not run here**: a task being closed
+/// is not about to be rewritten, and the read would make `--note` slower than
+/// the two commands it replaces.
 async fn written(client: &Client, id: &TaskRef, note: Option<&str>) -> Result<()> {
     let Some(note) = note else {
         return Ok(());
@@ -2373,12 +2174,9 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
 
 /// A model's reading of a body that has grown without anybody rewriting it.
 ///
-/// ⚠ **Every failure here is silence.** The edit has already landed, so there is
-/// nothing left for this to protect: a missing `claude`, a timeout, a body that
-/// could not be re-read are all reasons to say nothing rather than to spend a
-/// session's attention on the checker. `duplicates.rs` may cost a filing an
-/// error line because it runs BEFORE the write and can still stop one; this
-/// cannot stop anything, so it is advice or it is quiet.
+/// ⚠ **Every failure here is silence**: the edit has landed, so a missing
+/// `claude`, a timeout or an unreadable body is no reason to spend a session's
+/// attention on the checker.
 async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
     let Some(accreted) = updated["replaced"]["accreted"].as_u64() else {
         return;
@@ -2414,11 +2212,8 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
             outcome: checks::outcome(&said, advice.is_some()),
             // A density read has no subject to license anything with.
             subject_key: None,
-            // ⚠ **What the MODEL said, not what this prints.** `advice` wraps
-            // the findings in a header, a hedge and the remedy command — all of
-            // which are addressed to whoever ran the edit, at the moment they
-            // ran it. Stored, the reader is somebody opening the task later, and
-            // the wrapper would be a note about a session that has gone.
+            // ⚠ **What the MODEL said, not what this prints**: the wrapper is
+            // addressed to whoever ran this edit, not to the next reader.
             said: advice
                 .is_some()
                 .then(|| said.as_ref().ok().map(|words| words.trim().to_string()))
@@ -2433,14 +2228,8 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
 
 /// What an edit landed on, said back to whoever made it.
 ///
-/// ⚠ **This is the line that would have stopped the loss, and it stops
-/// nothing.** The loss is a session rewriting a body from a stale snapshot it
-/// never re-read; told it has just replaced text written *yesterday, by somebody
-/// else*, the mismatch is there to see. Refusing instead is the wrong trade for
-/// the reason `duplicates.rs` gives: a gate on a frequent correct operation
-/// teaches everyone to pass it.
-///
-/// The undo comes with it — this is the moment the remedy is wanted.
+/// See [`Replaced`](tasks::tasks::types::Replaced) for why this tells rather
+/// than refuses. The undo comes with it — this is when the remedy is wanted.
 fn displaced(task: &Value, id: u64) -> Option<String> {
     let was = task.get("replaced")?;
     let (before, after) = (was["was"].as_u64()?, was["now"].as_u64()?);
@@ -2454,10 +2243,8 @@ fn displaced(task: &Value, id: u64) -> Option<String> {
 
 /// One kind of check, as a line.
 ///
-/// ⚠ **A timeout is printed even when it is the only thing that happened.** The
-/// zero counts are dropped because a line of `0 error` is noise, but the four
-/// outcomes are not interchangeable: `quiet` and `timeout` both end in silence
-/// and one of them means the check never ran.
+/// Zero counts are dropped, but a timeout is printed even when it is all that
+/// happened: `quiet` and `timeout` both end in silence, and only one ran.
 fn tallied(line: &checks::Tally) -> String {
     let kind = match line.kind {
         checks::Kind::Filing => "filing",
@@ -2485,9 +2272,8 @@ fn tallied(line: &checks::Tally) -> String {
 
 /// One command's line.
 ///
-/// ⚠ **The run count comes first because it is the weight.** A rarely-run
-/// command with a bad worst case matters less than `list` slowing slightly, and
-/// a line that leads with latency invites reading them the other way round.
+/// ⚠ **The run count comes first because it is the weight**, as in
+/// [`commands::tally`].
 fn timed_line(line: &commands::Tally) -> String {
     let failed = if line.failed > 0 {
         format!(", {} failed", line.failed)

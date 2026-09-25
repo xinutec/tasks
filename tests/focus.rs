@@ -191,10 +191,8 @@ fn focusing_on_something_in_the_pile_takes_it_out_of_the_pile() {
 
 #[test]
 fn the_pile_cap_counts_what_the_focus_left() {
-    // ⚠ Focus runs FIRST and the cap runs on what survives. The other order
-    // would spend the five pile lines on tasks the focus then hid, and report a
-    // pile shorter than it is — two trims that have to compose in one direction
-    // only.
+    // ⚠ Focus runs FIRST and the cap runs on what survives, or the pile lines
+    // would be spent on tasks the focus then hid.
     let mut tasks = vec![mine(1, "what I am on")];
     for id in 2..=9 {
         tasks.push(piled(id, &format!("spare {id}")));
@@ -225,9 +223,8 @@ fn a_period_is_read_the_way_somebody_types_one() {
     assert_eq!(focus::parse("90m").unwrap(), Duration::minutes(90));
     assert_eq!(focus::parse("2h30m").unwrap(), Duration::minutes(150));
     assert_eq!(focus::parse(" 4H ").unwrap(), Duration::hours(4));
-    // ⚠ A bare number is MINUTES. The unit somebody leaves off is the small
-    // one, and reading `--for 30` as thirty hours would grant sixty times what
-    // was asked for — quietly, since it is a legal period either way.
+    // ⚠ A bare number is MINUTES: the unit somebody leaves off is the small one,
+    // and `--for 30` read as hours would pass silently.
     assert_eq!(focus::parse("30").unwrap(), Duration::minutes(30));
     for bad in ["", "soon", "4 hours", "h", "4d"] {
         assert!(focus::parse(bad).is_err(), "{bad:?} was read as a period");
@@ -400,15 +397,13 @@ async fn a_period_outside_the_bounds_is_refused_with_the_bounds_named() {
                 .await
                 .expect_err("a period outside the bounds"),
         );
-        // ⚠ Named, not clamped. fleetwatch clamps an over-long mute silently,
-        // which leaves the caller believing a number that was never applied.
+        // ⚠ Named, not clamped: clamping leaves the caller believing a number
+        // that was never applied.
         assert!(said.contains("15m"), "{said}");
         assert!(said.contains("24h"), "{said}");
         assert!(said.contains(&focus::spell(period)), "{said}");
-        // ⚠ **And the reason has to match which bound was missed.** One
-        // sentence for both told a caller who asked for five minutes that a
-        // focus longer than a day is really a handover. Measured on prod,
-        // 2026-08-15, before this arm existed.
+        // ⚠ **And the reason has to match which bound was missed**, or a caller
+        // who asked for five minutes is told about handovers.
         let handover = said.contains("handover");
         assert_eq!(
             handover,

@@ -11,8 +11,8 @@
 //! it" is falsifiable by string position, and it rejects most such claims.
 //! Nothing about the model changes; the shape of the answer does.
 //!
-//! ⚠ **This module holds the decision and none of the IO**, so its tests are the
-//! past mistakes rather than a fixture: no database, no network, no task store.
+//! ⚠ **This module holds the decision and none of the IO**: its tests need no
+//! database, network or task store.
 //!
 //! ⚠ **A finding is checkable only against the text it was made about, which is
 //! why the body is passed in rather than fetched.** Re-run a review after its
@@ -56,10 +56,9 @@ pub struct Finding {
     pub quote_resolving: Option<String>,
     /// For a repetition claim: the SECOND occurrence.
     ///
-    /// ⚠ **Required, and skipping it was instrument failure 2.** Counting
-    /// occurrences of `quote_problem` alone calls every repetition finding
-    /// false, because a model quotes one instance together with a lead-in that
-    /// appears once.
+    /// ⚠ **Required.** Counting occurrences of `quote_problem` alone calls every
+    /// repetition finding false, because a model quotes one instance together
+    /// with a lead-in that appears once.
     pub quote_second: Option<String>,
 }
 
@@ -97,10 +96,9 @@ impl Verdict {
 
 /// Try to refute a finding from the task's own text.
 ///
-/// ⚠ **The subject is searched too, and skipping it was instrument failure 1.**
-/// Looking in the body alone rejects every correct `subject-stale` finding,
-/// because the body does not contain the subject. A quote is checked against
-/// both, always — cheaper than deciding per kind which it should have been.
+/// ⚠ **The subject is searched too**, or every correct `subject-stale` finding
+/// is rejected. A quote is checked against both, always — cheaper than deciding
+/// per kind which it should have been.
 pub fn falsify(finding: &Finding, subject: &str, body: &str) -> Verdict {
     let hay = format!("{subject}\n{body}");
     let mut refused = Vec::new();

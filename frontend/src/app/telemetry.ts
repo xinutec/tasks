@@ -12,7 +12,7 @@ import { filter } from 'rxjs';
  * because it is built by plain `tsc` and Angular's decorators need the Angular
  * compiler to emit their Ivy definitions. A decorated class crossing that
  * boundary carries only inert metadata, and a production build fails on `JIT
- * compiler unavailable` — which is exactly how this was found.
+ * compiler unavailable`.
  *
  * So the split is: the two capture seams and the DI wiring here, everything
  * else there. Instrumented once, from the app shell, so no screen knows the

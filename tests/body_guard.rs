@@ -1,10 +1,8 @@
 //! Refusing the write that is not an edit.
 //!
-//! ⚠ **These exist because it happened.** 2026-08-15: a session wanted #900's
-//! prose, read `--json`, and took `detailed` — the BOOLEAN that says whether
-//! prose exists — for the prose itself. It then wrote the string `True` over
-//! 3,109 characters. `task undo` got it back, which is the point of the
-//! revision store, but nothing had tried to stop the write.
+//! ⚠ **The write this stops**: a session reads `--json`, takes `detailed` — the
+//! BOOLEAN that says whether prose exists — for the prose, and writes `True`
+//! over the body.
 //!
 //! The property under test is that a body which keeps almost nothing of the one
 //! it replaces is refused unless somebody says they mean it. Half of these pin
@@ -243,10 +241,9 @@ async fn the_history_says_how_much_of_a_body_moved() {
         .await
         .expect("editing");
 
-    // ⚠ The reply to the writer already carried these numbers and then went
-    // with their scrollback. This is the copy the NEXT reader gets — without
-    // it, #900's history said `edited body` and gave no sign that a body had
-    // been reduced to four characters.
+    // ⚠ The reply goes with the writer's scrollback; this is the copy the NEXT
+    // reader gets, or the history says `edited body` and nothing about a body
+    // reduced to four characters.
     let detail = repo::get(&pool, id)
         .await
         .expect("reading")

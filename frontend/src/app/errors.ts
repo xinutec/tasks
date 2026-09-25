@@ -3,16 +3,13 @@ import { HttpErrorResponse } from '@angular/common/http';
 /**
  * What went wrong, in words fit to put on screen.
  *
- * One boundary rather than a shape declared at each callsite. The pattern, and
- * the `[object Object]` that shipped to a phone without it, are recorded in the
- * agent console's `errors.ts`; this is that function with this API's error
- * envelope. It takes `unknown` and narrows, which is also what keeps it out of
- * `DL-ANGULAR-HTTP-ERROR-CLASSIFIED`'s sights by construction.
+ * One boundary rather than a shape declared at each callsite, or a phone shows
+ * `[object Object]`. It takes `unknown` and narrows, which also satisfies
+ * `DL-ANGULAR-HTTP-ERROR-CLASSIFIED` by construction.
  */
 export function reason(err: unknown): string {
   if (err instanceof HttpErrorResponse) {
-    // The service answers a refusal with `{"error": "…"}`, and that sentence —
-    // "a subject is one line and at most 200 characters — this is 412" — is
+    // The service answers a refusal with `{"error": "…"}`, and that sentence is
     // better than anything this function could compose.
     const said: unknown = err.error;
     if (typeof said === 'object' && said !== null && 'error' in said) {

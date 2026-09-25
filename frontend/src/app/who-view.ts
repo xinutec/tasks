@@ -15,17 +15,12 @@ import { TasksApi } from './tasks-api';
 /**
  * Who has what: every session, Pippijn, and the pile, as `open/total`.
  *
- * ⚠ **The second number is the reason this screen exists.** The list already
- * shows who is holding each open task, so `open` alone was already visible one
- * row at a time; what was not visible anywhere is who has *finished* anything,
- * because a task leaves every open list the moment it is done. `0` and `0/56`
- * are the difference between a session with nothing to do and one that has
- * cleared a plate.
+ * ⚠ **The second number is the reason this screen exists**: the list already
+ * shows who holds each open task, but not who has *finished* anything. `0` and
+ * `0/56` are an idle session and a cleared plate.
  *
- * Ordered by what is open, most first — the question this answers is who is
- * loaded — with Pippijn and the pile last regardless, since they are landmarks
- * rather than entries in the ranking. Both orderings are the backend's, so the
- * app and `task sessions` cannot disagree about them.
+ * The order is the backend's — most open first, Pippijn and the pile last as
+ * landmarks — so the app and `task sessions` cannot disagree.
  */
 @Component({
   selector: 'app-who-view',
@@ -64,7 +59,7 @@ export class WhoView {
       // handle for `task move`, and it is 36 characters of uuid otherwise.
       handle: holder.kind === 'session' && said(holder.name) ? (holder.id ?? null) : null,
       done: holder.total - holder.open,
-      // Where the row goes. The counts were the end of the road until #657.
+      // Where the row goes: that holder's work in the list.
       focus: whoParam(focusOn({ kind: holder.kind, id: holder.id })),
     })),
   );
@@ -98,11 +93,9 @@ export class WhoView {
   /**
    * Save it, and reload.
    *
-   * The refresh is not decoration: a name is resolved through the join wherever
-   * it appears, so the list's holder chips and every `from` on a pile row are
-   * stale the moment this lands. Blank is refused by the service — it is a
-   * write that would otherwise report success and keep the old name — so the
-   * button is disabled rather than letting somebody find that out.
+   * The reload is needed: the name is resolved through the join wherever it
+   * appears, so every holder chip and `from` is stale the moment this lands.
+   * The service refuses a blank name, so the button is disabled for one.
    */
   saveRename(id: string): void {
     const name = this.draft().trim();

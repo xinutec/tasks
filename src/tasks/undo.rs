@@ -10,22 +10,19 @@
 //! argues that gating a frequent correct operation only teaches everyone to pass
 //! the gate — which is why overwriting another session's text is merely warned
 //! about. Reverting another session's edit is neither frequent nor ordinary, so
-//! the flag stays rare enough to mean something. The warning this replaces was
-//! accurate and got piped to `/dev/null`; a louder one would have gone too.
+//! the flag stays rare enough to mean something; a warning here gets piped to
+//! `/dev/null`.
 
 use crate::tasks::types::Revision;
 
-///
-/// Only the authorship question. A revision that is the caller's own is theirs
-/// to put back, however old.
+/// Whether restoring `was` needs `--anyway`: only when someone else made it. A
+/// revision that is the caller's own is theirs to put back, however old.
 pub fn needs_saying(was: &Revision) -> bool {
     !was.mine
 }
 
-///
-/// The date is included because "by dev-lint" alone does not tell you whether
-/// you are looking at a collision seconds old or an edit from last week, and the
-/// two want different decisions.
+/// What an undo of someone else's edit is told. The date is included because
+/// a collision seconds old and an edit from last week want different decisions.
 pub fn refusal(was: &Revision, id: u64) -> String {
     format!(
         "the last edit to #{id} was {}'s, not yours, made {}. Restoring would revert \

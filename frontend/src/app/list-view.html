@@ -12,15 +12,10 @@
 
   <nav class="filters" aria-label="Filters">
     <!-- ⚠ **Its own row, not a fifth chip.** One named holder, arrived at from
-         /who. It draws a chip at all because otherwise none of the four buckets
-         is lit and the filter is invisible — "Nothing here" would read as no
-         work existing rather than as none for this holder. But sharing the
-         bucket row put it PAST the right edge at phone width: the row is
-         `overflow-x: auto` so it never wraps, and the one element that explains
-         why the list is short was reachable only by scrolling sideways, which
-         is the same as absent. Seen in `ui-snapshots/who-focused.png`, not
-         predicted. First, because it is the answer to what you are looking at.
-         Tapping it clears. -->
+         /who. It needs a chip or no bucket is lit and "Nothing here" reads as
+         no work at all. In the bucket row it lands past the right edge at phone
+         width, where the `overflow-x: auto` row hides it. First, because it is
+         the answer to what you are looking at. Tapping it clears. -->
     @if (focused(); as holder) {
       <div class="row focus" role="group" aria-label="Showing one holder">
         <button mat-button class="on" (click)="clearFocus()" aria-pressed="true">
@@ -70,18 +65,14 @@
                   >{{ row.task.escalated_to }}!</span
                 >
               } @else if (row.task.priority) {
-                <span class="priority" [class]="row.task.priority">{{
-                  row.task.priority
-                }}</span>
+                <span class="priority" [class]="row.task.priority">{{ row.task.priority }}</span>
               }
-              <!-- Only while a blocker is still OPEN — `blocked`, not the mere
-                   presence of `blocked_on`, which is kept after the blocker
-                   closes as a record of how the work went. -->
-              <!-- An icon, not the date — the same call as `blocked` below and
-                   for the same measured reason: a full `2026-09-01` in this row
-                   pushed the long-subject fixture from 9 wrapped lines to 12 at
-                   phone width. Whether there IS a deadline, and whether it has
-                   passed, is what a list needs; WHEN is on the task. -->
+              <!-- Only while a blocker is still OPEN — `blocked`, not the presence of
+                   `blocked_on`, which is kept after the blocker closes. -->
+              <!-- An icon, not the date, like `blocked`: a full date in this row wraps
+                   long subjects further at phone width. Whether there IS a
+                   deadline, and whether it has passed, is what a list needs;
+                   WHEN is on the task. -->
               @if (row.task.due) {
                 <mat-icon
                   class="due"
@@ -93,14 +84,12 @@
               @if (row.task.blocked) {
                 <mat-icon class="blocked" aria-label="blocked">block</mat-icon>
               }
-              <!-- An icon for the same reason the deadline is one: a body that
-                   got away is a yes/no in a list, and the size and the findings
-                   are both on the task. Drawn only where a read spoke and an
-                   edit has not since made the body smaller.
+              <!-- An icon for the same reason the deadline is one: a body that got away
+                   is a yes/no in a list, and the size and findings are on the
+                   task. Drawn only where a read spoke and no edit has since
+                   made the body smaller.
                    ⚠ **NOT `notes`, which is two icons down and means "has a
-                   body".** The first render of this used it and the same glyph
-                   appeared twice in one row meaning two different things —
-                   invisible in the markup, obvious in the screenshot. `compress`
+                   body"** — one glyph with two meanings in one row. `compress`
                    says what the remedy is. -->
               @if (row.task.sprawl_chars) {
                 <mat-icon class="sprawl" aria-label="a model found this body sprawling"
