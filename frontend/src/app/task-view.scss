@@ -220,9 +220,8 @@
     margin: 0.25rem 0 0;
   }
 
-  // A command is copied whole, so it is not broken across lines.
-  code {
-    white-space: nowrap;
+  .row {
+    margin-top: 0.5rem;
   }
 }
 

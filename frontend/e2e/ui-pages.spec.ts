@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 // The fleet-shared harness, published as @xinutec/ui-harness (source repo
 // ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
 import {
@@ -169,4 +169,16 @@ test('filing a task that names one you just closed @ phone width', async ({ page
   await page.getByRole('link', { name: '#89' }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+
+  // The one tap: reopen #89 FIRST, then drop the filing, then go to #89.
+  const patches: string[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'PATCH') patches.push(`${new URL(req.url()).pathname} ${req.postData()}`);
+  });
+  await page.getByRole('button', { name: 'Continue in #89' }).click();
+  await page.waitForURL('**/t/89');
+  expect(patches).toEqual([
+    '/api/tasks/89 {"status":"open"}',
+    `/api/tasks/${TASKS[1].id} {"status":"dropped"}`,
+  ]);
 });

@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Router, RouterLink } from '@angular/router';
+import { switchMap } from 'rxjs';
 
 import { reason } from './errors';
 import {
@@ -46,6 +47,7 @@ export class TaskView {
   readonly id = input.required<string>();
 
   private api = inject(TasksApi);
+  private router = inject(Router);
   private store = inject(TaskStore);
 
   readonly statusIcon = STATUS_ICON;
@@ -96,7 +98,7 @@ export class TaskView {
   readonly unwritten = signal<{ task: number; at: string } | null>(null);
 
   constructor() {
-    const handed = inject(Router).currentNavigation()?.extras.state as
+    const handed = this.router.currentNavigation()?.extras.state as
       { filed?: number; closed?: Closed[] } | undefined;
     if (handed?.filed !== undefined && handed.closed?.length) {
       this.continues.set({ task: handed.filed, closed: handed.closed });
@@ -192,6 +194,34 @@ export class TaskView {
    *  come back from. */
   drop(): void {
     this.change({ status: 'dropped' });
+  }
+
+  /**
+   * The whole remedy for a filing that continues a closed task, in one tap:
+   * reopen that one, drop this one, and go there.
+   *
+   * ⚠ **Reopen first.** If it fails nothing has been dropped, and the filing
+   * is still where it was.
+   */
+  continueIn(closed: number): void {
+    const task = this.task();
+    if (!task || this.saving()) return;
+    this.saving.set(true);
+    this.api
+      .change(closed, { status: 'open' })
+      .pipe(switchMap(() => this.api.change(task.id, { status: 'dropped' })))
+      .subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.continues.set(null);
+          this.store.refresh();
+          void this.router.navigate(['/t', closed]);
+        },
+        error: (err: unknown) => {
+          this.saving.set(false);
+          this.failed.set(reason(err));
+        },
+      });
   }
 
   moveTo(assignee: Assignee): void {

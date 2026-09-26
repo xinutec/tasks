@@ -136,9 +136,15 @@
           @for (was of c.closed; track was.id) {
             <p>
               <a [routerLink]="['/t', was.id]">#{{ was.id }}</a> was {{ was.status }} by you at
-              {{ was.at | date: 'd MMM HH:mm' }}. If this continues it, reopen #{{ was.id }} and
-              drop this one.
+              {{ was.at | date: 'd MMM HH:mm' }}. If this continues it, carry on there; this one is
+              dropped.
             </p>
+            <div class="row">
+              <button mat-stroked-button [disabled]="saving()" (click)="continueIn(was.id)">
+                <mat-icon>undo</mat-icon>
+                Continue in #{{ was.id }}
+              </button>
+            </div>
           }
         </section>
       }
@@ -149,8 +155,8 @@
         <section class="lifecycle">
           <h2>Closed with its text as it was</h2>
           <p>
-            Nothing was written since {{ u.at | date: 'd MMM HH:mm' }}. Closing is a rewrite: say
-            what was found with <code>task edit {{ t.id }} --body -</code>.
+            Nothing was written since {{ u.at | date: 'd MMM HH:mm' }}, so the body still says what
+            it said before it was closed.
           </p>
         </section>
       }
