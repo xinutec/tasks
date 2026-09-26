@@ -597,6 +597,11 @@ pub struct Updated {
     /// change that moved only a status, a rank or a holder.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replaced: Option<Replaced>,
+    /// When this change closed the task without anything having been written
+    /// to it since it last moved: when its text was last written. See
+    /// [`lifecycle::unwritten`](crate::tasks::lifecycle::unwritten).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unwritten: Option<DateTime<Utc>>,
 }
 
 /// What filing a task answers: the task, and what the filing may have meant

@@ -2175,6 +2175,15 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
         if let Some(was) = displaced(&task, id) {
             println!("{was}");
         }
+        if let Some(written) = task["unwritten"]
+            .as_str()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+        {
+            println!(
+                "{}",
+                lifecycle::rewrite_hint(id, written.to_utc(), chrono::Utc::now())
+            );
+        }
     });
     Ok(task)
 }

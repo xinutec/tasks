@@ -138,6 +138,11 @@ export interface Updated extends Task {
    * holder.
    */
   replaced?: Replaced;
+  /**
+   * When this change closed the task with nothing written since it last moved:
+   * when its text was last written. See `tasks::lifecycle::unwritten`.
+   */
+  unwritten?: string;
 }
 
 /**

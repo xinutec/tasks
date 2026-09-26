@@ -98,18 +98,76 @@ pub async fn closed_by(pool: &MySqlPool, actor: &Actor, ids: &[u64]) -> Result<V
     Ok(closed)
 }
 
+#[derive(sqlx::FromRow)]
+struct Written {
+    id: u64,
+    kind: String,
+    at: NaiveDateTime,
+}
+
+/// When a just-closed task's text was last written, if nothing was written
+/// since it last changed status — or, never having changed one, since it was
+/// filed.
+///
+/// ⚠ **Closing is a rewrite.** A body still saying what was wrong, under a done
+/// status, is what the next reader and the duplicate check both believe. `task
+/// done --note` writes before it closes, so it is never named here.
+///
+/// Call it only right after a close: the task's latest status event is taken
+/// to be that close.
+pub async fn unwritten(pool: &MySqlPool, id: u64) -> Result<Option<DateTime<Utc>>> {
+    let last: Option<Written> = sqlx::query_as(
+        "SELECT id, kind, at FROM task_events \
+         WHERE task_id = ? AND kind IN ('created', 'edited') ORDER BY id DESC LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .context("reading when a task's text was last written")?;
+    let Some(last) = last else {
+        return Ok(None);
+    };
+    // The status event before the close: the moment the task last moved.
+    let moved: Option<(u64,)> = sqlx::query_as(
+        "SELECT id FROM task_events WHERE task_id = ? AND kind = 'status' \
+         ORDER BY id DESC LIMIT 1 OFFSET 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .context("reading when a task last changed status")?;
+    let stale = last.kind == "created" || moved.is_some_and(|(moved,)| last.id < moved);
+    // The session zone is pinned to UTC in `db::connect`.
+    Ok(stale.then(|| last.at.and_utc()))
+}
+
+/// How long before `now` something happened, as a person says it.
+fn ago(at: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    let minutes = (now - at).num_minutes().max(0);
+    match minutes {
+        0 => "just now".to_string(),
+        1..=59 => format!("{minutes} min ago"),
+        60..=2879 => format!("{} h ago", minutes / 60),
+        _ => format!("{} days ago", minutes / 1440),
+    }
+}
+
+/// What a close is told when it rewrote nothing.
+pub fn rewrite_hint(id: u64, written: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    format!(
+        "#{id}'s text was last written {}, before this work. Closing is a rewrite: \
+         `task edit {id} --body -` to say what was found.",
+        ago(written, now)
+    )
+}
+
 /// What a filing is told about a task its filer closed, `now` being when it
 /// was filed.
 ///
 /// Both halves of the remedy: the filing has landed, so continuing the old task
 /// also means dropping the new one.
 pub fn reopen_hint(closed: &Closed, filed: u64, now: DateTime<Utc>) -> String {
-    let minutes = (now - closed.at).num_minutes().max(0);
-    let ago = match minutes {
-        0 => "just now".to_string(),
-        1..=59 => format!("{minutes} min ago"),
-        _ => format!("{} h ago", minutes / 60),
-    };
+    let ago = ago(closed.at, now);
     let id = closed.id;
     format!(
         "#{id} was closed ({}) by you {ago}. If this continues it: \

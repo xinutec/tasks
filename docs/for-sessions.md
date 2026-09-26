@@ -187,6 +187,9 @@ the one line that reaches a prompt every turn saying the old thing.
 and every later search see first, and it is read by people who will never open
 the task.
 
+A close with nothing written since the task last moved says so, with the `task
+edit` to run. `task done --note -` writes and closes in one command.
+
 ### What is safe to cut
 
 Tested by cutting bodies and asking one reader holding only the original and

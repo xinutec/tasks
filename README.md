@@ -275,6 +275,12 @@ and shares none of its wording. It warns and files anyway, since citing a
 finished task is often right. The task's last status change decides, read from
 columns rather than the history line.
 
+**A close that rewrote nothing says so.** `task done` or `task drop` on a task
+with nothing written since it last changed status (or since filing) prints when
+its text was last written and `task edit <id> --body -`: a body still describing
+the problem, under a closed status, is what the next reader believes. `--note`
+and `--reason` write before closing, so they satisfy it.
+
 ### The density read
 
 **A body that has grown without being rewritten is read back to you.** Once one

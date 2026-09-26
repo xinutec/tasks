@@ -120,9 +120,6 @@ macro_rules! tally {
 pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
     // `COUNT(t.id)` over the left join is *ever assigned anything* —
     // deliberately not spelled with the status vocabulary.
-    //
-    // dev-lint: allow-sqlx — a `concat!`ed literal assembled by `tally!`, not a
-    // string built at runtime; the only interpolation is another macro.
     let sessions: Vec<(String, Option<String>, i64, i64, i64)> = sqlx::query_as(tally!(
         "s.id, s.name, CAST(COUNT(t.id) AS SIGNED) AS ever, ",
         "FROM sessions s LEFT JOIN tasks t ON t.assignee_session = s.id GROUP BY s.id, s.name"
@@ -144,7 +141,6 @@ pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
         .collect();
     out.sort_by_key(|h| (-h.open, -h.total));
 
-    // dev-lint: allow-sqlx — as above.
     let (open, done): (i64, i64) =
         sqlx::query_as(tally!("", "FROM tasks t WHERE t.assignee_kind = 'person'"))
             .fetch_one(pool)
@@ -158,7 +154,6 @@ pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
         total: open + done,
     });
 
-    // dev-lint: allow-sqlx — as above.
     let (open, done): (i64, i64) =
         sqlx::query_as(tally!("", "FROM tasks t WHERE t.assignee_kind = 'nobody'"))
             .fetch_one(pool)
@@ -177,8 +172,6 @@ pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
 
 /// Every session known, most recently seen first.
 pub async fn list(pool: &MySqlPool) -> Result<Vec<Session>> {
-    // dev-lint: allow-sqlx — a `concat!`ed literal; the only interpolation is
-    // `still_open!`, which is where the open vocabulary lives.
     let rows: Vec<Row> = sqlx::query_as(concat!(
         "SELECT s.id, s.name, s.first_seen, s.last_seen, COUNT(t.id) AS open ",
         "FROM sessions s ",

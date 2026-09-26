@@ -248,3 +248,111 @@ async fn filing_through_the_api_names_what_this_session_just_closed() {
 fn first_closed_is_absent(filed: &serde_json::Value) -> bool {
     filed.get("closed").is_none() && filed["id"].is_u64()
 }
+
+async fn change(
+    pool: &sqlx::MySqlPool,
+    id: u64,
+    change: Change,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    repo::update(pool, id, change, &filer())
+        .await
+        .expect("changing")
+        .unwritten
+}
+
+fn status(status: Status) -> Change {
+    Change {
+        status: Some(status),
+        ..Change::default()
+    }
+}
+
+fn body(text: &str) -> Change {
+    Change {
+        body: Some(text.into()),
+        ..Change::default()
+    }
+}
+
+#[tokio::test]
+async fn closing_a_task_never_written_since_filing_is_named() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "never rewritten").await;
+    assert!(change(&pool, id, status(Status::Done)).await.is_some());
+}
+
+#[tokio::test]
+async fn a_drop_is_a_close_too() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "dropped unwritten").await;
+    assert!(change(&pool, id, status(Status::Dropped)).await.is_some());
+}
+
+#[tokio::test]
+async fn an_edit_before_the_close_satisfies_it() {
+    // What `task done --note` does: the note lands, then the close.
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "rewritten").await;
+    change(&pool, id, body("what was found")).await;
+    assert_eq!(change(&pool, id, status(Status::Done)).await, None);
+}
+
+#[tokio::test]
+async fn an_edit_and_a_close_in_one_change_satisfy_it() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "rewritten as it closes").await;
+    let both = Change {
+        body: Some("what was found".into()),
+        status: Some(Status::Done),
+        ..Change::default()
+    };
+    assert_eq!(change(&pool, id, both).await, None);
+}
+
+#[tokio::test]
+async fn an_edit_before_the_work_started_does_not() {
+    // The plan was written, the work began, and the close said nothing of it.
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "planned, then done silently").await;
+    change(&pool, id, body("the plan")).await;
+    change(&pool, id, status(Status::Doing)).await;
+    assert!(change(&pool, id, status(Status::Done)).await.is_some());
+}
+
+#[tokio::test]
+async fn an_edit_after_the_work_started_satisfies_it() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "started, rewritten, done").await;
+    change(&pool, id, status(Status::Doing)).await;
+    change(&pool, id, body("what was found")).await;
+    assert_eq!(change(&pool, id, status(Status::Done)).await, None);
+}
+
+#[tokio::test]
+async fn a_reopened_task_closed_again_unwritten_is_named() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "closed, reopened, closed").await;
+    change(&pool, id, body("the first finding")).await;
+    change(&pool, id, status(Status::Done)).await;
+    change(&pool, id, status(Status::Open)).await;
+    assert!(change(&pool, id, status(Status::Done)).await.is_some());
+}
+
+#[tokio::test]
+async fn a_change_that_does_not_close_is_never_named() {
+    let pool = common::fresh_db().await;
+    let id = file(&pool, "only started").await;
+    assert_eq!(change(&pool, id, status(Status::Doing)).await, None);
+}
+
+#[test]
+fn the_rewrite_hint_says_how_long_the_text_has_stood() {
+    let at = chrono::DateTime::parse_from_rfc3339("2026-09-20T10:00:00Z")
+        .unwrap()
+        .to_utc();
+    assert_eq!(
+        lifecycle::rewrite_hint(89, at, at + chrono::Duration::days(3)),
+        "#89's text was last written 3 days ago, before this work. Closing is a rewrite: \
+         `task edit 89 --body -` to say what was found."
+    );
+}

@@ -282,7 +282,6 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
 pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
     // `select!` expands to `concat!`, so rustc sees a literal; only the linter
     // sees a macro.
-    // dev-lint: allow-sqlx — a `concat!`ed literal, not a runtime-built string.
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
         .fetch_optional(pool)
@@ -761,7 +760,6 @@ async fn blocking_is_consistent(
     // arithmetic, not a judgement. Equal is allowed. Checked before the rank,
     // because it is the harder fact.
     if let Some(mine) = due {
-        // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
         let ahead: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
             "SELECT bt.id, bt.due FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
             "WHERE b.task_id = ? AND bt.due IS NOT NULL AND bt.due > ? AND ",
@@ -780,7 +778,6 @@ async fn blocking_is_consistent(
         }
     }
     // And the other end: a blocker pushed out past something waiting on it.
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let stranded: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
         "SELECT t.id, t.due FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
         "WHERE b.blocked_on = ? AND t.due IS NOT NULL AND ",
@@ -809,7 +806,6 @@ async fn blocking_is_consistent(
     let mine = Priority::rank(Some(stated));
 
     // This end: what this task waits for, of those still open.
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let blockers: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
         "SELECT bt.id, bt.priority FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
         "WHERE b.task_id = ? AND ",
@@ -843,7 +839,6 @@ async fn unblocked_end(
     priority: Option<Priority>,
 ) -> Result<()> {
     let mine = Priority::rank(priority);
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let waiting: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
         "SELECT t.id, t.priority FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
         "WHERE b.blocked_on = ? AND ",
@@ -1465,10 +1460,23 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         None => None,
     };
 
+    let task = list_one(pool, id).await?;
+    // ⚠ **A failed warning is no failed close**: the change has landed.
+    let unwritten = if changed.contains(&Moved::Status) && !task.status.is_open() {
+        crate::tasks::lifecycle::unwritten(pool, id)
+            .await
+            .unwrap_or_else(|why| {
+                tracing::warn!("reading whether #{id} was closed unwritten: {why}");
+                None
+            })
+    } else {
+        None
+    };
     Ok(Updated {
-        task: list_one(pool, id).await?,
+        task,
         changed,
         replaced,
+        unwritten,
     })
 }
 
@@ -1511,7 +1519,6 @@ async fn accreted(pool: &MySqlPool, id: u64, now: usize) -> Result<usize> {
 /// One task without its prose or history — the read every write does first,
 /// and the value every write returns.
 async fn list_one(pool: &MySqlPool, id: u64) -> Result<Task> {
-    // dev-lint: allow-sqlx — a `concat!`ed literal; see `get`.
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
         .fetch_optional(pool)

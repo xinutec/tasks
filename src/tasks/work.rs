@@ -51,9 +51,6 @@ pub async fn standing(pool: &MySqlPool) -> Result<Tally> {
     // ⚠ **Every `SUM` is CAST to SIGNED.** MariaDB types `SUM()` as DECIMAL,
     // which sqlx refuses to decode into `i64` — at runtime, on a real row.
     // `COUNT(*)` is already BIGINT.
-    //
-    // dev-lint: allow-sqlx — a `concat!`ed literal; the macros expand at compile
-    // time and nothing here is built from a runtime string.
     let row: (i64, i64, i64, i64, i64, i64) = sqlx::query_as(concat!(
         "SELECT COUNT(*), ",
         "CAST(COALESCE(SUM(t.assignee_kind = 'nobody'), 0) AS SIGNED), ",
