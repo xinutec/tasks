@@ -109,7 +109,9 @@ test('every screen, at phone width', async ({ page }) => {
   );
   await page.goto(`/t/${TASKS[1].id}`);
   await page.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'done' }).click();
-  await page.locator('.lifecycle').scrollIntoViewIfNeeded();
+  await page
+    .getByRole('heading', { name: 'Closed with its text as it was' })
+    .scrollIntoViewIfNeeded();
   await shot(page, 'closed-unwritten');
 
   await page.route('**/api/tasks', (r) =>
@@ -125,7 +127,7 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByLabel('Priority').click();
   await page.getByRole('option', { name: 'P2', exact: false }).click();
   await page.getByRole('button', { name: 'File it' }).click();
-  await page.locator('.lifecycle').scrollIntoViewIfNeeded();
+  await page.getByRole('heading', { name: 'You closed what this names' }).scrollIntoViewIfNeeded();
   await shot(page, 'filed-continues');
 
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DROPPED }));

@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -35,6 +36,7 @@ import { TasksApi } from './tasks-api';
   imports: [
     DatePipe,
     MatButtonModule,
+    MatCardModule,
     MatIconModule,
     MatMenuModule,
     MatProgressBarModule,

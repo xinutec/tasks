@@ -131,63 +131,83 @@
 
     @if (continues(); as c) {
       @if (c.task === t.id) {
-        <section class="lifecycle">
-          <h2>You closed what this names</h2>
-          @for (was of c.closed; track was.id) {
-            <p>
-              <a [routerLink]="['/t', was.id]">#{{ was.id }}</a> was {{ was.status }} by you at
-              {{ was.at | date: 'd MMM HH:mm' }}. If this continues it, carry on there; this one is
-              dropped.
-            </p>
-            <div class="row">
+        <mat-card appearance="outlined" class="note">
+          <mat-card-header>
+            <h2 mat-card-title>You closed what this names</h2>
+          </mat-card-header>
+          <mat-card-content>
+            @for (was of c.closed; track was.id) {
+              <p>
+                <a [routerLink]="['/t', was.id]">#{{ was.id }}</a> was {{ was.status }} by you at
+                {{ was.at | date: 'd MMM HH:mm' }}. If this continues it, carry on there; this one
+                is dropped.
+              </p>
+            }
+          </mat-card-content>
+          <mat-card-actions>
+            @for (was of c.closed; track was.id) {
               <button mat-stroked-button [disabled]="saving()" (click)="continueIn(was.id)">
                 <mat-icon>undo</mat-icon>
                 Continue in #{{ was.id }}
               </button>
-            </div>
-          }
-        </section>
+            }
+          </mat-card-actions>
+        </mat-card>
       }
     }
 
     @if (unwritten(); as u) {
       @if (u.task === t.id) {
-        <section class="lifecycle">
-          <h2>Closed with its text as it was</h2>
-          <p>
-            Nothing was written since {{ u.at | date: 'd MMM HH:mm' }}, so the body still says what
-            it said before it was closed.
-          </p>
-        </section>
+        <mat-card appearance="outlined" class="note">
+          <mat-card-header>
+            <h2 mat-card-title>Closed with its text as it was</h2>
+          </mat-card-header>
+          <mat-card-content>
+            <p>
+              Nothing was written since {{ u.at | date: 'd MMM HH:mm' }}, so the body still says
+              what it said before it was closed.
+            </p>
+          </mat-card-content>
+        </mat-card>
       }
     }
 
     <!-- ⚠ **Under the body, because it is about the body.** Shown on every open
          until an edit makes the body smaller. -->
     @if (t.sprawl_said) {
-      <section class="sprawl">
-        <h2>A model read this body, and it is a guess</h2>
-        <p class="said">{{ t.sprawl_said }}</p>
-      </section>
+      <mat-card appearance="outlined" class="note sprawl">
+        <mat-card-header>
+          <h2 mat-card-title>A model read this body, and it is a guess</h2>
+        </mat-card-header>
+        <mat-card-content>
+          <p class="said">{{ t.sprawl_said }}</p>
+        </mat-card-content>
+      </mat-card>
     }
 
     <!-- Offered only where there is something to put back, and never as one
          tap: the first shows what would come back, the second does it. -->
     @if (t.restorable) {
       @if (previous(); as was) {
-        <section class="previous">
-          <h2>Before the last edit</h2>
-          <p class="whose">Replaced {{ was.at | date: 'd MMM HH:mm' }} by {{ was.actor }}</p>
-          <p class="was-subject">{{ was.subject }}</p>
-          <pre class="was-body">{{ was.body }}</pre>
-          <div class="row">
+        <mat-card appearance="outlined" class="note previous">
+          <mat-card-header>
+            <h2 mat-card-title>Before the last edit</h2>
+            <mat-card-subtitle>
+              Replaced {{ was.at | date: 'd MMM HH:mm' }} by {{ was.actor }}
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <p class="was-subject">{{ was.subject }}</p>
+            <pre class="was-body">{{ was.body }}</pre>
+          </mat-card-content>
+          <mat-card-actions>
             <button mat-flat-button [disabled]="saving()" (click)="restore()">
               <mat-icon>undo</mat-icon>
               Put this back
             </button>
             <button mat-button (click)="dismiss()">Keep what is there</button>
-          </div>
-        </section>
+          </mat-card-actions>
+        </mat-card>
       } @else {
         <button mat-button class="peek" [disabled]="peeking()" (click)="peek()">
           <!-- `restore`, not `history`: a Material icon renders its ligature as
