@@ -599,6 +599,19 @@ pub struct Updated {
     pub replaced: Option<Replaced>,
 }
 
+/// What filing a task answers: the task, and what the filing may have meant
+/// instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Created {
+    #[serde(flatten)]
+    pub task: Task,
+    /// Tasks this filing names as `#<id>` that its filer closed recently —
+    /// usually a sign it continues one and `task reopen` was meant. See
+    /// [`lifecycle`](crate::tasks::lifecycle).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closed: Vec<crate::tasks::lifecycle::Closed>,
+}
+
 /// What an edit overwrote, told to whoever made it.
 ///
 /// ⚠ **This is the whole of the prevention, and it refuses nothing.** The loss

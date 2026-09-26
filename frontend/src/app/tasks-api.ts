@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   Change,
+  Created,
   Holder,
   Me,
   NewTask,
@@ -37,8 +38,8 @@ export class TasksApi {
     return this.http.get<TaskDetail>(`/api/tasks/${id}`);
   }
 
-  create(task: NewTask): Observable<Task> {
-    return this.http.post<Task>('/api/tasks', task);
+  create(task: NewTask): Observable<Created> {
+    return this.http.post<Created>('/api/tasks', task);
   }
 
   /** A genuine partial update: send only what is changing. */

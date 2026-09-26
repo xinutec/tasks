@@ -259,6 +259,22 @@ verdict is always the LAST line, because sessions pipe this to `tail -3`.
 * **`--check-only`** runs both halves and files nothing, so the check can be
   tried without probe rows in a shared tracker.
 
+### The reopen hint
+
+**The model checks cost seconds, so the lifecycle checks are store queries**
+(`tasks::lifecycle`), cheap enough for any command. The first: a filing whose
+subject or body names `#<id>` of a task its filer closed in the last day is told,
+under the task line,
+
+```text
+#89 was closed (done) by you 40 min ago. If this continues it: `task reopen 89` and `task drop 1700 --reason "continues #89"`.
+```
+
+This is the follow-up the duplicate check misses: it cites the closed task by id
+and shares none of its wording. It warns and files anyway, since citing a
+finished task is often right. The task's last status change decides, read from
+columns rather than the history line.
+
 ### The density read
 
 **A body that has grown without being rewritten is read back to you.** Once one

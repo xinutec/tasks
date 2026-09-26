@@ -110,6 +110,22 @@ export interface Task {
 }
 
 /**
+ * A task just filed, and the closed tasks its text names as `#<id>` that the
+ * filer closed in the last day. See `tasks::lifecycle`.
+ */
+export interface Created extends Task {
+  /** Absent — not empty — when the filing names none. */
+  closed?: Closed[];
+}
+
+export interface Closed {
+  id: number;
+  status: Status;
+  /** When the filer closed it. */
+  at: string;
+}
+
+/**
  * A task after a write, and what the write actually moved: `changed` holds the
  * `task_events` kinds written, and is empty when the call moved nothing.
  */

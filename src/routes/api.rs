@@ -15,8 +15,9 @@ use crate::state::AppState;
 use crate::tasks::checks;
 use crate::tasks::commands;
 use crate::tasks::focus;
+use crate::tasks::lifecycle;
 use crate::tasks::repo::{self, Change, Filter, NewTask};
-use crate::tasks::types::{Revision, Task, TaskDetail, Updated};
+use crate::tasks::types::{Created, Revision, Task, TaskDetail, Updated};
 use crate::tasks::work;
 use crate::wire::{RequiredKeys, Wire};
 
@@ -258,7 +259,7 @@ pub async fn create(
     SeenAs(called): SeenAs,
     State(app): State<AppState>,
     Wire(new): Wire<NewTask>,
-) -> Result<Json<Task>, AppError> {
+) -> Result<Json<Created>, AppError> {
     let actor = viewer.actor();
     // ⚠ **Before the write and before `touch`.** Skipping the duplicate check is
     // licensed only by a recent refusal of the same subject; without one
@@ -279,7 +280,17 @@ pub async fn create(
     if let Viewer::Session(id) = &viewer {
         sessions::touch(&app.db, id, called.as_deref()).await?;
     }
-    Ok(Json(repo::create(&app.db, new, &actor).await?))
+    let named = lifecycle::mentioned(&format!("{}\n{}", new.subject, new.body));
+    let task = repo::create(&app.db, new, &actor).await?;
+    // ⚠ **A failed warning is no failed filing.** The task is written; an error
+    // here would send the caller to file it again.
+    let closed = lifecycle::closed_by(&app.db, &actor, &named)
+        .await
+        .unwrap_or_else(|why| {
+            tracing::warn!("looking for recently closed tasks a filing names: {why}");
+            Vec::new()
+        });
+    Ok(Json(Created { task, closed }))
 }
 
 /// Change a task — its status, its holder, its words. Partial: an absent field

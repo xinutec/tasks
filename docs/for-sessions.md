@@ -349,6 +349,11 @@ only a model that actually names something refuses, because a session that
 cannot write things down is worse than any duplicate. The check costs seconds,
 and it costs them *before* the task exists rather than after.
 
+**Naming a task you closed today gets a reopen hint.** If the subject or body
+cites `#89` and you closed #89 in the last day, the filing lands and says so,
+with both commands: `task reopen 89`, and `task drop` for the task just filed. A
+follow-up to finished work usually belongs in the old task.
+
 ## What to do next: P0 to P4
 
 Five levels, and `task --help` glosses each one — read them there rather than

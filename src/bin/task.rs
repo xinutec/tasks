@@ -50,9 +50,10 @@ use tasks::tasks::duplicates;
 use tasks::tasks::fleetwatch;
 use tasks::tasks::focus;
 use tasks::tasks::holder::{self, Holder};
+use tasks::tasks::lifecycle;
 use tasks::tasks::reference::TaskRef;
 use tasks::tasks::selection::{self, list_query};
-use tasks::tasks::types::{AssigneeKind, Priority, Status, Task};
+use tasks::tasks::types::{AssigneeKind, Created, Priority, Status, Task};
 use tasks::tasks::wait;
 
 /// Where the service lives. The VPN name, because that is the only place it is.
@@ -1726,9 +1727,15 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 .request(reqwest::Method::POST, "/api/tasks")
                 .json(&payload);
             let task = client.send(req).await?.context("no task came back")?;
-            let shown: Task = serde_json::from_value(task.clone())
+            let created: Created = serde_json::from_value(task.clone())
                 .context("the service answered with a task this CLI could not read")?;
-            emit(cli.json, &task, || println!("{}", line(&shown)));
+            emit(cli.json, &task, || {
+                println!("{}", line(&created.task));
+                let now = chrono::Utc::now();
+                for closed in &created.closed {
+                    println!("{}", lifecycle::reopen_hint(closed, created.task.id, now));
+                }
+            });
             // ⚠ **After the POST, because the edge needs this task's id.** Recorded
             // on the OTHER task: `blocked_on` belongs to the thing that waits.
             if let Some(filed) = task["id"].as_u64() {

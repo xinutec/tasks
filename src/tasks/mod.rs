@@ -8,6 +8,7 @@ pub mod findings;
 pub mod fleetwatch;
 pub mod focus;
 pub mod holder;
+pub mod lifecycle;
 pub mod reference;
 pub mod repo;
 pub mod selection;
