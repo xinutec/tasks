@@ -280,8 +280,6 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
 
 /// One task, its prose and its history. `None` when there is no such task.
 pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
-    // `select!` expands to `concat!`, so rustc sees a literal; only the linter
-    // sees a macro.
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
         .fetch_optional(pool)
