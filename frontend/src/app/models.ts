@@ -262,9 +262,8 @@ export interface NewTask {
    * and called it ordinary*. Send `null` rather than omitting the key —
    * omitting it is a **400** naming both answers, not a default (`src/wire.rs`).
    */
-  // dev-lint: allow-wire-mirror the Rust side is `Ranking`, not `Option<Priority>`, and the rule reads the null arm off the TYPE. `Ranking` is a hand-written Deserialize whose whole purpose is that `null` is legal and ABSENCE is not — the one shape an Option cannot express. Null is right here; the rule cannot see it.
   priority: Priority | null;
-  due?: string | null;
+  due?: string;
   blocked_on?: number[];
   assignee?: Assignee;
   /**
