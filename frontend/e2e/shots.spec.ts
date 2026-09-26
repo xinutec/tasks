@@ -1,6 +1,6 @@
 import { Page, test } from '@playwright/test';
 
-import { DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
+import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
  * Write one picture out, with the animations finished.
@@ -100,6 +100,33 @@ test('every screen, at phone width', async ({ page }) => {
   await page.locator('.mat-mdc-menu-panel').waitFor();
   await page.getByRole('menuitem', { name: 'Drop it' }).waitFor();
   await shot(page, 'drop');
+
+  // The two lifecycle notes, where they land: under the body, scrolled to.
+  await page.route('**/api/tasks/*', (r) =>
+    r.request().method() === 'PATCH'
+      ? r.fulfill({ json: { ...DETAIL, changed: ['status'], unwritten: '2026-09-20T10:00:00Z' } })
+      : r.fulfill({ json: DETAIL }),
+  );
+  await page.goto(`/t/${TASKS[1].id}`);
+  await page.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'done' }).click();
+  await page.locator('.lifecycle').scrollIntoViewIfNeeded();
+  await shot(page, 'closed-unwritten');
+
+  await page.route('**/api/tasks', (r) =>
+    r.request().method() === 'POST'
+      ? r.fulfill({
+          json: { ...TASKS[1], closed: [{ id: 89, status: 'done', at: '2026-09-26T10:00:00Z' }] },
+        })
+      : r.fulfill({ json: TASKS }),
+  );
+  await page.goto('/new');
+  await page.getByLabel('Subject').fill('four more bugs found after #89');
+  await page.getByLabel("Why is this nobody's?").fill('any session can take it');
+  await page.getByLabel('Priority').click();
+  await page.getByRole('option', { name: 'P2', exact: false }).click();
+  await page.getByRole('button', { name: 'File it' }).click();
+  await page.locator('.lifecycle').scrollIntoViewIfNeeded();
+  await shot(page, 'filed-continues');
 
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DROPPED }));
   await page.goto(`/t/${TASKS[1].id}`);

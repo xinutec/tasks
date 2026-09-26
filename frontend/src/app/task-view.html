@@ -129,6 +129,33 @@
       <p class="empty">No notes. The subject is the whole of it.</p>
     }
 
+    @if (continues(); as c) {
+      @if (c.task === t.id) {
+        <section class="lifecycle">
+          <h2>You closed what this names</h2>
+          @for (was of c.closed; track was.id) {
+            <p>
+              <a [routerLink]="['/t', was.id]">#{{ was.id }}</a> was {{ was.status }} by you at
+              {{ was.at | date: 'd MMM HH:mm' }}. If this continues it, reopen #{{ was.id }} and
+              drop this one.
+            </p>
+          }
+        </section>
+      }
+    }
+
+    @if (unwritten(); as u) {
+      @if (u.task === t.id) {
+        <section class="lifecycle">
+          <h2>Closed with its text as it was</h2>
+          <p>
+            Nothing was written since {{ u.at | date: 'd MMM HH:mm' }}. Closing is a rewrite: say
+            what was found with <code>task edit {{ t.id }} --body -</code>.
+          </p>
+        </section>
+      }
+    }
+
     <!-- ⚠ **Under the body, because it is about the body.** Shown on every open
          until an edit makes the body smaller. -->
     @if (t.sprawl_said) {

@@ -194,7 +194,8 @@
 // The same card as `.previous` below: both are things the server is telling the
 // reader ABOUT this task rather than parts of it, and drawing them alike is what
 // says so without a word.
-.sprawl {
+.sprawl,
+.lifecycle {
   margin-top: 1.5rem;
   padding: 0.75rem;
   border: 1px solid var(--mat-sys-outline-variant);
@@ -211,6 +212,17 @@
     // The model answers one finding per line and they are read as a list, so
     // the newlines it sent are kept rather than collapsed into a paragraph.
     white-space: pre-wrap;
+  }
+}
+
+.lifecycle {
+  p {
+    margin: 0.25rem 0 0;
+  }
+
+  // A command is copied whole, so it is not broken across lines.
+  code {
+    white-space: nowrap;
   }
 }
 

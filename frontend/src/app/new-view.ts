@@ -124,7 +124,10 @@ export class NewView {
           this.store.refresh();
           // Straight to the task rather than back to the list: the next thing
           // wanted after filing one is usually to add to it.
-          void this.router.navigate(['/t', task.id]);
+          void this.router.navigate(['/t', task.id], {
+            // `task-view` shows these; only this response carries them.
+            state: { filed: task.id, closed: task.closed ?? [] },
+          });
         },
         // The service's own message, which says which field was wrong — a
         // generic "could not save" here would send somebody guessing.

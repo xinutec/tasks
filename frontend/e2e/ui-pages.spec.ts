@@ -9,7 +9,7 @@ import {
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 
-import { DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
+import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
  * L2 phone-width layout harness. Render the real screens at a Pixel viewport
@@ -131,4 +131,42 @@ test('filing a task — a hint under a field, and a label under that @ phone wid
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoClippedIcons(page, testInfo);
+});
+
+test('a task — closed with nothing written since it last moved @ phone width', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.route('**/api/tasks/*', (r) =>
+    r.request().method() === 'PATCH'
+      ? r.fulfill({ json: { ...DETAIL, changed: ['status'], unwritten: '2026-09-20T10:00:00Z' } })
+      : r.fulfill({ json: DETAIL }),
+  );
+  await page.goto('/t/92');
+  await page.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'done' }).click();
+  await page.getByRole('heading', { name: 'Closed with its text as it was' }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+});
+
+test('filing a task that names one you just closed @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.route('**/api/tasks', (r) =>
+    r.request().method() === 'POST'
+      ? r.fulfill({
+          json: { ...TASKS[1], closed: [{ id: 89, status: 'done', at: '2026-09-26T10:00:00Z' }] },
+        })
+      : r.fulfill({ json: TASKS }),
+  );
+  await page.goto('/new');
+  await page.getByLabel('Subject').fill('four more bugs found after #89');
+  // The form starts on the pile here, and the pile needs a reason.
+  await page.getByLabel("Why is this nobody's?").fill('any session can take it');
+  await page.getByLabel('Priority').click();
+  await page.getByRole('option', { name: 'P2', exact: false }).click();
+  await page.getByRole('button', { name: 'File it' }).click();
+  await page.getByRole('heading', { name: 'You closed what this names' }).waitFor();
+  await page.getByRole('link', { name: '#89' }).waitFor();
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
 });

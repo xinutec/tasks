@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { reason } from './errors';
 import {
@@ -15,7 +15,7 @@ import {
   holderLabel,
   sessionLabel,
 } from './holder';
-import { Assignee, Priority, Revision, Status, TaskDetail } from './models';
+import { Assignee, Closed, Priority, Revision, Status, TaskDetail } from './models';
 import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
@@ -83,7 +83,24 @@ export class TaskView {
   readonly previous = signal<Revision | null>(null);
   readonly peeking = signal(false);
 
+  /**
+   * Closed tasks the filing that just made this one names, which its filer
+   * closed recently — see `tasks::lifecycle`. Handed over by the filing page in
+   * the navigation's state, since only that response carries them. Keyed by
+   * task, so following a link away does not carry them along.
+   */
+  readonly continues = signal<{ task: number; closed: Closed[] } | null>(null);
+
+  /** When a close from this page found the text last written, if it rewrote
+   *  nothing. Keyed like `continues`. */
+  readonly unwritten = signal<{ task: number; at: string } | null>(null);
+
   constructor() {
+    const handed = inject(Router).currentNavigation()?.extras.state as
+      { filed?: number; closed?: Closed[] } | undefined;
+    if (handed?.filed !== undefined && handed.closed?.length) {
+      this.continues.set({ task: handed.filed, closed: handed.closed });
+    }
     // An effect rather than `ngOnInit`, because the router reuses this
     // component when only the parameter changes: going from #4 to #7 through a
     // link would otherwise leave #4 on the screen with #7 in the address bar.
@@ -186,8 +203,9 @@ export class TaskView {
     if (!task || this.saving()) return;
     this.saving.set(true);
     this.api.change(task.id, change).subscribe({
-      next: () => {
+      next: (updated) => {
         this.saving.set(false);
+        this.unwritten.set(updated.unwritten ? { task: task.id, at: updated.unwritten } : null);
         // Re-read rather than patching the held object: the write also appends
         // to the history, and a page that showed the new status beside a
         // history that had not moved would be telling two stories. `load`
