@@ -6,7 +6,6 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use crate::access::{Access, SeenAs, Viewer};
 use crate::digest;
@@ -41,16 +40,22 @@ fn own_name<'a>(viewer: &Viewer, called: &'a Option<String>) -> Option<&'a str> 
     }
 }
 
+/// Who the caller is, as `/api/me` answers. Mirrored by `Me` in `models.ts`.
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Me {
+    Person { id: String, name: String },
+    Session { id: String },
+}
+
 /// Who the caller is, so the client can draw itself correctly.
-pub async fn me(Access(viewer): Access) -> Json<serde_json::Value> {
+pub async fn me(Access(viewer): Access) -> Json<Me> {
     Json(match viewer {
-        // dev-lint: allow-wire-untyped pre-standard debt (DL-WIRE-UNTYPED-RESPONSE landed 2026-09-03): give this handler a Serialize response struct when the route is next touched
-        Viewer::Owner(user) => json!({
-            "kind": "person",
-            "id": user.user_id,
-            "name": user.display_name,
-        }),
-        Viewer::Session(id) => json!({ "kind": "session", "id": id }),
+        Viewer::Owner(user) => Me::Person {
+            id: user.user_id,
+            name: user.display_name,
+        },
+        Viewer::Session(id) => Me::Session { id },
     })
 }
 
@@ -132,14 +137,20 @@ pub async fn start_focus(
     Ok(Json(focus))
 }
 
+/// What `DELETE /api/focus` answers: the focus it ended, if there was one.
+#[derive(Serialize)]
+pub struct Ended {
+    was: Option<focus::Focus>,
+}
+
 pub async fn end_focus(
     Access(viewer): Access,
     State(app): State<AppState>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<Json<Ended>, AppError> {
     let session = own_session(&viewer)?;
     let was = focus::current(&app.db, &session).await?;
     focus::leave(&app.db, &session).await?;
-    Ok(Json(json!({ "was": was })))
+    Ok(Json(Ended { was }))
 }
 
 pub async fn read_focus(

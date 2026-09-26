@@ -163,8 +163,11 @@ async fn a_session_is_answered_as_itself() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("\"kind\":\"session\""), "{body}");
-    assert!(body.contains("sess-1"), "{body}");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({ "kind": "session", "id": "sess-1" })
+    );
 }
 
 #[tokio::test]
@@ -186,7 +189,11 @@ async fn the_person_is_answered_as_the_person() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("\"kind\":\"person\""), "{body}");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({ "kind": "person", "id": "pippijn", "name": "Pippijn" })
+    );
 }
 
 #[tokio::test]
