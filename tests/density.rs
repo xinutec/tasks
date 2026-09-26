@@ -104,3 +104,13 @@ fn a_model_that_will_not_stop_talking_is_cut_off() {
     // being too long with a page of its own has joined the problem.
     assert!(!advice.contains("line 5"), "at most four lines survive");
 }
+
+#[test]
+fn the_judge_speaks_only_past_a_bar() {
+    // Without one it finds something in nearly every body, just-rewritten ones
+    // included. The two reasons it may speak are both named.
+    let asked = density::prompt(1, 4000, "body");
+    assert!(asked.contains("contradicts itself"), "{asked}");
+    assert!(asked.contains("at least a third"), "{asked}");
+    assert!(asked.contains("Most bodies pass"), "{asked}");
+}

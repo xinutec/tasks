@@ -263,8 +263,9 @@ mean closed.
 
 ⚠ **`--prepend` is cheap and reading is not, so bodies accrete.** Once a task's
 body has grown past a threshold since the last edit that made it smaller, your
-next `task edit` puts the whole thing to a model against three rules and prints
-what it found. It has already written your edit: this is advice on stderr, it
+next `task edit` puts the whole thing to a model against three rules. It speaks
+only when the body contradicts itself or a rewrite would remove a third of it, so
+when it speaks, rewrite. It has already written your edit: this is advice on stderr, it
 refuses nothing, and `--no-density-check` skips the wait. What it said stays on
 the task — `task show` prints it, and your prompt marks the task `[sprawl …]` —
 until an edit makes the body smaller or a later read finds it dense.

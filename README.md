@@ -286,7 +286,9 @@ and `--reason` write before closing, so they satisfy it.
 **A body that has grown without being rewritten is read back to you.** Once one
 has gained `density::SAMPLER` characters since the last edit that made it
 smaller, `task edit` puts it to the local model against the three rules `task
-edit --help` prints, and says what came back on stderr. It never refuses: the
+edit --help` prints, and says what came back on stderr. It speaks only for a
+body that contradicts itself or would lose a third to a rewrite: without that
+bar it found fault with nearly every body, freshly rewritten ones included. It never refuses: the
 edit has landed, so a missing, slow or unreadable `claude` is silence, and
 `--no-density-check` skips the wait. The unit is characters since the last
 consolidation — a size cannot tell a body just rewritten from one that has

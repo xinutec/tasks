@@ -36,6 +36,15 @@
 //! teaches sessions to edit until it goes quiet. And the write has landed by
 //! the time this runs.
 //!
+//! ⚠ **The judge has a bar, or it always speaks.** Asked what is wrong with a
+//! body against [`RUBRIC`], a model finds something in nearly every one,
+//! bodies just rewritten included — and a check that speaks on everything is a
+//! banner. So [`prompt`] lets it speak only for a self-contradiction, however
+//! short, or a rewrite that would remove a third. Calibrated against bodies
+//! whose last edit was a consolidating rewrite, which should pass: a change to
+//! the prompt is judged by how often it speaks on those as well as on grown
+//! ones.
+//!
 //! ⚠ **Never "as few words as possible".** Told to compress, a model drops the
 //! numbers and keeps the prose, because prose reads like the argument — and a
 //! body is believed for its measurements. [`RUBRIC`] therefore asks for density
@@ -81,9 +90,15 @@ pub fn prompt(id: u64, accreted: usize, body: &str) -> String {
          the whole thing first.\n\n\
          Judge whether it still reads as one document, against this standard:\n\n\
          {RUBRIC}\n\n\
-         Answer with ONE FINDING PER LINE and at most four lines, addressed to the session \
-         that holds it.\n\
-         If it still holds together, answer with exactly: {FINE}\n\
+         Speak ONLY for one of two things. First, it contradicts itself: an earlier \
+         part states as current what a later part replaced, and both still stand. Name \
+         both, however short. Second, rewriting it to that standard would remove at \
+         least a third of it. A section that could be tighter, reordered or better \
+         placed is NOT worth a rewrite, and neither is history on a closed task. Most \
+         bodies pass.\n\n\
+         If it passes, answer with exactly: {FINE}\n\
+         Otherwise answer with ONE FINDING PER LINE and at most four lines, addressed to \
+         the session that holds it.\n\
          Otherwise say SPECIFICALLY what is wrong — where the conclusion sits, which section \
          is superseded by which, which paragraph carries no claim. Quote the headings you \
          mean. No preamble, no praise, no summary of what the task is about: the holder \
