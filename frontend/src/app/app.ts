@@ -1,10 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { Scaffold } from '@xinutec/ui-scaffold';
+import { filter, map } from 'rxjs';
 
 import { AuthStore } from './auth';
 import { BUILD_INFO } from './build-info';
@@ -40,6 +42,14 @@ export class App {
   private readonly swUpdates = inject(SwUpdates);
 
   readonly me = signal<Me | null>(null);
+  /** On the filing screen, where `+` would only reopen what is already open. */
+  readonly filing = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects.startsWith('/new')),
+    ),
+    { initialValue: false },
+  );
   readonly loading = signal(true);
 
   constructor() {

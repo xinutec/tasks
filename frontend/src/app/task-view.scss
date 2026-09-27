@@ -17,12 +17,6 @@
     color: var(--mat-sys-on-surface-variant);
   }
 
-  .status {
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--mat-sys-surface-container-high);
-  }
-
   .set {
     color: var(--mat-sys-on-surface-variant);
   }
@@ -81,17 +75,11 @@
     }
   }
 
-  .status.doing {
-    background: var(--mat-sys-primary-container);
-    color: var(--mat-sys-on-primary-container);
-  }
-
   // Struck through rather than coloured. A dropped task is not a warning and
   // not an error — nothing went wrong — it is a line that no longer applies,
   // and that is what a strike-through means to everybody who reads one.
-  .status.dropped {
+  .dropped {
     text-decoration: line-through;
-    color: var(--mat-sys-on-surface-variant);
   }
 }
 

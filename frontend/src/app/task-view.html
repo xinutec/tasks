@@ -5,7 +5,13 @@
     <header class="head">
       <h1>{{ t.subject }}</h1>
       <p class="where">
-        <span class="status" [class]="t.status">{{ statusLabel[t.status] }}</span>
+        <!-- The status control below shows open, in progress and done; a dropped
+             task selects none of them, so only that one is said here. -->
+        @if (t.status === 'dropped') {
+          <mat-chip-set aria-label="Status">
+            <mat-chip disableRipple class="dropped">{{ statusLabel[t.status] }}</mat-chip>
+          </mat-chip-set>
+        }
         <!-- Both, here: what it sorts as AND what somebody set, because this is
              the screen where "why is this at the top" gets asked. -->
         @if (t.escalated_to) {

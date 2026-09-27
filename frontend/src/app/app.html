@@ -13,9 +13,11 @@
     <!-- The one control that is always wanted, on the bar rather than behind a
          menu: filing a task is what this app is for, and a thing you do twenty
          times a day should not be two taps. -->
-    <a mat-icon-button routerLink="/new" aria-label="File a task">
-      <mat-icon>add</mat-icon>
-    </a>
+    @if (!filing()) {
+      <a mat-icon-button routerLink="/new" aria-label="File a task">
+        <mat-icon>add</mat-icon>
+      </a>
+    }
   </ui-scaffold>
   <mat-menu #nav="matMenu">
     <a mat-menu-item routerLink="/" [queryParams]="{ done: 1 }">

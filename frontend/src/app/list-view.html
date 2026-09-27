@@ -17,12 +17,14 @@
          width, where the `overflow-x: auto` row hides it. First, because it is
          the answer to what you are looking at. Tapping it clears. -->
     @if (focused(); as holder) {
-      <div class="row focus" role="group" aria-label="Showing one holder">
-        <button mat-button class="on" (click)="clearFocus()" aria-pressed="true">
-          <mat-icon>close</mat-icon>
+      <mat-chip-set aria-label="Showing one holder">
+        <mat-chip (removed)="clearFocus()">
           {{ holder }}
-        </button>
-      </div>
+          <button matChipRemove aria-label="Show everything">
+            <mat-icon>cancel</mat-icon>
+          </button>
+        </mat-chip>
+      </mat-chip-set>
     }
     <!-- One holder in focus matches no bucket, so none is selected. -->
     <div class="row">

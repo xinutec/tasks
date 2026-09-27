@@ -30,25 +30,6 @@
     scrollbar-width: none;
   }
 
-  // The focused holder's own row, which must never scroll out of sight: this
-  // chip is the only thing on screen saying why the list is short.
-  //
-  // ⚠ **A whole uuid fits** at phone width, which the snapshot establishes
-  // (`ui-snapshots/who-focused-unnamed.png`), not a rule here. A longer label
-  // would clip at the tail and keep the icon, which is FIRST, so the filter
-  // stays clearable. Do not reach into Material's private DOM to clip it.
-  .row.focus {
-    overflow-x: hidden;
-  }
-
-  button {
-    flex: 0 0 auto;
-    &.on {
-      background: var(--mat-sys-secondary-container);
-      color: var(--mat-sys-on-secondary-container);
-    }
-  }
-
   .count {
     margin-left: 6px;
     opacity: 0.7;

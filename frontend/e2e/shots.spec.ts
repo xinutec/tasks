@@ -148,7 +148,7 @@ test('every screen, at phone width', async ({ page }) => {
   // showing, or an empty result reads as no work existing. Captured by clicking
   // rather than visiting the URL, so the picture shows the link works.
   await page.getByRole('link', { name: /memview/ }).click();
-  await page.getByRole('button', { name: /memview/ }).waitFor();
+  await page.getByLabel('Showing one holder').getByText('memview').waitFor();
   await shot(page, 'who-focused', true);
 
   // The same screen for a session that never named itself: 36 characters of

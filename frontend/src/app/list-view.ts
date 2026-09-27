@@ -2,6 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -43,6 +44,7 @@ import { TaskStore } from './task-store';
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
+    MatChipsModule,
     MatIconModule,
     MatProgressBarModule,
   ],
