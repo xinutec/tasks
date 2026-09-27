@@ -30,11 +30,10 @@ pub enum Holder {
 
 /// Resolve `typed` against the known `(id, name)` pairs.
 ///
-/// ⚠ **An id is not always a UUID.** A script names itself
-/// (`TASKS_SESSION=claude-sync`), and a stray `--session recall` makes a
-/// conversation whose id is another one's name. A word that is one
-/// conversation's id and another's name is refused with both, rather than
-/// handed to the id: that is how work reached a phantom silently.
+/// ⚠ **A word that is one conversation's id and another's name is refused with
+/// both.** Handing it to the id would silently misroute everything addressed to
+/// the name. Ids are not all UUIDs: a script names itself
+/// (`TASKS_SESSION=claude-sync`), so the two can collide.
 pub fn resolve<'a>(
     known: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
     typed: &str,

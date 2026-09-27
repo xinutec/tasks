@@ -1,9 +1,8 @@
 //! Which ids a conversation may be recorded under.
 //!
 //! Ids are not all UUIDs: a script names itself (`TASKS_SESSION=claude-sync`).
-//! But an id that is ANOTHER conversation's name makes a phantom that every
-//! `--to <name>` then resolves to. That is how recall's work went missing from
-//! recall's own list, after a stray `--session recall`.
+//! An id that is ANOTHER conversation's name is refused, because every
+//! `--to <name>` would resolve to it instead of to the named conversation.
 
 mod common;
 

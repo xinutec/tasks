@@ -47,10 +47,10 @@ struct Row {
 /// which knows only the id, would blank it on every prompt. `Some("")` counts
 /// as absent: the CLI reports an empty name before a session has one.
 ///
-/// ⚠ **An id that is another conversation's name is refused.** Ids are not all
-/// UUIDs (a script names itself, `TASKS_SESSION=claude-sync`), but a stray
-/// `--session recall` recorded a phantom that every `--to recall` then
-/// resolved to. A UUID cannot be a name, so only other ids pay for the lookup.
+/// ⚠ **An id that is another conversation's name is refused**, or that id
+/// would capture every `--to <name>` meant for the named one. Ids are not all
+/// UUIDs (a script names itself, `TASKS_SESSION=claude-sync`). A UUID cannot be
+/// a name, so only other ids pay for the lookup.
 pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()> {
     let name = name.map(str::trim).filter(|n| !n.is_empty());
     if !is_uuid(id) {

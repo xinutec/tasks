@@ -39,10 +39,9 @@ fn an_id_still_works_and_needs_no_name() {
     );
 }
 
-/// Ids are not all UUIDs: a script names itself (`TASKS_SESSION=claude-sync`),
-/// and a mistyped `--session recall` made a conversation whose id is another
-/// one's name. Every `--to recall` then went to that phantom, silently. So a
-/// word that is one conversation's id and another's name is refused, with both.
+/// A word that is one conversation's id and another's name is refused, with
+/// both: handing it to the id would misroute everything addressed to the name.
+/// Ids are not all UUIDs, so the two can collide.
 #[test]
 fn an_id_that_is_another_conversations_name_is_refused_with_both() {
     let odd = vec![("health", None), (HEALTH, Some("health"))];

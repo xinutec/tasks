@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::MySqlPool;
 
 use crate::error::AppError;
-use crate::tasks::types::{Actor, Status};
+use crate::tasks::types::{Actor, Moved, Status};
 
 type Result<T> = std::result::Result<T, AppError>;
 
@@ -136,7 +136,8 @@ pub async fn unwritten(pool: &MySqlPool, id: u64) -> Result<Option<DateTime<Utc>
     .fetch_optional(pool)
     .await
     .context("reading when a task last changed status")?;
-    let stale = last.kind == "created" || moved.is_some_and(|(moved,)| last.id < moved);
+    let stale =
+        last.kind == Moved::Created.as_str() || moved.is_some_and(|(moved,)| last.id < moved);
     // The session zone is pinned to UTC in `db::connect`.
     Ok(stale.then(|| last.at.and_utc()))
 }

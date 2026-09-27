@@ -1367,11 +1367,34 @@ async fn clocked(
     }
 }
 
+/// Exit quietly when whoever reads stdout has stopped: `task list | head -1`.
+///
+/// `println!` panics on a closed pipe, which prints a stack trace for a reader
+/// that got exactly what it asked for. Resetting SIGPIPE would need `unsafe`,
+/// which this crate forbids, so the panic is caught instead; any other panic
+/// keeps the default report.
+fn quiet_on_broken_pipe() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let said = info
+            .payload()
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        if said.starts_with("failed printing to stdout") && said.contains("Broken pipe") {
+            std::process::exit(0);
+        }
+        default(info);
+    }));
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // ⚠ First statement in the process: what a session waits for includes
     // argument parsing and building the client.
     let started = std::time::Instant::now();
+    quiet_on_broken_pipe();
     let cli = Cli::parse();
     let session = cli.session.clone().or_else(session_id);
     let client = Client {
@@ -1508,7 +1531,10 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 let was: tasks::tasks::types::Revision = serde_json::from_value(was.clone())
                     .context("the service's previous version did not parse")?;
                 if tasks::tasks::undo::needs_saying(&was) {
-                    bail!(tasks::tasks::undo::refusal(&was, id.id()));
+                    return Err(commands::declined(tasks::tasks::undo::refusal(
+                        &was,
+                        id.id(),
+                    )));
                 }
             }
             // `replace_body`: see `Change::replace_body`.
