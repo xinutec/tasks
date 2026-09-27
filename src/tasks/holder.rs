@@ -30,21 +30,22 @@ pub enum Holder {
 
 /// Resolve `typed` against the known `(id, name)` pairs.
 ///
-/// **An exact id wins over a name**: the id is the identity, should a name ever
-/// look like one.
+/// ⚠ **An id is not always a UUID.** A script names itself
+/// (`TASKS_SESSION=claude-sync`), and a stray `--session recall` makes a
+/// conversation whose id is another one's name. A word that is one
+/// conversation's id and another's name is refused with both, rather than
+/// handed to the id: that is how work reached a phantom silently.
 pub fn resolve<'a>(
     known: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
     typed: &str,
 ) -> Holder {
     let known: Vec<(&str, Option<&str>)> = known.into_iter().collect();
-    if known.iter().any(|(id, _)| *id == typed) {
-        return Holder::Session(typed.to_string());
-    }
-    let hit: Vec<&str> = known
+    let mut hit: Vec<&str> = known
         .iter()
-        .filter(|(_, name)| *name == Some(typed))
+        .filter(|(id, name)| *id == typed || *name == Some(typed))
         .map(|(id, _)| *id)
         .collect();
+    hit.dedup();
     match hit.as_slice() {
         [id] => Holder::Session((*id).to_string()),
         [] => {

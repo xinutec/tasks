@@ -39,15 +39,29 @@ fn an_id_still_works_and_needs_no_name() {
     );
 }
 
+/// Ids are not all UUIDs: a script names itself (`TASKS_SESSION=claude-sync`),
+/// and a mistyped `--session recall` made a conversation whose id is another
+/// one's name. Every `--to recall` then went to that phantom, silently. So a
+/// word that is one conversation's id and another's name is refused, with both.
 #[test]
-fn an_id_beats_a_name_that_collides_with_it() {
-    // They cannot collide in practice — one is a uuid — but if they ever did,
-    // the identity is the answer and the attribute is not.
-    let odd = vec![("health", Some("something-else")), (HEALTH, Some("health"))];
+fn an_id_that_is_another_conversations_name_is_refused_with_both() {
+    let odd = vec![("health", None), (HEALTH, Some("health"))];
+    match resolve(odd, "health") {
+        Holder::Ambiguous(ids) => {
+            assert!(ids.contains(&"health".to_string()), "{ids:?}");
+            assert!(ids.contains(&HEALTH.to_string()), "{ids:?}");
+        }
+        other => panic!("an id shadowed another conversation's name: {other:?}"),
+    }
+}
+
+#[test]
+fn a_non_uuid_id_nobody_else_is_named_still_resolves() {
+    // `claude-sync` is a script's own id, and nothing else answers to it.
+    let fleet = vec![("claude-sync", None), (HEALTH, Some("health"))];
     assert_eq!(
-        resolve(odd, "health"),
-        Holder::Session("health".to_string()),
-        "the name won over an exact id"
+        resolve(fleet, "claude-sync"),
+        Holder::Session("claude-sync".to_string())
     );
 }
 

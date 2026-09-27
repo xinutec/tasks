@@ -773,8 +773,8 @@ impl Client {
                 names.join(", ")
             ),
             Holder::Ambiguous(ids) => bail!(
-                "`{typed}` is the name of {} conversations, so this would guess: {}. \
-                 Give the id instead — `task sessions` prints both.",
+                "`{typed}` answers to {} conversations, as a name or an id, so this \
+                 would guess: {}. Give the full id instead — `task sessions` prints both.",
                 ids.len(),
                 ids.join(", ")
             ),

@@ -46,8 +46,29 @@ struct Row {
 /// ⚠ **An absent name does not erase the stored one**, or the prompt hook,
 /// which knows only the id, would blank it on every prompt. `Some("")` counts
 /// as absent: the CLI reports an empty name before a session has one.
+///
+/// ⚠ **An id that is another conversation's name is refused.** Ids are not all
+/// UUIDs (a script names itself, `TASKS_SESSION=claude-sync`), but a stray
+/// `--session recall` recorded a phantom that every `--to recall` then
+/// resolved to. A UUID cannot be a name, so only other ids pay for the lookup.
 pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()> {
     let name = name.map(str::trim).filter(|n| !n.is_empty());
+    if !is_uuid(id) {
+        let named: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM sessions WHERE name = ? AND id <> ? LIMIT 1")
+                .bind(id)
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+                .context("checking a session id against the names")?;
+        if let Some((other,)) = named {
+            return Err(AppError::BadRequest(format!(
+                "`{id}` is the name of conversation {other}, not an id. A session id is \
+                 the conversation's own, `$CLAUDE_CODE_SESSION_ID`: drop `--session` or \
+                 `TASKS_SESSION`, or pass {other}. Nothing was recorded."
+            )));
+        }
+    }
     sqlx::query(
         "INSERT INTO sessions (id, name) VALUES (?, ?) \
          ON DUPLICATE KEY UPDATE name = COALESCE(VALUES(name), name), last_seen = NOW()",
@@ -193,4 +214,14 @@ pub async fn list(pool: &MySqlPool) -> Result<Vec<Session>> {
             open: row.open,
         })
         .collect())
+}
+
+/// Whether `id` has a UUID's shape, the id Claude Code gives a conversation.
+fn is_uuid(id: &str) -> bool {
+    let groups: Vec<&str> = id.split('-').collect();
+    groups.len() == 5
+        && groups
+            .iter()
+            .zip([8, 4, 4, 4, 12])
+            .all(|(g, len)| g.len() == len && g.chars().all(|c| c.is_ascii_hexdigit()))
 }
