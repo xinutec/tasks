@@ -17,7 +17,7 @@ import { WhoView } from './who-view';
 export const routes: Routes = [
   { path: '', component: ListView },
   { path: 't/:id', component: TaskView, data: { up: { path: '/', label: 'all tasks' } } },
-  { path: 'new', component: NewView },
-  { path: 'who', component: WhoView },
+  { path: 'new', component: NewView, data: { up: { path: '/', label: 'all tasks' } } },
+  { path: 'who', component: WhoView, data: { up: { path: '/', label: 'all tasks' } } },
   { path: '**', redirectTo: '' },
 ];

@@ -139,6 +139,8 @@ test('filing a task — a hint under a field, and a label under that @ phone wid
   await mockApi(page);
   await page.goto('/new');
   await page.getByRole('heading', { name: 'File a task' }).waitFor();
+  // Drilled into from `+`, so the bar leads with the arrow back to the list.
+  await expectUpInTheBar(page);
   await page.getByLabel('Subject').fill(TASKS[1].subject);
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);

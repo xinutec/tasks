@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 
 import { reason } from './errors';
 import { focusOn, said, whoParam } from './holder';
@@ -68,6 +69,7 @@ export class WhoView {
   readonly total = computed(() => this.rows().reduce((sum, row) => sum + row.total, 0));
 
   constructor() {
+    scaffoldTitle(() => 'Who has what');
     this.store.ensure();
   }
 

@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { Router } from '@angular/router';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 
 import { reason } from './errors';
 import { PRIORITIES, PRIORITY_GLOSS, sessionLabel } from './holder';
@@ -66,6 +67,7 @@ export class NewView {
   readonly failed = signal<string | null>(null);
 
   constructor() {
+    scaffoldTitle(() => 'File a task');
     this.store.ensure();
   }
 
