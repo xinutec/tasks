@@ -5,6 +5,7 @@ import {
   expectIconFontLoaded,
   expectNoHorizontalOverflow,
   expectNoTextOverlaps,
+  expectUpInTheBar,
   expectNoClippedIcons,
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
@@ -51,7 +52,7 @@ const FILTER_SCROLLERS = ['.filters .row'];
 test('the list — filtered to one holder @ phone width', async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'with a session' }).click();
+  await page.getByRole('radio', { name: 'with a session' }).click();
   await page.getByText('The console task reader').waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, FILTER_SCROLLERS);
@@ -73,6 +74,8 @@ test('a task — a 200-character subject, prose, and a raw session id in the his
   // By role: a Material icon renders its ligature into the accessible tree, so
   // a text query for a common word can match an icon as well as the heading.
   await page.getByRole('heading', { name: 'History' }).waitFor();
+  // `/t/:id` declares up, so the bar leads with the arrow and names the task.
+  await expectUpInTheBar(page);
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
   await expectNoClippedIcons(page, testInfo);
@@ -143,7 +146,10 @@ test('a task — closed with nothing written since it last moved @ phone width',
       : r.fulfill({ json: DETAIL }),
   );
   await page.goto('/t/92');
-  await page.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'done' }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Status' })
+    .getByRole('radio', { name: 'done' })
+    .click();
   await page.getByRole('heading', { name: 'Closed with its text as it was' }).waitFor();
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);

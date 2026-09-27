@@ -1,11 +1,13 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Router, RouterLink } from '@angular/router';
+import { scaffoldTitle } from '@xinutec/ui-scaffold';
 import { switchMap } from 'rxjs';
 
 import { reason } from './errors';
@@ -36,6 +38,7 @@ import { TasksApi } from './tasks-api';
   imports: [
     DatePipe,
     MatButtonModule,
+    MatButtonToggleModule,
     MatCardModule,
     MatIconModule,
     MatMenuModule,
@@ -100,6 +103,9 @@ export class TaskView {
   readonly unwritten = signal<{ task: number; at: string } | null>(null);
 
   constructor() {
+    // The bar names the screen by the task's number: the subject is the page's
+    // headline and too long for a bar.
+    scaffoldTitle(() => `#${this.id()}`);
     const handed = this.router.currentNavigation()?.extras.state as
       { filed?: number; closed?: Closed[] } | undefined;
     if (handed?.filed !== undefined && handed.closed?.length) {

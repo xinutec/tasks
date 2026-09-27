@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -38,7 +39,13 @@ import { TaskStore } from './task-store';
   selector: 'app-list-view',
   templateUrl: './list-view.html',
   styleUrl: './list-view.scss',
-  imports: [RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [
+    RouterLink,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatIconModule,
+    MatProgressBarModule,
+  ],
 })
 export class ListView {
   private store = inject(TaskStore);
@@ -66,6 +73,12 @@ export class ListView {
    * session's id is 36 characters of uuid, and the whole point of arriving here
    * from `/who` is that you were reading a name.
    */
+  /** The bucket the toggle row shows as selected, or none while one holder is in focus. */
+  readonly bucket = computed(() => {
+    const who = this.who();
+    return who.kind === 'bucket' ? who.bucket : null;
+  });
+
   readonly focused = computed(() => {
     const who = this.who();
     if (who.kind === 'bucket') return null;
@@ -118,11 +131,6 @@ export class ListView {
       queryParams: { who: whoParam(who) },
       replaceUrl: true,
     });
-  }
-
-  isOn(bucket: Bucket): boolean {
-    const who = this.who();
-    return who.kind === 'bucket' && who.bucket === bucket;
   }
 
   /** The chips set a bucket; the focused chip clears back to everything. */

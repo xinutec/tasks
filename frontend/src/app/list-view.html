@@ -24,17 +24,17 @@
         </button>
       </div>
     }
-    <div class="row" role="group" aria-label="Whose">
-      @for (bucket of buckets; track bucket) {
-        <button
-          mat-button
-          [class.on]="isOn(bucket)"
-          (click)="pickBucket(bucket)"
-          [attr.aria-pressed]="isOn(bucket)"
-        >
-          {{ whoLabel[bucket] }}
-        </button>
-      }
+    <!-- One holder in focus matches no bucket, so none is selected. -->
+    <div class="row">
+      <mat-button-toggle-group
+        aria-label="Whose"
+        [value]="bucket()"
+        (change)="pickBucket($event.value)"
+      >
+        @for (bucket of buckets; track bucket) {
+          <mat-button-toggle [value]="bucket">{{ whoLabel[bucket] }}</mat-button-toggle>
+        }
+      </mat-button-toggle-group>
     </div>
   </nav>
 

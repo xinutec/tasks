@@ -108,7 +108,10 @@ test('every screen, at phone width', async ({ page }) => {
       : r.fulfill({ json: DETAIL }),
   );
   await page.goto(`/t/${TASKS[1].id}`);
-  await page.getByRole('group', { name: 'Status' }).getByRole('button', { name: 'done' }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Status' })
+    .getByRole('radio', { name: 'done' })
+    .click();
   await page
     .getByRole('heading', { name: 'Closed with its text as it was' })
     .scrollIntoViewIfNeeded();

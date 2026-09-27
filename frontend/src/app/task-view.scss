@@ -17,10 +17,6 @@
     color: var(--mat-sys-on-surface-variant);
   }
 
-  .id {
-    font-variant-numeric: tabular-nums;
-  }
-
   .status {
     padding: 2px 8px;
     border-radius: 999px;
@@ -105,16 +101,6 @@
   gap: 8px;
   align-items: center;
   margin-bottom: 16px;
-
-  .statuses {
-    display: flex;
-    gap: 2px;
-  }
-
-  button.on {
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-  }
 
   .move {
     // A session name is unbreakable and can be long; the button says who holds

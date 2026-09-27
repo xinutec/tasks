@@ -5,7 +5,6 @@
     <header class="head">
       <h1>{{ t.subject }}</h1>
       <p class="where">
-        <span class="id">#{{ t.id }}</span>
         <span class="status" [class]="t.status">{{ statusLabel[t.status] }}</span>
         <!-- Both, here: what it sorts as AND what somebody set, because this is
              the screen where "why is this at the top" gets asked. -->
@@ -41,19 +40,22 @@
     </header>
 
     <div class="acts">
-      <div class="statuses" role="group" aria-label="Status">
+      <!-- A dropped task matches none of the three, so none is selected. Each
+           status has its own icon, so the check mark would be a second one. -->
+      <mat-button-toggle-group
+        aria-label="Status"
+        hideSingleSelectionIndicator
+        [value]="t.status"
+        [disabled]="saving()"
+        (change)="setStatus($event.value)"
+      >
         @for (status of statuses; track status) {
-          <button
-            mat-button
-            [class.on]="t.status === status"
-            [disabled]="saving()"
-            (click)="setStatus(status)"
-          >
+          <mat-button-toggle [value]="status">
             <mat-icon>{{ statusIcon[status] }}</mat-icon>
             {{ statusLabel[status] }}
-          </button>
+          </mat-button-toggle>
         }
-      </div>
+      </mat-button-toggle-group>
 
       <!-- Ranking it. Beside the move rather than among the status buttons:
            the status says where a task IS and this says when it should be
