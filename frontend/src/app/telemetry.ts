@@ -27,6 +27,11 @@ export class Telemetry {
   // through the CLI and has no browser to trace.
   private readonly core = new TelemetryCore(this.doc);
 
+  /** Something the user met and nobody else saw: an uncaught error or a failed request. */
+  failure(kind: 'error' | 'http', what: string): void {
+    this.core.record(kind, this.router.url, what);
+  }
+
   /** Wire the two capture points. Called once from the app shell; idempotent. */
   init(): void {
     if (this.core.started) return;
