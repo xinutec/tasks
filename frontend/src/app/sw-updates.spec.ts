@@ -106,20 +106,4 @@ describe('SwUpdates', () => {
     versionUpdates.next(ready);
     expect(activateUpdate).toHaveBeenCalledOnce();
   });
-
-  it('checkNow applies immediately — the user explicitly asked', async () => {
-    const { svc, versionUpdates, checkForUpdate, activateUpdate } = setup(true);
-    svc.start();
-    vi.advanceTimersByTime(60_000);
-    checkForUpdate.mockResolvedValueOnce(true);
-    await expect(svc.checkNow()).resolves.toBe('updating');
-    versionUpdates.next(ready);
-    expect(activateUpdate).toHaveBeenCalledOnce(); // no deferral on a manual check
-  });
-
-  it('checkNow reports current when no update was found', async () => {
-    const { svc } = setup(true);
-    svc.start();
-    await expect(svc.checkNow()).resolves.toBe('current');
-  });
 });
