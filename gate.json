@@ -71,8 +71,6 @@
         "tasks",
         "--password",
         "tasks",
-        "--port",
-        "3321",
         "--url-env",
         "TASKS_TEST_DATABASE_URL",
         "--",
