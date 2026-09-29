@@ -1043,7 +1043,7 @@ fn spare_note(kind: AssigneeKind, spare: Option<&str>) -> Result<Option<String>>
 pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Task> {
     let subject = check_subject(&new.subject)?;
     // Filing a task takes it on, unless the caller says where it goes —
-    // The user's rule: a task a session deals with is that session's. The pile is
+    // the user's rule: a task a session deals with is that session's. The pile is
     // something said (`--to nobody`), not fallen into.
     //
     // ⚠ **A filing session needs a row in `sessions`**: the default holder is a

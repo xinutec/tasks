@@ -576,7 +576,7 @@ there is: a row exists for each one that ever asked for a digest, and most never
 held a task. `task sessions --all` is the whole table, and the reason to want it
 is to find the id of a conversation that has never been given anything, so you
 can hand it something. The same list is at <https://tasks.xinutec.org> for
-The user, which is why a task's subject is written to be read by somebody who is
+the user, which is why a task's subject is written to be read by somebody who is
 not you.
 
 `task --help` is the authority on the commands. `README.md` beside this file is
