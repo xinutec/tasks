@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "ng build",
-    "lint": "eslint src e2e playwright.config.ts",
+    "lint": "eslint src e2e playwright.config.ts && stylelint \"src/**/*.scss\"",
     "ng": "ng",
     "prebuild": "node scripts/stamp-version.mjs",
     "prelint": "node scripts/stamp-version.mjs",
@@ -18,7 +18,8 @@
     "watch": "ng build --watch --configuration development",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -p tsconfig.e2e.json"
+    "typecheck": "tsc -p tsconfig.e2e.json",
+    "lint:styles": "stylelint \"src/**/*.scss\""
   },
   "dependencies": {
     "@angular/cdk": "^22.1.7",
@@ -46,7 +47,9 @@
     "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "jsdom": "^30.1.0",
+    "postcss-scss": "^4.0.9",
     "prettier": "^3.9.9",
+    "stylelint": "^17.14.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.11"
