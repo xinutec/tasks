@@ -9,8 +9,8 @@ mod common;
 use tasks::tasks::repo::{self, Change, NewTask};
 use tasks::tasks::types::{Actor, Priority, Ranking};
 
-fn pippijn() -> Actor {
-    Actor::Person("pippijn".into())
+fn human() -> Actor {
+    Actor::Person("user".into())
 }
 
 async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
@@ -27,7 +27,7 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
             assignee: None,
             spare: None,
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("filing")
@@ -50,7 +50,7 @@ async fn edit_to(pool: &sqlx::MySqlPool, id: u64, body: &str) -> usize {
             replace_body: true,
             ..Change::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("editing")
@@ -108,7 +108,7 @@ async fn an_edit_that_left_the_body_alone_does_not_end_a_run() {
             subject: Some("renamed, and not consolidated".into()),
             ..Change::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("renaming");

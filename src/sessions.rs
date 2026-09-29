@@ -126,7 +126,7 @@ macro_rules! tally {
     };
 }
 
-/// Who holds what: every session that has held something, Pippijn, and the pile.
+/// Who holds what: every session that has held something, the user, and the pile.
 ///
 /// Three queries rather than one union: the groups are counted from different
 /// columns — `assignee_session`, `assignee_person`, and the absence of both.
@@ -138,7 +138,7 @@ macro_rules! tally {
 /// anything; listing them would bury the holders under `0/0` lines. The
 /// predicate is *ever assigned*, not *anything open*, so a cleared plate still
 /// says who cleared it. [`list`] is every session known (`task sessions --all`).
-pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
+pub async fn holders(pool: &MySqlPool, person: &str) -> Result<Vec<Holder>> {
     // `COUNT(t.id)` over the left join is *ever assigned anything* —
     // deliberately not spelled with the status vocabulary.
     let sessions: Vec<(String, Option<String>, i64, i64, i64)> = sqlx::query_as(tally!(
@@ -169,8 +169,8 @@ pub async fn holders(pool: &MySqlPool) -> Result<Vec<Holder>> {
             .context("counting what the person holds")?;
     out.push(Holder {
         kind: "person".into(),
-        id: Some("pippijn".into()),
-        name: Some("Pippijn".into()),
+        id: Some(person.into()),
+        name: Some(person.into()),
         open,
         total: open + done,
     });

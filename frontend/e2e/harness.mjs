@@ -10,7 +10,7 @@ export default {
   // Fallback stub only — the specs page.route everything. Signed-in person with
   // an empty list, so an un-mocked run still renders.
   api: {
-    '/api/me': { kind: 'person', id: 'pippijn', name: 'Pippijn' },
+    '/api/me': { kind: 'person', id: 'user', name: 'User' },
     '/api/tasks': [],
     '/api/repos': [],
     '/api/sessions': [],

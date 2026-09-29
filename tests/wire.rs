@@ -37,7 +37,7 @@ fn config(database_url: &str) -> Config {
             nc_client_id: "id".into(),
             nc_client_secret: "secret".into(),
             nc_redirect_uri: "https://tasks.example/auth/callback".into(),
-            allowed_users: vec!["pippijn".into()],
+            allowed_users: vec!["user".into()],
         }),
         agent_token: Some(TOKEN.into()),
     }

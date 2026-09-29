@@ -16,8 +16,8 @@ mod common;
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
 use tasks::tasks::types::{Actor, Moved, Priority, Ranking, Status};
 
-fn pippijn() -> Actor {
-    Actor::Person("pippijn".into())
+fn human() -> Actor {
+    Actor::Person("user".into())
 }
 
 fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
@@ -50,7 +50,7 @@ async fn a_rank_is_stored_and_comes_back() {
     let task = repo::create(
         &pool,
         filed("Ranked when filed", Some(Priority::P0)),
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("filing");
@@ -69,7 +69,7 @@ async fn nothing_is_ranked_unless_somebody_ranks_it() {
     // The decision this feature turns on: a DEFAULT would have every unranked
     // row claim a level.
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("Filed the ordinary way", None), &pippijn())
+    let task = repo::create(&pool, filed("Filed the ordinary way", None), &human())
         .await
         .expect("filing");
     assert_eq!(task.priority, None, "an unasked-for rank appeared");
@@ -91,7 +91,7 @@ async fn ranks_rise_and_sink_around_the_untriaged() {
         ("filed last, next", Some(Priority::P1)),
         ("third filed, untouched", None),
     ] {
-        repo::create(&pool, filed(subject, priority), &pippijn())
+        repo::create(&pool, filed(subject, priority), &human())
             .await
             .expect("filing");
     }
@@ -128,7 +128,7 @@ async fn the_sql_order_is_the_one_rust_describes() {
         Some(Priority::P1),
     ];
     for (n, priority) in fixture.iter().enumerate() {
-        repo::create(&pool, filed(&format!("task {n}"), *priority), &pippijn())
+        repo::create(&pool, filed(&format!("task {n}"), *priority), &human())
             .await
             .expect("filing");
     }
@@ -147,7 +147,7 @@ async fn the_sql_order_is_the_one_rust_describes() {
 #[tokio::test]
 async fn ranking_a_task_afterwards_says_so_in_its_history() {
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("Rank me later", None), &pippijn())
+    let task = repo::create(&pool, filed("Rank me later", None), &human())
         .await
         .expect("filing");
 
@@ -158,7 +158,7 @@ async fn ranking_a_task_afterwards_says_so_in_its_history() {
             priority: Some(Priority::P1),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("ranking");
@@ -187,7 +187,7 @@ async fn re_ranking_a_task_to_what_it_already_is_writes_no_history() {
     // The rule the rest of `update` follows: a change that changes nothing is
     // not an event, because a history full of non-events is one nobody reads.
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("Already P2", Some(Priority::P2)), &pippijn())
+    let task = repo::create(&pool, filed("Already P2", Some(Priority::P2)), &human())
         .await
         .expect("filing");
 
@@ -198,7 +198,7 @@ async fn re_ranking_a_task_to_what_it_already_is_writes_no_history() {
             priority: Some(Priority::P2),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("re-ranking");
@@ -213,7 +213,7 @@ async fn re_ranking_a_task_to_what_it_already_is_writes_no_history() {
 #[tokio::test]
 async fn ranking_changes_the_order_and_nothing_else() {
     let pool = common::fresh_db().await;
-    let task = repo::create(&pool, filed("Someday", Some(Priority::P4)), &pippijn())
+    let task = repo::create(&pool, filed("Someday", Some(Priority::P4)), &human())
         .await
         .expect("filing");
     assert_eq!(order(&pool).await.len(), 1, "a P4 task left the open list");
@@ -225,7 +225,7 @@ async fn ranking_changes_the_order_and_nothing_else() {
             status: Some(Status::Done),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("finishing");

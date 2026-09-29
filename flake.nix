@@ -5,9 +5,9 @@
 # is here rather than in the container image because the two halves run in
 # different places: the service is a Docker image on isis, and the CLI has to be
 # on the PATH of every shell on this Mac, installed through home-manager like
-# every other tool. See `pippijn/mac-config`.
+# every other tool. See `~/.config/home-manager`.
 {
-  description = "tasks — the work Claude sessions and Pippijn hand between each other";
+  description = "tasks — the work Claude sessions and the user hand between each other";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

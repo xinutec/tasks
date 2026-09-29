@@ -62,7 +62,7 @@ export class TasksApi {
     return this.http.get<Session[]>('/api/sessions');
   }
 
-  /** Who holds what: every session, Pippijn, and the pile. */
+  /** Who holds what: every session, the user, and the pile. */
   holders(): Observable<Holder[]> {
     return this.http.get<Holder[]>('/api/holders');
   }
@@ -71,7 +71,7 @@ export class TasksApi {
    * Give a conversation a name.
    *
    * One column, and it moves nothing: the id is the identity. A session may
-   * only rename itself; Pippijn may rename any, which is what this is for.
+   * only rename itself; the user may rename any, which is what this is for.
    */
   rename(id: string, name: string): Observable<void> {
     return this.http.patch<void>(`/api/sessions/${id}`, { name });

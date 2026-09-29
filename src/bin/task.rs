@@ -1,6 +1,6 @@
 //! `task` — the CLI half of this service, and the half a Claude session uses.
 //!
-//! **It mirrors the app, and that is a rule rather than a convenience.** Pippijn
+//! **It mirrors the app, and that is a rule rather than a convenience.** The user
 //! reads the list on a phone; a session has no browser at all. If the two
 //! surfaces diverge, one party is working from a picture of the work the other
 //! cannot see — which is the exact failure this service exists to prevent.
@@ -25,11 +25,11 @@
 //! task list --handed-out          what you filed and somebody else is holding
 //! task show <id> [--previous]               one task, its prose and its history
 //! task undo <id>                            put back what the last edit replaced
-//! task add <subject> [--body -] [--to me|pippijn|<session>|nobody] [--priority P3]
+//! task add <subject> [--body -] [--to me|human|<session>|nobody] [--priority P3]
 //! task start <id> / task done <id> [--to W] move it along
 //! task drop <id>                            close it without doing it
 //! task reopen <id>                          put it back to open
-//! task move <id> me|pippijn|<session>|nobody  hand it over
+//! task move <id> me|human|<session>|nobody  hand it over
 //! task edit <id> [--subject S] [--body -] [--priority P0]  change the words, rank it
 //! task digest                              exactly what a prompt receives
 //! task rename <name>                        tell the service what I call myself
@@ -69,7 +69,7 @@ fn long_about() -> String {
         .map(|p| format!("\n  {p}  {}", p.gloss()))
         .collect();
     format!(
-        "The work Claude sessions and Pippijn hand between each other.
+        "The work Claude sessions and the user hand between each other.
 
 Two facts decide how to use this, and neither is guessable from the commands:
 
@@ -151,7 +151,7 @@ evidence.",
 #[derive(Parser)]
 #[command(
     name = "task",
-    about = "The work Claude sessions and Pippijn hand between each other",
+    about = "The work Claude sessions and the user hand between each other",
     long_about = long_about()
 )]
 struct Cli {
@@ -219,7 +219,7 @@ enum Command {
         #[arg(long)]
         done: bool,
         /// What ONE other holder is carrying: a session by name or id,
-        /// `pippijn`, or `nobody` for the pile.
+        /// `human`, or `nobody` for the pile.
         ///
         /// `--assignee` and `--holder` are accepted too. Strictly that holder,
         /// with no pile folded in: the pile is on no holder's plate.
@@ -310,7 +310,7 @@ enum Command {
         /// without fighting shell quoting.
         #[arg(long)]
         body: Option<String>,
-        /// Who it is for: `me` (the default — whoever is filing), `pippijn`,
+        /// Who it is for: `me` (the default — whoever is filing), `human`,
         /// `nobody` for the pile, or a session id.
         #[arg(long)]
         to: Option<To>,
@@ -434,7 +434,7 @@ enum Command {
     /// than nobody, so reopening something you finished puts it back on your
     /// own plate. `task move <id> nobody` sends it to the pile.
     Reopen { id: TaskRef },
-    /// Hand a task over: `me` (this conversation), `pippijn`, `nobody`, or a
+    /// Hand a task over: `me` (this conversation), `human`, `nobody`, or a
     /// session — **by name or by id**, whichever you have.
     ///
     /// A name works because every list prints one. A name that matches nothing,
@@ -559,7 +559,7 @@ enum Command {
     },
     /// Exactly what a prompt receives — for checking the cost, not for reading.
     Digest,
-    /// Who holds what: each session that has, Pippijn, and the pile — open/total.
+    /// Who holds what: each session that has, the user, and the pile — open/total.
     Sessions {
         /// Every conversation there has ever been, including the many never
         /// given anything — where a brand-new conversation's id can be found to
@@ -738,10 +738,14 @@ impl Client {
     ///
     /// ⚠ **It refuses rather than falling through to "probably an id"**, with the
     /// known names to hand.
-    async fn resolve(&self, to: To) -> Result<To> {
-        let To::Session(typed) = &to else {
-            return Ok(to);
+    async fn resolve(&self, to: To) -> Result<Target> {
+        let typed = match to {
+            To::Nobody => return Ok(Target::Nobody),
+            To::Me => return Ok(Target::Me),
+            To::Human => return self.human().await.map(Target::Person),
+            To::Session(typed) => typed,
         };
+        let typed = &typed;
         // Holders first: it is the short list, and handing work to a
         // conversation that already carries some is the ordinary case.
         let mut known = known_sessions(
@@ -765,7 +769,7 @@ impl Client {
             .map(|(id, name)| (id.as_str(), name.as_deref()))
             .collect();
         match holder::resolve(pairs, typed) {
-            Holder::Session(id) => Ok(To::Session(id)),
+            Holder::Session(id) => Ok(Target::Session(id)),
             Holder::Unknown(names) => bail!(
                 "no session called `{typed}`, and it is not an id this service knows. \
                  Assigning it anyway would hand the task to a conversation that is not \
@@ -779,6 +783,15 @@ impl Client {
                 ids.join(", ")
             ),
         }
+    }
+
+    /// The person's account, as the service's holder list names it.
+    async fn human(&self) -> Result<String> {
+        let rows = self
+            .send(self.request(reqwest::Method::GET, "/api/holders"))
+            .await?
+            .unwrap_or(json!([]));
+        person_id(&rows).context("the service names no person to hand work to")
     }
 
     /// Drop the prompt hook's copy, so the next prompt shows what just changed.
@@ -857,10 +870,10 @@ enum To {
     ///
     /// ⚠ **`me` is the CALLER, and reading it as the person is the trap.** A
     /// session dealing with a task owns it by default; handing work to the
-    /// person is `pippijn`, which says so.
+    /// person is `human`, which says so.
     Me,
-    /// The person, by name.
-    Person,
+    /// The person. Which account that is, the service says.
+    Human,
     /// A conversation, by its id **or by its name**.
     ///
     /// Which of the two is not decided here: telling them apart needs the
@@ -875,10 +888,20 @@ impl std::str::FromStr for To {
         Ok(match s {
             "nobody" | "none" | "" => To::Nobody,
             "me" | "self" | "mine" => To::Me,
-            "pippijn" => To::Person,
+            "human" => To::Human,
             id => To::Session(id.to_string()),
         })
     }
+}
+
+/// A [`To`] the service has answered for: the person's account and a
+/// session's id are known.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Target {
+    Nobody,
+    Me,
+    Person(String),
+    Session(String),
 }
 
 /// The assignee the API takes.
@@ -887,18 +910,27 @@ impl std::str::FromStr for To {
 /// something this process knows and the service must not take on faith — a
 /// request body says *what* to change and never *who* is changing it, so there
 /// is no wire spelling of "whoever is asking" for a caller to claim.
-fn assignee(to: &To, me: &str) -> Value {
+fn assignee(to: &Target, me: &str) -> Value {
     match to {
-        To::Nobody => json!({ "kind": "nobody" }),
-        To::Me => json!({ "kind": "session", "id": me }),
-        To::Person => json!({ "kind": "person", "id": "pippijn" }),
-        To::Session(id) => json!({ "kind": "session", "id": id }),
+        Target::Nobody => json!({ "kind": "nobody" }),
+        Target::Me => json!({ "kind": "session", "id": me }),
+        Target::Person(id) => json!({ "kind": "person", "id": id }),
+        Target::Session(id) => json!({ "kind": "session", "id": id }),
     }
 }
 
 /// Whether a row answers to what somebody typed, as an id or as a name.
 fn matches(id: &str, name: &Option<String>, typed: &str) -> bool {
     id == typed || name.as_deref() == Some(typed)
+}
+
+/// The person row's id in `/api/holders`.
+fn person_id(rows: &Value) -> Option<String> {
+    rows.as_array()?
+        .iter()
+        .find(|row| row["kind"] == "person")?["id"]
+        .as_str()
+        .map(str::to_string)
 }
 
 /// One row of `/api/holders` or `/api/sessions`, reduced to what naming needs.
@@ -1444,14 +1476,12 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             };
             let me = client.me().ok();
             let asked = holder.as_ref().map(|to| match to {
-                To::Nobody => selection::Holder::Nobody,
-                To::Person => selection::Holder::Person("pippijn"),
-                To::Me | To::Session(_) => match to {
-                    To::Session(id) => selection::Holder::Session(id),
-                    // `--to me` is `--mine` said another way, and a session that
-                    // cannot name itself has already failed `identified`.
-                    _ => selection::Holder::Session(me.unwrap_or_default()),
-                },
+                Target::Nobody => selection::Holder::Nobody,
+                Target::Person(id) => selection::Holder::Person(id),
+                Target::Session(id) => selection::Holder::Session(id),
+                // `--to me` is `--mine` said another way, and a session that
+                // cannot name itself has already failed `identified`.
+                Target::Me => selection::Holder::Session(me.unwrap_or_default()),
             });
             let query = list_query(
                 all,

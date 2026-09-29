@@ -264,7 +264,7 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         query.push_bind(person);
     }
     // The sort key is the EFFECTIVE rank: inside the week a deadline raises a
-    // task to `P0`. Pippijn set that rule; otherwise a date reorders nothing.
+    // task to `P0`. The user set that rule; otherwise a date reorders nothing.
     query.push(concat!(
         " ORDER BY IF(",
         due_soon!("t.due"),
@@ -1043,7 +1043,7 @@ fn spare_note(kind: AssigneeKind, spare: Option<&str>) -> Result<Option<String>>
 pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Task> {
     let subject = check_subject(&new.subject)?;
     // Filing a task takes it on, unless the caller says where it goes —
-    // Pippijn's rule: a task a session deals with is that session's. The pile is
+    // The user's rule: a task a session deals with is that session's. The pile is
     // something said (`--to nobody`), not fallen into.
     //
     // ⚠ **A filing session needs a row in `sessions`**: the default holder is a

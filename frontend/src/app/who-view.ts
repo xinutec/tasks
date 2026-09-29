@@ -14,13 +14,13 @@ import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
 /**
- * Who has what: every session, Pippijn, and the pile, as `open/total`.
+ * Who has what: every session, the user, and the pile, as `open/total`.
  *
  * ⚠ **The second number is the reason this screen exists**: the list already
  * shows who holds each open task, but not who has *finished* anything. `0` and
  * `0/56` are an idle session and a cleared plate.
  *
- * The order is the backend's — most open first, Pippijn and the pile last as
+ * The order is the backend's — most open first, the user and the pile last as
  * landmarks — so the app and `task sessions` cannot disagree.
  */
 @Component({

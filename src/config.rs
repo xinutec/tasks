@@ -100,6 +100,15 @@ impl Config {
         })
     }
 
+    /// The person work is handed to: the first account on the allow-list, or
+    /// the local owner when auth is unconfigured.
+    pub fn person(&self) -> &str {
+        self.auth
+            .as_ref()
+            .and_then(|a| a.allowed_users.first())
+            .map_or(crate::access::LOCAL_OWNER, String::as_str)
+    }
+
     /// Whether a Nextcloud user id is permitted to use the app. With auth
     /// unconfigured every request is the local owner, so this is `true`.
     pub fn is_allowed(&self, user_id: &str) -> bool {

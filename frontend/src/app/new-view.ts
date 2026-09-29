@@ -76,7 +76,7 @@ export class NewView {
    *
    * ⚠ **Absence is not the pile**: the service files a task to whoever is
    * filing it unless told otherwise, so `undefined` for "nobody" would put the
-   * task on Pippijn. The pile is a choice, and travels as one.
+   * task on the user. The pile is a choice, and travels as one.
    *
    * The one case that still returns nothing is "me" before `/api/me` has
    * answered: there is no id to send, and letting the service infer the person

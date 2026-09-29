@@ -241,7 +241,7 @@ fn app(pool: MySqlPool) -> axum::Router {
             nc_client_id: "id".into(),
             nc_client_secret: "secret".into(),
             nc_redirect_uri: "https://tasks.example/auth/callback".into(),
-            allowed_users: vec!["pippijn".into()],
+            allowed_users: vec!["user".into()],
         }),
         agent_token: Some(TOKEN.into()),
     };
@@ -302,8 +302,8 @@ async fn a_browser_has_no_check_to_report() {
     let cookie = create_session(
         SECRET,
         &UserSession {
-            user_id: "pippijn".into(),
-            display_name: "Pippijn".into(),
+            user_id: "user".into(),
+            display_name: "User".into(),
         },
     );
     let refused = app
@@ -438,7 +438,7 @@ mod sprawl {
                 assignee: None,
                 spare: None,
             },
-            &Actor::Person("pippijn".into()),
+            &Actor::Person("user".into()),
         )
         .await
         .expect("filing")

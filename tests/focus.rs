@@ -123,7 +123,7 @@ fn a_focus_that_hides_nothing_still_says_it_is_on() {
 
 #[test]
 fn a_p0_arrives_whatever_the_focus_is() {
-    // ⚠ **The reason this is safe to use at all.** Pippijn filing a P0 is the
+    // ⚠ **The reason this is safe to use at all.** The user filing a P0 is the
     // drop-everything signal; a four-hour focus that could swallow one filed
     // five minutes into it would make the feature a way to miss the only task
     // that was meant to interrupt.
@@ -261,7 +261,7 @@ async fn a_task(pool: &sqlx::MySqlPool, subject: &str) -> u64 {
             assignee: None,
             spare: None,
         },
-        &Actor::Person("pippijn".into()),
+        &Actor::Person("user".into()),
     )
     .await
     .expect("filing")

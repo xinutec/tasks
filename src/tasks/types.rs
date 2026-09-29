@@ -365,7 +365,7 @@ varchar_enum!(Priority);
 pub enum AssigneeKind {
     /// In the pile: nobody has taken it, and whichever conversation is around may.
     Nobody,
-    /// A Nextcloud user — Pippijn.
+    /// A Nextcloud user — the user.
     Person,
     /// A Claude Code conversation, by the CLI's session id.
     Session,
@@ -511,7 +511,7 @@ pub struct Task {
     /// threshold: the reader who needs it is the one who cannot see it coming.
     pub body_lines: u32,
     /// What the session that filed it calls itself — `observe`, `dev-lint`.
-    /// Absent when Pippijn filed it, or the filing session has no name.
+    /// Absent when the user filed it, or the filing session has no name.
     ///
     /// ⚠ **A hint about where the work lives, deliberately not a filter**: a
     /// session scanning the pile learns from it without opening the task, and

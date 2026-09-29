@@ -15,8 +15,8 @@ mod common;
 use tasks::tasks::repo::{self, Change, NewTask};
 use tasks::tasks::types::{Actor, Priority, Ranking, Status};
 
-fn pippijn() -> Actor {
-    Actor::Person("pippijn".into())
+fn human() -> Actor {
+    Actor::Person("user".into())
 }
 
 fn other() -> Actor {
@@ -37,7 +37,7 @@ async fn file(pool: &sqlx::MySqlPool, subject: &str, body: &str) -> u64 {
             assignee: None,
             spare: None,
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("filing")
@@ -62,7 +62,7 @@ async fn a_task_nothing_has_overwritten_has_no_previous_version() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "the first body").await;
     assert!(
-        repo::previous(&pool, id, &pippijn())
+        repo::previous(&pool, id, &human())
             .await
             .expect("reading")
             .is_none(),
@@ -76,7 +76,7 @@ async fn an_edited_body_leaves_the_one_it_replaced_behind() {
     let id = file(&pool, "as filed", "the first body").await;
     edit(&pool, id, body("something else entirely")).await;
 
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("an edit leaves a previous version");
@@ -106,7 +106,7 @@ async fn a_subject_edit_snapshots_the_body_it_did_not_touch() {
     )
     .await;
 
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("a revision");
@@ -145,7 +145,7 @@ async fn one_update_changing_both_leaves_exactly_one_revision() {
     .expect("counting revisions");
     assert_eq!(kept.0, 1, "one update, one previous version");
 
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("a revision");
@@ -175,7 +175,7 @@ async fn a_change_that_moves_no_text_leaves_no_revision() {
         edit(&pool, id, change).await;
     }
     assert!(
-        repo::previous(&pool, id, &pippijn())
+        repo::previous(&pool, id, &human())
             .await
             .expect("reading")
             .is_none(),
@@ -200,7 +200,7 @@ async fn the_newest_revision_is_the_one_that_comes_back() {
         .await
         .expect("flattening the timestamps");
 
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("a revision");
@@ -216,7 +216,7 @@ async fn putting_a_version_back_is_an_edit_like_any_other() {
     let id = file(&pool, "as filed", "the first body").await;
     edit(&pool, id, body("the clobbering body")).await;
 
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("a revision");
@@ -237,7 +237,7 @@ async fn putting_a_version_back_is_an_edit_like_any_other() {
         .expect("the task");
     assert_eq!(detail.body, "the first body", "restored");
 
-    let now = repo::previous(&pool, id, &pippijn())
+    let now = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("a revision");
@@ -258,7 +258,7 @@ async fn an_edit_reports_the_text_it_landed_on() {
     let replaced = done
         .replaced
         .expect("an edit that moved text says what it moved");
-    assert_eq!(replaced.by, "pippijn", "who wrote what was displaced");
+    assert_eq!(replaced.by, "user", "who wrote what was displaced");
     assert_eq!((replaced.was, replaced.now), (10, 7));
 }
 

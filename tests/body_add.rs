@@ -18,8 +18,8 @@ mod common;
 use tasks::tasks::repo::{self, Change, NewTask};
 use tasks::tasks::types::{Actor, Priority, Ranking};
 
-fn pippijn() -> Actor {
-    Actor::Person("pippijn".into())
+fn human() -> Actor {
+    Actor::Person("user".into())
 }
 
 fn dev_lint() -> Actor {
@@ -40,7 +40,7 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
             assignee: None,
             spare: None,
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("filing")
@@ -82,7 +82,7 @@ async fn prepending_keeps_every_word_of_what_was_there() {
     let filing = "## The filing\n\nEverything anybody knew when this was raised.";
     let id = file(&pool, filing).await;
 
-    repo::update(&pool, id, prepend("DONE in a2c3ab6."), &pippijn())
+    repo::update(&pool, id, prepend("DONE in a2c3ab6."), &human())
         .await
         .expect("prepending");
 
@@ -98,7 +98,7 @@ async fn appending_puts_it_under() {
     let filing = "## The filing\n\nWhat was known at the time.";
     let id = file(&pool, filing).await;
 
-    repo::update(&pool, id, append("Then this happened."), &pippijn())
+    repo::update(&pool, id, append("Then this happened."), &human())
         .await
         .expect("appending");
 
@@ -116,7 +116,7 @@ async fn one_blank_line_at_the_seam_whatever_was_typed() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "\n\n  The filing, indented and padded.\n\n\n").await;
 
-    repo::update(&pool, id, prepend("DONE.\n\n\n"), &pippijn())
+    repo::update(&pool, id, prepend("DONE.\n\n\n"), &human())
         .await
         .expect("prepending");
 
@@ -140,7 +140,7 @@ async fn appending_does_not_restyle_the_top_it_never_touched() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "\n\nThe filing, with a blank line above it.").await;
 
-    repo::update(&pool, id, append("And this."), &pippijn())
+    repo::update(&pool, id, append("And this."), &human())
         .await
         .expect("appending");
 
@@ -163,7 +163,7 @@ async fn both_at_once() {
             append: Some("underneath".into()),
             ..Change::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("both");
@@ -185,7 +185,7 @@ async fn prepending_to_a_task_filed_with_no_prose() {
         &pool,
         id,
         prepend("The first thing anybody wrote."),
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("prepending");
@@ -198,7 +198,7 @@ async fn additions_compose_one_after_another() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 
-    repo::update(&pool, id, prepend("mine"), &pippijn())
+    repo::update(&pool, id, prepend("mine"), &human())
         .await
         .expect("first");
     repo::update(&pool, id, prepend("theirs"), &dev_lint())
@@ -244,7 +244,7 @@ async fn adding_waits_for_whoever_is_already_writing_the_body() {
 
     let mine = tokio::spawn({
         let pool = pool.clone();
-        async move { repo::update(&pool, id, prepend("mine"), &pippijn()).await }
+        async move { repo::update(&pool, id, prepend("mine"), &human()).await }
     });
 
     // The precondition, asserted rather than assumed: if this addition had
@@ -285,7 +285,7 @@ async fn the_collapse_guard_cannot_fire_on_something_that_only_grows() {
     let long = "word ".repeat(600); // 3,000 characters: well over the threshold
     let id = file(&pool, &long).await;
 
-    repo::update(&pool, id, prepend("x"), &pippijn())
+    repo::update(&pool, id, prepend("x"), &human())
         .await
         .expect("a growing body was refused");
 
@@ -299,11 +299,11 @@ async fn what_it_replaced_is_still_recoverable() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 
-    repo::update(&pool, id, prepend("DONE."), &pippijn())
+    repo::update(&pool, id, prepend("DONE."), &human())
         .await
         .expect("prepending");
 
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("reading")
         .expect("a revision");
@@ -315,7 +315,7 @@ async fn the_history_counts_an_addition_as_what_it_is() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 
-    repo::update(&pool, id, prepend("DONE."), &pippijn())
+    repo::update(&pool, id, prepend("DONE."), &human())
         .await
         .expect("prepending");
 
@@ -342,7 +342,7 @@ async fn the_reply_counts_the_body_that_was_written_not_the_one_that_was_sent() 
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 
-    let replaced = repo::update(&pool, id, prepend("DONE."), &pippijn())
+    let replaced = repo::update(&pool, id, prepend("DONE."), &human())
         .await
         .expect("prepending")
         .replaced
@@ -366,7 +366,7 @@ async fn replacing_and_adding_at_once_is_refused_as_a_contradiction() {
                 prepend: Some("and this on top".into()),
                 ..Change::default()
             },
-            &pippijn(),
+            &human(),
         )
         .await
         .expect_err("--body with --prepend"),
@@ -391,7 +391,7 @@ async fn adding_nothing_is_refused_rather_than_quietly_doing_nothing() {
 
     for change in [prepend("   \n  "), append("")] {
         let said = refusal(
-            repo::update(&pool, id, change, &pippijn())
+            repo::update(&pool, id, change, &human())
                 .await
                 .expect_err("an empty addition"),
         );

@@ -1,6 +1,6 @@
 //! What blocks what, and the rule that carries.
 //!
-//! Pippijn: *"If something is blocked, it should get a ticket number
+//! The user: *"If something is blocked, it should get a ticket number
 //! that it's blocked on. It can be the same, but not higher priority than the
 //! thing it's blocked on."* And, separately: *"If A blocks B then B can't block
 //! A."*
@@ -13,8 +13,8 @@ mod common;
 use tasks::tasks::repo::{self, Change, Filter, NewTask};
 use tasks::tasks::types::{Actor, Priority, Ranking, Status};
 
-fn pippijn() -> Actor {
-    Actor::Person("pippijn".into())
+fn human() -> Actor {
+    Actor::Person("user".into())
 }
 
 fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
@@ -32,7 +32,7 @@ fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
 }
 
 async fn file(pool: &sqlx::MySqlPool, subject: &str, priority: Option<Priority>) -> u64 {
-    repo::create(pool, filed(subject, priority), &pippijn())
+    repo::create(pool, filed(subject, priority), &human())
         .await
         .expect("filing")
         .id
@@ -50,7 +50,7 @@ async fn block(
             blocked_on: Some(on.to_vec()),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .map(|_| ())
@@ -68,7 +68,7 @@ async fn rank(
             priority: Some(p),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .map(|_| ())
@@ -181,7 +181,7 @@ async fn a_closed_blocker_stops_constraining_anything() {
             status: Some(Status::Done),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("finishing the blocker");
@@ -217,7 +217,7 @@ async fn nothing_may_block_itself() {
 
 #[tokio::test]
 async fn if_a_blocks_b_then_b_may_not_block_a() {
-    // Pippijn's words. The two-task case is the one anybody thinks
+    // The user's words. The two-task case is the one anybody thinks
     // of; the test below is the one that actually needs the graph walk.
     let pool = common::fresh_db().await;
     let a = file(&pool, "A", None).await;
@@ -310,7 +310,7 @@ async fn re_stating_the_same_blockers_writes_no_history() {
             blocked_on: Some(vec![blocker]),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("re-stating");
@@ -338,7 +338,7 @@ async fn ranking_and_blocking_in_one_change_is_judged_on_the_result() {
             blocked_on: Some(vec![blocker]),
             ..Default::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("a consistent pair was refused");
@@ -370,7 +370,7 @@ mod deadlines {
                 due: Some(day(days)),
                 ..Default::default()
             },
-            &pippijn(),
+            &human(),
         )
         .await
         .map(|_| ())
@@ -430,7 +430,7 @@ mod deadlines {
                 clear_due: true,
                 ..Default::default()
             },
-            &pippijn(),
+            &human(),
         )
         .await
         .expect("clearing");
@@ -475,7 +475,7 @@ mod deadlines {
                 status: Some(Status::Done),
                 ..Default::default()
             },
-            &pippijn(),
+            &human(),
         )
         .await
         .expect("finishing the blocker");
@@ -507,7 +507,7 @@ mod deadlines {
     }
 }
 
-/// A deadline inside the week raises the rank — Pippijn's rule.
+/// A deadline inside the week raises the rank — the user's rule.
 ///
 /// ⚠ **The one thing a deadline reorders**, which does not contradict
 /// `a_deadline_does_not_move_a_task_up_the_list`: that pins that a FAR date
@@ -529,7 +529,7 @@ mod escalation {
                 due: Some(day),
                 ..Default::default()
             },
-            &pippijn(),
+            &human(),
         )
         .await
         .map(|_| ())

@@ -95,7 +95,7 @@ task done <id> [--note -]       # finished; the note goes above the body first
 task drop <id> [--reason -]     # closed WITHOUT doing it (shows as - [-])
 task reopen <id>                # back to open — it keeps its holder
 task move <id> me               # take it — `me` is YOU, this conversation
-task move <id> pippijn          # hand it to Pippijn
+task move <id> human            # hand it to the user
 task move <id> <session>        # hand it to another conversation, by name or id
 task move <id> nobody           # put it back in the pile
 task add "One line" --priority P2 --body -   # yours, by default
@@ -143,7 +143,7 @@ corrected later, so a bare `--to nobody` is refused.
 
 ⚠ **A pile line ending in `(from health)` is telling you where the work lives.**
 That is the session that filed it, there so you can rule a task out without
-opening it. Treat it as a hint: it is silent when Pippijn filed it or the filer
+opening it. Treat it as a hint: it is silent when the user filed it or the filer
 has no name, and wrong when one conversation files work for another, which the
 subject usually gives away. It is in `task list` and deliberately not in your
 prompt.
@@ -160,7 +160,7 @@ the approach is not — so the status says work happened, not that anybody is
 doing it now. Read the body before you begin: it is where the previous holder
 left what they found. `task start` takes it on.
 
-⚠ **`me` is you.** Handing work to the person is `pippijn`. Nothing means him
+⚠ **`me` is you.** Handing work to the person is `human`. Nothing means them
 implicitly.
 
 ⚠ **A subject is one line and at most 200 characters**, because the subject is
@@ -366,7 +366,7 @@ guessing, because a level two conversations read differently ranks nothing.
 ⚠ **FILING ONE MEANS SAYING.** `task add` takes `--priority`, or `--unassessed`
 for work that is not yours to judge — filing into another session's domain is the
 ordinary case, and that is what the escape is for. Leaving both off is refused,
-by the CLI and by the service both. Pippijn: *"I want everything to have a
+by the CLI and by the service both. The user: *"I want everything to have a
 priority."*
 
 ⚠ **Reach for `--unassessed` rather than a reflex `P2`.** They sort identically,
@@ -425,13 +425,13 @@ means *still waiting*; nothing there means nothing is in the way.
 ### When the blocker is not a ticket
 
 ⚠ **Say it in the body, and that is correct rather than a workaround.** `hands on
-the hardware`, `Pippijn present for device signing`, `an external image rebuild`,
+the hardware`, `the user present for device signing`, `an external image rebuild`,
 `sweep after some weeks` — none of these is a task row, so `--blocked-on` has
 nothing to join to. Write them in prose.
 
 ⚠ **The rule above is about a blocker that IS a ticket, and does not transfer.**
 That failure needs a row whose status can change behind the sentence's back.
-"Pippijn present for device signing" has no row and no status; it stays true
+"The user present for device signing" has no row and no status; it stays true
 until it is done, and cannot be quietly contradicted.
 
 ⚠ **This is why there is no free-text blocker field.** `blocked` is derived —
@@ -471,12 +471,12 @@ bounded one.
 
 The wait lives in your own process, so a Claude Code restart loses it: the
 `--blocked-on` edge and the `⛔` survive, but the automatic wake does not. Not
-something to plan around — Pippijn: *"Sessions are long lived on Mac, no need to
+something to plan around — the user: *"Sessions are long lived on Mac, no need to
 worry about that."*
 
 ## When it has to be done by
 
-⚠ **Inside the last week, a deadline RAISES the rank to `P0`.** Pippijn's rule.
+⚠ **Inside the last week, a deadline RAISES the rank to `P0`.** The user's rule.
 The line reads `P0!` — the `!` says the level is not the one anybody set, and
 `task show` prints both. Nothing is written: the raise is recomputed from the
 date every time it is read, so it appears and goes away on its own.
@@ -501,7 +501,7 @@ later, and a date is the same fact whenever it is read.
 ## Closing it
 
 **`task done` puts your name on it.** Finishing a task makes you its holder, so
-every list afterwards says who did it — pass `--to pippijn` (or anyone) in the
+every list afterwards says who did it — pass `--to human` (or anyone) in the
 same command if it should go somewhere else. `task drop` does the same, and that
 is deliberate: who decided a thing was not worth doing is as much a fact as who
 did it.
@@ -571,12 +571,12 @@ something and it is missing from your next digest, that is a real absence and
 worth looking at.
 
 `task sessions` shows who holds what — every session that has ever held
-anything, Pippijn and the pile, as `open/total`. It is **not** every conversation
+anything, the user and the pile, as `open/total`. It is **not** every conversation
 there is: a row exists for each one that ever asked for a digest, and most never
 held a task. `task sessions --all` is the whole table, and the reason to want it
 is to find the id of a conversation that has never been given anything, so you
 can hand it something. The same list is at <https://tasks.xinutec.org> for
-Pippijn, which is why a task's subject is written to be read by somebody who is
+The user, which is why a task's subject is written to be read by somebody who is
 not you.
 
 `task --help` is the authority on the commands. `README.md` beside this file is

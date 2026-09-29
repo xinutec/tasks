@@ -22,7 +22,7 @@ use tasks::tasks::repo::{self, Change, NewTask};
 use tasks::tasks::types::{Actor, Priority, Ranking, Status};
 
 fn filer() -> Actor {
-    Actor::Person("pippijn".into())
+    Actor::Person("user".into())
 }
 
 fn other() -> Actor {
@@ -202,7 +202,7 @@ async fn filing_through_the_api_names_what_this_session_just_closed() {
             nc_client_id: "id".into(),
             nc_client_secret: "secret".into(),
             nc_redirect_uri: "https://tasks.example/auth/callback".into(),
-            allowed_users: vec!["pippijn".into()],
+            allowed_users: vec!["user".into()],
         }),
         agent_token: Some(TOKEN.into()),
     };

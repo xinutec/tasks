@@ -45,7 +45,7 @@ fn app(pool: MySqlPool) -> axum::Router {
             nc_client_id: "id".into(),
             nc_client_secret: "secret".into(),
             nc_redirect_uri: "https://tasks.example/auth/callback".into(),
-            allowed_users: vec!["pippijn".into()],
+            allowed_users: vec!["user".into()],
         }),
         agent_token: Some(TOKEN.into()),
     };
@@ -74,13 +74,13 @@ async fn digest_as_session(app: &axum::Router, session: &str) -> String {
     String::from_utf8_lossy(&body).to_string()
 }
 
-/// The digest as Pippijn receives it, naming no session.
+/// The digest as the user receives it, naming no session.
 async fn digest_as_owner(app: &axum::Router) -> String {
     let cookie = create_session(
         SECRET,
         &UserSession {
-            user_id: "pippijn".into(),
-            display_name: "Pippijn".into(),
+            user_id: "user".into(),
+            display_name: "User".into(),
         },
     );
     let res = app
@@ -127,10 +127,10 @@ async fn seed(pool: &MySqlPool) {
             },
         ),
         (
-            "PIPPIJN is holding this",
+            "HUMAN is holding this",
             Assignee {
                 kind: AssigneeKind::Person,
-                id: Some("pippijn".into()),
+                id: Some("user".into()),
                 name: None,
             },
         ),
@@ -150,7 +150,7 @@ async fn seed(pool: &MySqlPool) {
                     .then(|| "left for whoever picks it up".to_string()),
                 assignee: Some(holder),
             },
-            &Actor::Person("pippijn".into()),
+            &Actor::Person("user".into()),
         )
         .await
         .expect("filing");
@@ -174,7 +174,7 @@ async fn the_route_hands_a_session_its_own_work_and_the_pile() {
         "another session's work reached this prompt:\n{digest}"
     );
     assert!(
-        !digest.contains("PIPPIJN is holding this"),
+        !digest.contains("HUMAN is holding this"),
         "the person's own work reached a session's prompt:\n{digest}"
     );
 }
@@ -216,7 +216,7 @@ async fn a_person_naming_no_session_still_sees_everything() {
     for subject in [
         "MINE to do",
         "ANOTHER conversation has this",
-        "PIPPIJN is holding this",
+        "HUMAN is holding this",
         "PILE, for whoever picks it up",
     ] {
         assert!(digest.contains(subject), "{subject} missing:\n{digest}");
@@ -309,7 +309,7 @@ mod handed_out {
 
     /// Four tasks, filed by two different sessions, held four different ways.
     ///
-    /// `seed` above cannot serve this: it files everything as Pippijn, and
+    /// `seed` above cannot serve this: it files everything as the user, and
     /// `filed_by` is only recorded for a SESSION actor — so every row there has
     /// no filer at all and this filter would correctly match none of them.
     async fn seed_filings(pool: &MySqlPool) {
@@ -436,7 +436,7 @@ mod handed_out {
     #[tokio::test]
     async fn asking_about_another_session_asks_about_that_session() {
         // The parameter carries the subject rather than being a flag on the
-        // caller, so Pippijn can ask what any session has handed out. Sent by
+        // caller, so the user can ask what any session has handed out. Sent by
         // `sess-1`, about `sess-2`.
         let pool = common::fresh_db().await;
         seed_filings(&pool).await;
@@ -530,7 +530,7 @@ mod naming {
 
     #[tokio::test]
     async fn a_person_reading_a_digest_cannot_name_the_session() {
-        // Pippijn's browser can pass `?session=`, and it is not that
+        // The user's browser can pass `?session=`, and it is not that
         // conversation. Whatever header it carries is about itself.
         let pool = common::fresh_db().await;
         let app = app(pool.clone());
@@ -541,8 +541,8 @@ mod naming {
         let cookie = create_session(
             SECRET,
             &UserSession {
-                user_id: "pippijn".into(),
-                display_name: "Pippijn".into(),
+                user_id: "user".into(),
+                display_name: "User".into(),
             },
         );
         let res = app
@@ -679,7 +679,7 @@ mod pile {
                 status: Some(tasks::tasks::types::Status::Dropped),
                 ..Default::default()
             },
-            &Actor::Person("pippijn".into()),
+            &Actor::Person("user".into()),
         )
         .await
         .expect("dropping it");

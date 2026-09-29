@@ -246,12 +246,12 @@ pub async fn previous(
         .ok_or(AppError::NotFound)
 }
 
-/// Who holds what — every session, Pippijn, and the pile.
+/// Who holds what — every session, the user, and the pile.
 pub async fn holders(
     Access(_): Access,
     State(app): State<AppState>,
 ) -> Result<Json<Vec<sessions::Holder>>, AppError> {
-    Ok(Json(sessions::holders(&app.db).await?))
+    Ok(Json(sessions::holders(&app.db, app.cfg.person()).await?))
 }
 
 pub async fn create(

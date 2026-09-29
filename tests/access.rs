@@ -33,7 +33,7 @@ fn app(agent_token: Option<&str>) -> axum::Router {
             nc_client_id: "id".into(),
             nc_client_secret: "secret".into(),
             nc_redirect_uri: "https://tasks.example/auth/callback".into(),
-            allowed_users: vec!["pippijn".into()],
+            allowed_users: vec!["user".into()],
         }),
         agent_token: agent_token.map(str::to_string),
     };
@@ -116,8 +116,8 @@ async fn a_nameless_token_does_not_fall_through_to_a_cookie() {
     let cookie = create_session(
         SECRET,
         &UserSession {
-            user_id: "pippijn".into(),
-            display_name: "Pippijn".into(),
+            user_id: "user".into(),
+            display_name: "User".into(),
         },
     );
     let (status, _) = send(
@@ -176,8 +176,8 @@ async fn the_person_is_answered_as_the_person() {
     let cookie = create_session(
         SECRET,
         &UserSession {
-            user_id: "pippijn".into(),
-            display_name: "Pippijn".into(),
+            user_id: "user".into(),
+            display_name: "User".into(),
         },
     );
     let (status, body) = send(
@@ -192,20 +192,20 @@ async fn the_person_is_answered_as_the_person() {
     let body: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
         body,
-        serde_json::json!({ "kind": "person", "id": "pippijn", "name": "Pippijn" })
+        serde_json::json!({ "kind": "person", "id": "user", "name": "User" })
     );
 }
 
 #[tokio::test]
 async fn a_session_credential_beats_a_cookie_that_rode_along() {
     // Otherwise a session driven from a signed-in machine would file its
-    // history under Pippijn's name, and the record would be a fiction.
+    // history under the user's name, and the record would be a fiction.
     let app = app(Some(TOKEN));
     let cookie = create_session(
         SECRET,
         &UserSession {
-            user_id: "pippijn".into(),
-            display_name: "Pippijn".into(),
+            user_id: "user".into(),
+            display_name: "User".into(),
         },
     );
     let (status, body) = send(

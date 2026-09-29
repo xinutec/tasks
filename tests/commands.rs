@@ -1,6 +1,6 @@
 //! What the CLI recorded about itself.
 //!
-//! ⚠ **Every row this models is a command somebody actually ran** — Pippijn's
+//! ⚠ **Every row this models is a command somebody actually ran** — the user's
 //! rule: measure what is actually going on, and do not poll. See
 //! `tasks::commands`.
 
@@ -101,7 +101,7 @@ fn a_command_that_only_ever_failed_is_still_reported() {
     );
 }
 
-/// ⚠ **Five days is the requirement** — Pippijn: five days of nothing is a
+/// ⚠ **Five days is the requirement** — the user: five days of nothing is a
 /// problem, anything short of it is not. fleetwatch grades `Silent` beyond 3×
 /// the declared interval, so 3× must land exactly on five days, and a quiet
 /// weekend must stay inside `Fresh` (1.5×).

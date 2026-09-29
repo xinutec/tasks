@@ -134,10 +134,10 @@ fn asking_for_one_holder_asks_the_right_column() {
         false,
         false,
         None,
-        Some(Holder::Person("pippijn")),
+        Some(Holder::Person("user")),
     )
     .expect("a query");
-    assert_eq!(joined(person), "person=pippijn");
+    assert_eq!(joined(person), "person=user");
     let session = list_query(
         false,
         false,

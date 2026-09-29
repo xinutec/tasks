@@ -17,7 +17,7 @@ import { type Page } from '@playwright/test';
  *   3. **A holder chip may be a raw session id**, which is the widest thing
  *      the meta column ever has to carry.
  */
-export const ME = { kind: 'person', id: 'pippijn', name: 'Pippijn' };
+export const ME = { kind: 'person', id: 'user', name: 'User' };
 
 /** A named session and an unnamed one: the second is the hard case, because it
  *  is drawn as its raw id everywhere a name would go. */
@@ -51,7 +51,7 @@ export const HOLDERS = [
     open: 0,
     total: 56,
   },
-  { kind: 'person', id: 'pippijn', name: 'Pippijn', open: 4, total: 19 },
+  { kind: 'person', id: 'user', name: 'User', open: 4, total: 19 },
   { kind: 'nobody', name: 'nobody', open: 7, total: 61 },
 ];
 
@@ -118,7 +118,7 @@ export const TASKS = [
     id: 110,
     subject: 'Nothing watches the boot disk, and nix deletes store paths mid-build before it fills',
     status: 'open',
-    assignee: { kind: 'person', id: 'pippijn', name: 'pippijn' },
+    assignee: { kind: 'person', id: 'user', name: 'user' },
     detailed: true,
     body_lines: 182,
     created_at: '2026-08-06T09:00:00Z',
@@ -126,7 +126,7 @@ export const TASKS = [
   },
   {
     id: 128,
-    // The other pile row, deliberately beside the one that speaks: Pippijn and
+    // The other pile row, deliberately beside the one that speaks: the user and
     // unnamed sessions leave nothing to say, and "not said" has to look like
     // silence rather than like a missing value.
     subject: 'Left for whoever picks it up, by somebody with no name to give',
@@ -141,7 +141,7 @@ export const TASKS = [
     id: 131,
     subject: 'Something of mine that belongs to no checkout',
     status: 'open',
-    assignee: { kind: 'person', id: 'pippijn', name: 'pippijn' },
+    assignee: { kind: 'person', id: 'user', name: 'user' },
     detailed: false,
     body_lines: 0,
     created_at: '2026-08-08T09:00:00Z',
@@ -217,13 +217,13 @@ interpreter</strong>: it evaluates as far as the text determines and stops.</p>
       at: '2026-08-05T09:00:00Z',
       kind: 'created',
       detail: 'Abstractly evaluate',
-      actor: 'pippijn',
+      actor: 'user',
     },
     {
       at: '2026-08-08T09:00:00Z',
       kind: 'assigned',
       detail: 'nobody → memview',
-      actor: 'pippijn',
+      actor: 'user',
     },
     {
       at: '2026-08-08T10:00:00Z',
@@ -250,7 +250,7 @@ export const DROPPED = {
       at: '2026-08-08T12:00:00Z',
       kind: 'status',
       detail: 'doing → dropped',
-      actor: 'pippijn',
+      actor: 'user',
     },
   ],
 };

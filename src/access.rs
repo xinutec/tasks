@@ -2,7 +2,7 @@
 //!
 //! ⚠ **The actor is derived from the credential, never from the request body.**
 //! A write says what to change, not who is changing it, so a session cannot
-//! file history as though Pippijn had moved a task: there is no field to put
+//! file history as though the user had moved a task: there is no field to put
 //! it in.
 //!
 //! Two credentials, and they are not the same strength:
@@ -75,9 +75,12 @@ impl Viewer {
     }
 }
 
+/// Who every request is with auth unconfigured.
+pub const LOCAL_OWNER: &str = "local";
+
 fn local_owner() -> UserSession {
     UserSession {
-        user_id: "local".into(),
+        user_id: LOCAL_OWNER.into(),
         display_name: "Local".into(),
     }
 }
@@ -131,7 +134,7 @@ fn agent(app: &AppState, parts: &Parts) -> Offered {
 
 fn resolve(app: &AppState, parts: &Parts) -> Result<Viewer, AppError> {
     // The agent credential first, so a session driven from a signed-in
-    // browser does not write history under Pippijn's name.
+    // browser does not write history under the user's name.
     match agent(app, parts) {
         Offered::On(session) => return Ok(Viewer::Session(session)),
         // Not a fall-through to the cookie: whoever holds this token is a

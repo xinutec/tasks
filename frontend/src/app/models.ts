@@ -90,7 +90,7 @@ export interface Task {
    */
   body_lines: number;
   /**
-   * What the session that filed it calls itself. Absent when Pippijn filed it,
+   * What the session that filed it calls itself. Absent when the user filed it,
    * or when the filing session had never named itself — both mean "not said",
    * which is why it is drawn only where there is no holder.
    */

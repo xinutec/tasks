@@ -17,8 +17,8 @@ mod common;
 use tasks::tasks::repo::{self, Change, NewTask};
 use tasks::tasks::types::{Actor, Priority, Ranking};
 
-fn pippijn() -> Actor {
-    Actor::Person("pippijn".into())
+fn human() -> Actor {
+    Actor::Person("user".into())
 }
 
 async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
@@ -35,7 +35,7 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
             assignee: None,
             spare: None,
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("filing")
@@ -76,7 +76,7 @@ async fn a_long_body_may_not_be_replaced_by_almost_nothing() {
     let id = file(&pool, &was).await;
 
     let said = refusal(
-        repo::update(&pool, id, body("True"), &pippijn())
+        repo::update(&pool, id, body("True"), &human())
             .await
             .expect_err("4 characters replaced 3,000"),
     );
@@ -96,7 +96,7 @@ async fn the_refusal_counts_one_character_as_one() {
     let id = file(&pool, &prose(3000)).await;
 
     let said = refusal(
-        repo::update(&pool, id, body("x"), &pippijn())
+        repo::update(&pool, id, body("x"), &human())
             .await
             .expect_err("one character replaced 3,000"),
     );
@@ -110,7 +110,7 @@ async fn a_refused_edit_leaves_no_trace() {
     let id = file(&pool, &prose(3000)).await;
     let before = repo::get(&pool, id).await.expect("reading").expect("there");
 
-    repo::update(&pool, id, body(""), &pippijn())
+    repo::update(&pool, id, body(""), &human())
         .await
         .expect_err("a 3,000-character body was emptied");
 
@@ -136,7 +136,7 @@ async fn a_subject_beside_a_refused_body_does_not_survive_it() {
             body: Some("True".into()),
             ..Change::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect_err("the body collapsed");
@@ -158,7 +158,7 @@ async fn saying_so_is_how_a_body_is_emptied_on_purpose() {
             replace_body: true,
             ..Change::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("--replace-body was given and refused anyway");
@@ -173,7 +173,7 @@ async fn putting_back_a_body_an_edit_had_grown() {
     let id = file(&pool, &short).await;
 
     // The edit that grows it. Nothing objects to this.
-    repo::update(&pool, id, body(&prose(4000)), &pippijn())
+    repo::update(&pool, id, body(&prose(4000)), &human())
         .await
         .expect("growing a body");
 
@@ -181,7 +181,7 @@ async fn putting_back_a_body_an_edit_had_grown() {
     // replacing 4,000, well under the share the guard wants kept. It is let
     // through because whoever restores has just read what they are restoring,
     // which is the one thing the collapsing write never did.
-    let was = repo::previous(&pool, id, &pippijn())
+    let was = repo::previous(&pool, id, &human())
         .await
         .expect("a revision")
         .expect("there");
@@ -194,7 +194,7 @@ async fn putting_back_a_body_an_edit_had_grown() {
             replace_body: true,
             ..Change::default()
         },
-        &pippijn(),
+        &human(),
     )
     .await
     .expect("an undo was refused");
@@ -209,7 +209,7 @@ async fn a_short_body_is_not_worth_guarding() {
 
     // Every proportion the guard cares about, and none of it applies: below the
     // size where losing the text costs anything worth a question.
-    repo::update(&pool, id, body("x"), &pippijn())
+    repo::update(&pool, id, body("x"), &human())
         .await
         .expect("a short body was guarded");
 
@@ -225,7 +225,7 @@ async fn an_ordinary_rewrite_is_not_a_collapse() {
     // history under it actually looks like. The guard has to sit far enough out
     // that this never meets it.
     let now = prose(1500);
-    repo::update(&pool, id, body(&now), &pippijn())
+    repo::update(&pool, id, body(&now), &human())
         .await
         .expect("a genuine rewrite was refused");
 
@@ -237,7 +237,7 @@ async fn the_history_says_how_much_of_a_body_moved() {
     let pool = common::fresh_db().await;
     let id = file(&pool, "the body as first written").await;
 
-    repo::update(&pool, id, body("shorter"), &pippijn())
+    repo::update(&pool, id, body("shorter"), &human())
         .await
         .expect("editing");
 

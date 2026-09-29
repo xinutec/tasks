@@ -4,7 +4,7 @@ import { EVERYTHING, focusOn, holderLabel, inBucket, parseWho, whoParam } from '
 import { Assignee } from './models';
 
 const nobody: Assignee = { kind: 'nobody' };
-const me: Assignee = { kind: 'person', id: 'pippijn', name: 'pippijn' };
+const me: Assignee = { kind: 'person', id: 'user', name: 'user' };
 const named: Assignee = { kind: 'session', id: 'sess-1', name: 'memview' };
 const unnamed: Assignee = { kind: 'session', id: 'sess-2' };
 
@@ -38,7 +38,7 @@ describe('inBucket', () => {
 
   for (const [who, assignee, want] of cases) {
     it(`${who}: ${assignee.kind} → ${want}`, () => {
-      expect(inBucket(assignee, parseWho(who), 'pippijn')).toBe(want);
+      expect(inBucket(assignee, parseWho(who), 'user')).toBe(want);
     });
   }
 
@@ -50,7 +50,7 @@ describe('inBucket', () => {
   });
 
   it('does not count another person as mine', () => {
-    expect(inBucket({ kind: 'person', id: 'someone-else' }, parseWho('mine'), 'pippijn')).toBe(
+    expect(inBucket({ kind: 'person', id: 'someone-else' }, parseWho('mine'), 'user')).toBe(
       false,
     );
   });
@@ -60,23 +60,23 @@ describe('one named holder', () => {
   it('shows that session and no other', () => {
     // `with a session` is every session at once; this answers "what is
     // hardware holding".
-    expect(inBucket(named, parseWho('session:sess-1'), 'pippijn')).toBe(true);
-    expect(inBucket(unnamed, parseWho('session:sess-1'), 'pippijn')).toBe(false);
-    expect(inBucket(nobody, parseWho('session:sess-1'), 'pippijn')).toBe(false);
-    expect(inBucket(me, parseWho('session:sess-1'), 'pippijn')).toBe(false);
+    expect(inBucket(named, parseWho('session:sess-1'), 'user')).toBe(true);
+    expect(inBucket(unnamed, parseWho('session:sess-1'), 'user')).toBe(false);
+    expect(inBucket(nobody, parseWho('session:sess-1'), 'user')).toBe(false);
+    expect(inBucket(me, parseWho('session:sess-1'), 'user')).toBe(false);
   });
 
   it('shows that person and no other', () => {
-    expect(inBucket(me, parseWho('person:pippijn'), 'pippijn')).toBe(true);
-    expect(inBucket(named, parseWho('person:pippijn'), 'pippijn')).toBe(false);
+    expect(inBucket(me, parseWho('person:user'), 'user')).toBe(true);
+    expect(inBucket(named, parseWho('person:user'), 'user')).toBe(false);
   });
 
   it('does not confuse a session id with a person id', () => {
     // The prefix is what stops this: both are bare strings on the wire, and a
-    // session could perfectly well be identified as `pippijn`.
-    const twin: Assignee = { kind: 'session', id: 'pippijn' };
-    expect(inBucket(twin, parseWho('person:pippijn'), 'pippijn')).toBe(false);
-    expect(inBucket(twin, parseWho('session:pippijn'), 'pippijn')).toBe(true);
+    // session could perfectly well be identified as `user`.
+    const twin: Assignee = { kind: 'session', id: 'user' };
+    expect(inBucket(twin, parseWho('person:user'), 'user')).toBe(false);
+    expect(inBucket(twin, parseWho('session:user'), 'user')).toBe(true);
   });
 
   it('does not read a holder id as a bucket', () => {
@@ -84,15 +84,15 @@ describe('one named holder', () => {
     // prefix means `session:all` and `all` are different strings, which is the
     // reason for prefixing rather than accepting bare ids.
     const awkward: Assignee = { kind: 'session', id: 'all' };
-    expect(inBucket(nobody, parseWho('session:all'), 'pippijn')).toBe(false);
-    expect(inBucket(awkward, parseWho('session:all'), 'pippijn')).toBe(true);
+    expect(inBucket(nobody, parseWho('session:all'), 'user')).toBe(false);
+    expect(inBucket(awkward, parseWho('session:all'), 'user')).toBe(true);
   });
 });
 
 describe('focusOn', () => {
   it('names the holder a row should link to', () => {
     expect(whoParam(focusOn(named))).toBe('session:sess-1');
-    expect(whoParam(focusOn(me))).toBe('person:pippijn');
+    expect(whoParam(focusOn(me))).toBe('person:user');
   });
 
   it('sends the pile to the bucket it already has', () => {
@@ -105,7 +105,7 @@ describe('parseWho', () => {
   it('reads every selection the URL can carry', () => {
     expect(parseWho('pile')).toEqual({ kind: 'bucket', bucket: 'pile' });
     expect(parseWho('session:sess-1')).toEqual({ kind: 'session', id: 'sess-1' });
-    expect(parseWho('person:pippijn')).toEqual({ kind: 'person', id: 'pippijn' });
+    expect(parseWho('person:user')).toEqual({ kind: 'person', id: 'user' });
   });
 
   it('falls back to everything rather than to nothing', () => {
@@ -117,7 +117,7 @@ describe('parseWho', () => {
   });
 
   it('round-trips through the URL', () => {
-    for (const raw of ['mine', 'sessions', 'pile', 'session:sess-1', 'person:pippijn']) {
+    for (const raw of ['mine', 'sessions', 'pile', 'session:sess-1', 'person:user']) {
       expect(whoParam(parseWho(raw))).toBe(raw);
     }
     // `all` is the default and is left out of the URL entirely.

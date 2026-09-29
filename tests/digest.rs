@@ -107,10 +107,10 @@ fn work_in_hand_is_counted_and_marked() {
 #[test]
 fn a_holder_is_named_and_nobody_is_not() {
     let mut held = open(2, "yours");
-    held.assignee = person("pippijn");
+    held.assignee = person("user");
     let out = render(&[open(1, "in the pile"), held]);
     assert!(out.contains("- [ ] **#1** in the pile\n"), "{out}");
-    assert!(out.contains("- [ ] **#2** yours (pippijn)"), "{out}");
+    assert!(out.contains("- [ ] **#2** yours (user)"), "{out}");
     assert!(!out.contains("(nobody)"), "{out}");
 }
 

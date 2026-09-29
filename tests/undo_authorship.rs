@@ -103,7 +103,7 @@ async fn the_same_id_under_a_different_kind_is_a_different_actor() {
     // ⚠ A person and a session may hold the same string. Comparing ids alone
     // would make each look like the other, which is the failure that matters:
     // it waves an undo through as "yours".
-    let (as_person, as_session) = (person("pippijn"), known(&pool, "pippijn").await);
+    let (as_person, as_session) = (person("user"), known(&pool, "user").await);
     let id = file(&pool, &as_person).await;
     edit(&pool, id, "written by the session", &as_session).await;
 

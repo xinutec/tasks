@@ -1,6 +1,6 @@
 //! Waking a session that is not speaking.
 //!
-//! Pippijn: *"I just need that blocked session to have a way to be notified of a
+//! The user: *"I just need that blocked session to have a way to be notified of a
 //! task being closed so they can continue working."* See `tasks::wait` for why
 //! that is a background command returning rather than anything delivered.
 //!

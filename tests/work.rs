@@ -44,7 +44,7 @@ async fn file(pool: &MySqlPool, subject: &str, assignee: Option<Assignee>) -> u6
             blocked_on: Vec::new(),
             assignee,
         },
-        &Actor::Person("pippijn".into()),
+        &Actor::Person("user".into()),
     )
     .await
     .expect("filing")

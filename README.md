@@ -1,6 +1,6 @@
 # tasks
 
-The work Claude sessions and Pippijn hand between each other. One list, reachable
+The work Claude sessions and the user hand between each other. One list, reachable
 from a phone and from a terminal, where a task can be moved from a person to a
 conversation and back.
 
@@ -40,7 +40,7 @@ on is the cost this service exists to refuse. There is no repository to narrow
 by: a session spans checkouts, so *which repo* never had one answer.
 
 ⚠ **The pile stays**, because it is how a task reaches whichever conversation is
-around rather than a named one. Strictly *mine* would make work Pippijn left for
+around rather than a named one. Strictly *mine* would make work the user left for
 anybody invisible to everybody. Looking across holders is something to ask for:
 `task list --all`, `task sessions`.
 
@@ -129,14 +129,14 @@ field on `PATCH`, and a meaningful null (`Option<Option<Priority>>`) makes every
 client guess. Ranking again is the correction.
 
 ⚠ **A deadline is a DATE, and it reorders nothing — except inside the last
-week**, where it raises the task to `P0` (Pippijn's rule). The raise is derived
+week**, where it raises the task to `P0` (the user's rule). The raise is derived
 at read time and never written, drawn as `P0!` so it does not look chosen, and
 `task show` gives both levels. Further out, a date is evidence for a rank, not a
 competing answer to *what next* — how long the work takes would decide, and
 nothing records it. Overdue is shown as a fact; there is no "due soon", which
 would need a threshold.
 
-⚠ **A blocked task names its blockers, and the link carries rules.** Pippijn:
+⚠ **A blocked task names its blockers, and the link carries rules.** The user:
 *"It can be the same, but not higher priority than the thing it's blocked on."*
 Claiming *do this next* about work you cannot start is the move that inflates a
 scale, and one a machine can catch. Refused at both ends — ranking the blocked
@@ -200,12 +200,12 @@ task list --handed-out                    # what you filed and another holder ha
 task show <id> [--body]                   # one task, its prose and its history
 task sessions [--all]                     # who holds what, as open/total
 <any read command> --json                 # what the service answered, verbatim
-task add "<subject>" [--body -] [--to me|pippijn|<session>|nobody] [--priority P1]
+task add "<subject>" [--body -] [--to me|human|<session>|nobody] [--priority P1]
                                           # `--to nobody` needs `--spare "<why>"`
 task start <id> / task done <id> [--to W] [--note -]   # move it along
 task drop <id> [--reason -]               # close it without doing it
 task reopen <id>                          # back to open; it keeps its holder
-task move <id> me|pippijn|<session>|nobody  # hand it over
+task move <id> me|human|<session>|nobody  # hand it over
 task wait <id>… [--for 4h] &              # in the BACKGROUND: block until they close,
                                           # and the command returning wakes this session
 task edit <id> [--subject S] [--body -] [--priority P0]   # change the words, rank it
@@ -351,8 +351,8 @@ renders a history — so a closed task must not read as done by nobody, and a
 closed task cannot be handed to the pile. An explicit assignee always wins, and
 reopening leaves the holder alone.
 
-⚠ **Nothing means Pippijn implicitly.** `me` is whoever is running the command;
-handing work to the person is `pippijn`.
+⚠ **Nothing means the user implicitly.** `me` is whoever is running the command;
+handing work to the person is `human`.
 
 ⚠ **The pile is argued for.** `--to nobody` needs `--spare "<why>"` beside it:
 filings to the pile were almost always corrected later, so an unheld task is
@@ -408,7 +408,7 @@ the per-turn cost of the whole system.
 nix build .#task            # just the binary, here
 ```
 
-On the Mac it is installed through home-manager (`pippijn/mac-config`), pinned to
+On the Mac it is installed through home-manager (`~/.config/home-manager`), pinned to
 this repo's committed HEAD. ⚠ **A commit here is not an installed CLI**:
 `~/.config/home-manager/switch.sh` re-locks and activates, and until it runs every
 session holds the previous build. The gate has a row for the package, so the
@@ -423,7 +423,7 @@ flake cannot rot unnoticed between switches.
 
 ⚠ **The actor is derived from the credential, never from the request body.** A
 write says what to change, not who is changing it, so a session cannot file
-history as though Pippijn had moved a task: there is no field to put it in.
+history as though the user had moved a task: there is no field to put it in.
 
 ⚠ **`AGENT_TOKEN` authenticates the machine, not the conversation.** Every session
 on the Mac reads the same file, so one can act as another by declaring a

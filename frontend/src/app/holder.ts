@@ -22,7 +22,7 @@ export const STATUS_LABEL: Record<Status, string> = {
  * — see `Priority::gloss` in Rust.
  *
  * ⚠ **A second copy of `Priority::gloss`, and it has to say the same thing**,
- * or Pippijn and the sessions read the levels differently. Nothing checks this
+ * or the user and the sessions read the levels differently. Nothing checks this
  * at build time, so change both or neither. (P4's session-only clause about
  * the prompt is left out here.)
  *
@@ -87,7 +87,7 @@ export const WHO_LABEL: Record<Bucket, string> = {
  * `/who`'s `hardware 6/31` can open onto those six.
  *
  * **Prefixed, rather than bare ids.** `session:<id>` and `person:<id>` cannot
- * collide with a bucket word, and a bare id could: `pippijn` is a person today,
+ * collide with a bucket word, and a bare id could: `user` is a person today,
  * and nothing stops a session from being named or identified as `mine` or
  * `all`. The prefix also makes the URL say what it means when read aloud.
  *
@@ -165,7 +165,7 @@ export function inBucket(assignee: Assignee, who: Who, me: string | null): boole
         case 'all':
           return true;
         case 'mine':
-          // The signed-in id, not a hard-coded `pippijn`: the allow-list is
+          // The signed-in id, not a hard-coded account: the allow-list is
           // configuration.
           return assignee.kind === 'person' && (me === null || assignee.id === me);
         case 'sessions':

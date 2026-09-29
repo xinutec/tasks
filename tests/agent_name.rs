@@ -134,9 +134,9 @@ fn the_transcript_is_found_whichever_project_directory_it_is_under() {
     // path it was started in — so the file is looked for by id, in all of them.
     let root = std::env::temp_dir().join(format!("tasks-agent-name-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    let dir = root.join("-Users-pippijn-Code-elsewhere");
+    let dir = root.join("-Users-user-Code-elsewhere");
     std::fs::create_dir_all(&dir).expect("a projects root to work in");
-    std::fs::create_dir_all(root.join("-Users-pippijn-Code")).expect("a second project");
+    std::fs::create_dir_all(root.join("-Users-user-Code")).expect("a second project");
     std::fs::write(dir.join(format!("{ME}.jsonl")), agent_line("tasks", ME)).expect("a transcript");
 
     assert_eq!(from_projects(&root, ME).as_deref(), Some("tasks"));

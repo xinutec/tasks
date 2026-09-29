@@ -1,4 +1,4 @@
-//! tasks — the work Claude sessions and Pippijn hand between each other.
+//! tasks — the work Claude sessions and the user hand between each other.
 //!
 //! **Why a service and not a file.** A task list kept in a file is
 //! re-serialised into the conversation every turn and grows until it dominates
