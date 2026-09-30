@@ -13,8 +13,10 @@
 
 use std::collections::HashMap;
 use std::io::Read;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use serde::Deserialize;
 
 use tasks::tasks::findings::{Finding, Kind, Verdict, falsify};
@@ -46,11 +48,16 @@ fn kind(s: &str) -> Option<Kind> {
     })
 }
 
+/// Try to refute a review's findings (JSON on stdin) before anybody edits on them.
+#[derive(Parser)]
+struct Cli {
+    /// A map of task id to `{subject, body}`, from `task show <id> --json`.
+    #[arg(long, value_name = "FILE")]
+    tasks: PathBuf,
+}
+
 fn main() -> Result<()> {
-    let path = std::env::args()
-        .skip_while(|a| a != "--tasks")
-        .nth(1)
-        .context("usage: falsify --tasks <id-to-subject-and-body.json> < findings.json")?;
+    let path = Cli::parse().tasks;
     let texts: HashMap<String, TaskText> =
         serde_json::from_str(&std::fs::read_to_string(&path).context("reading --tasks")?)
             .context("--tasks must be {\"<id>\": {\"subject\":…, \"body\":…}}")?;
