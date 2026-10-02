@@ -11,6 +11,7 @@ import {
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 
+import type { Created, Updated } from '../src/app/models';
 import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
@@ -153,7 +154,13 @@ test('a task — closed with nothing written since it last moved @ phone width',
   await mockApi(page);
   await page.route('**/api/tasks/*', (r) =>
     r.request().method() === 'PATCH'
-      ? r.fulfill({ json: { ...DETAIL, changed: ['status'], unwritten: '2026-09-20T10:00:00Z' } })
+      ? r.fulfill({
+          json: {
+            ...DETAIL,
+            changed: ['status'],
+            unwritten: '2026-09-20T10:00:00Z',
+          } satisfies Updated,
+        })
       : r.fulfill({ json: DETAIL }),
   );
   await page.goto('/t/92');
@@ -171,7 +178,10 @@ test('filing a task that names one you just closed @ phone width', async ({ page
   await page.route('**/api/tasks', (r) =>
     r.request().method() === 'POST'
       ? r.fulfill({
-          json: { ...TASKS[1], closed: [{ id: 89, status: 'done', at: '2026-09-26T10:00:00Z' }] },
+          json: {
+            ...TASKS[1],
+            closed: [{ id: 89, status: 'done', at: '2026-09-26T10:00:00Z' }],
+          } satisfies Created,
         })
       : r.fulfill({ json: TASKS }),
   );

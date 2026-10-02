@@ -1,5 +1,7 @@
 import { type Page } from '@playwright/test';
 
+import type { Holder, Me, Revision, Session, Task, TaskDetail } from '../src/app/models';
+
 /**
  * The data both render checks run against.
  *
@@ -17,7 +19,7 @@ import { type Page } from '@playwright/test';
  *   3. **A holder chip may be a raw session id**, which is the widest thing
  *      the meta column ever has to carry.
  */
-export const ME = { kind: 'person', id: 'user', name: 'User' };
+export const ME = { kind: 'person', id: 'user', name: 'User' } satisfies Me;
 
 /** A named session and an unnamed one: the second is the hard case, because it
  *  is drawn as its raw id everywhere a name would go. */
@@ -35,7 +37,7 @@ export const SESSIONS = [
     last_seen: '2026-08-08T12:00:00Z',
     open: 3,
   },
-];
+] satisfies Session[];
 
 /** Who holds what. Carries the two hazards this screen has: an unnamed session,
  *  drawn as 36 unbreakable characters beside a count that must not be pushed
@@ -53,7 +55,7 @@ export const HOLDERS = [
   },
   { kind: 'person', id: 'user', name: 'User', open: 4, total: 19 },
   { kind: 'nobody', name: 'nobody', open: 7, total: 61 },
-];
+] satisfies Holder[];
 
 /** Real subjects from the corpus, plus one at the full 200-character cap. */
 export const TASKS = [
@@ -147,7 +149,7 @@ export const TASKS = [
     created_at: '2026-08-08T09:00:00Z',
     updated_at: '2026-08-08T09:00:00Z',
   },
-];
+] satisfies Task[];
 
 /** The version an edit replaced, as the undo panel shows it.
  *
@@ -181,7 +183,7 @@ export const PREVIOUS = {
     '| 1 | totality-checks/src/ir.rs | 10 |',
     '| 2 | totality-checks/src/descent.rs | 24 |',
   ].join('\n'),
-};
+} satisfies Revision;
 
 /** A task page with everything that can crowd the column: a long subject, a
  *  body with a fenced block and a table, and a history whose actor is a raw
@@ -233,7 +235,7 @@ interpreter</strong>: it evaluates as far as the text determines and stops.</p>
       actor: SESSIONS[1].id,
     },
   ],
-};
+} satisfies TaskDetail;
 
 /** The same task, closed without being done.
  *
@@ -253,14 +255,12 @@ export const DROPPED = {
       actor: 'user',
     },
   ],
-};
+} satisfies TaskDetail;
 
 /** Mock every backend call. Catch-all FIRST — Playwright runs handlers
  *  last-registered-first. */
 export async function mockApi(page: Page): Promise<void> {
-  await page.route('**/api/**', (r) =>
-    r.request().method() === 'GET' ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: '' }),
-  );
+  await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
   await page.route('**/api/tasks**', (r) => r.fulfill({ json: TASKS }));
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DETAIL }));

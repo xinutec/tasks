@@ -1,5 +1,6 @@
 import { Page, test } from '@playwright/test';
 
+import type { Created, Task, Updated } from '../src/app/models';
 import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
@@ -104,7 +105,13 @@ test('every screen, at phone width', async ({ page }) => {
   // The two lifecycle notes, where they land: under the body, scrolled to.
   await page.route('**/api/tasks/*', (r) =>
     r.request().method() === 'PATCH'
-      ? r.fulfill({ json: { ...DETAIL, changed: ['status'], unwritten: '2026-09-20T10:00:00Z' } })
+      ? r.fulfill({
+          json: {
+            ...DETAIL,
+            changed: ['status'],
+            unwritten: '2026-09-20T10:00:00Z',
+          } satisfies Updated,
+        })
       : r.fulfill({ json: DETAIL }),
   );
   await page.goto(`/t/${TASKS[1].id}`);
@@ -120,7 +127,10 @@ test('every screen, at phone width', async ({ page }) => {
   await page.route('**/api/tasks', (r) =>
     r.request().method() === 'POST'
       ? r.fulfill({
-          json: { ...TASKS[1], closed: [{ id: 89, status: 'done', at: '2026-09-26T10:00:00Z' }] },
+          json: {
+            ...TASKS[1],
+            closed: [{ id: 89, status: 'done', at: '2026-09-26T10:00:00Z' }],
+          } satisfies Created,
         })
       : r.fulfill({ json: TASKS }),
   );
@@ -183,7 +193,7 @@ test('every screen, at phone width', async ({ page }) => {
 
   // Empty is a state somebody sees on the first day and after the last task is
   // finished, and an empty screen is the easiest one to leave looking broken.
-  await page.route('**/api/tasks**', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/tasks**', (r) => r.fulfill({ json: [] satisfies Task[] }));
   await page.goto('/');
   await page.getByText('Nothing here').waitFor();
   await shot(page, 'empty', true);
