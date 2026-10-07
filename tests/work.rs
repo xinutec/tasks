@@ -247,6 +247,7 @@ async fn the_sprawl_backlog_is_the_number_this_module_was_built_for() {
             elapsed_ms: 33_735,
             outcome: Outcome::Spoke,
             subject_key: None,
+            matched: Vec::new(),
             said: Some("the conclusion is at the bottom".into()),
         },
     )

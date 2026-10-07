@@ -175,10 +175,13 @@ fn a_refusal_admits_it_is_a_model_reading_titles() {
     // missing priority, a subject that is really a body. This one is a small
     // model's opinion, and a caller told "this is a duplicate" checks nothing
     // where a caller told what was matched opens the task.
-    let text = refusal(&[Match {
-        id: 255,
-        why: "the same suspended cron".into(),
-    }]);
+    let text = refusal(
+        &[Match {
+            id: 255,
+            why: "the same suspended cron".into(),
+        }],
+        &corpus(),
+    );
     assert!(text.contains("model"), "{text}");
     assert!(text.contains("#255"), "{text}");
     assert!(text.contains("the same suspended cron"), "{text}");
@@ -190,10 +193,13 @@ fn a_refusal_says_nothing_was_filed_and_how_to_file_it_anyway() {
     // that cannot tell whether the task landed re-runs and makes a real one. And
     // a refusal with no way past it turns a false positive into lost work, when
     // the body is still sitting in the command the caller just ran.
-    let text = refusal(&[Match {
-        id: 689,
-        why: "the same signal.dhall apply".into(),
-    }]);
+    let text = refusal(
+        &[Match {
+            id: 689,
+            why: "the same signal.dhall apply".into(),
+        }],
+        &corpus(),
+    );
     // ⚠ The verdict lives in the LAST line — see `what_survives_the_tail`. This
     // asserts both halves are present at all.
     assert!(text.contains("NOT FILED"), "{text}");
@@ -544,16 +550,19 @@ mod what_survives_the_tail {
 
     #[test]
     fn a_model_refusal_says_everything_in_its_last_line() {
-        let text = refusal(&[
-            Match {
-                id: 255,
-                why: "the same suspended cron".into(),
-            },
-            Match {
-                id: 689,
-                why: "the same signal.dhall apply".into(),
-            },
-        ]);
+        let text = refusal(
+            &[
+                Match {
+                    id: 255,
+                    why: "the same suspended cron".into(),
+                },
+                Match {
+                    id: 689,
+                    why: "the same signal.dhall apply".into(),
+                },
+            ],
+            &corpus(),
+        );
         let last = verdict(&text);
         assert!(
             last.contains("NOT FILED"),
@@ -614,6 +623,72 @@ mod what_survives_the_tail {
         );
     }
 
+    /// ⚠ **The remedy names its id.** On the lines above alone, a `tail -1`
+    /// keeps "`task reopen <id>`" with no id, and the filer overrides blind.
+    #[test]
+    fn a_closed_refusal_names_what_it_matched_in_its_last_line() {
+        let text = reopen_instead(
+            &[(
+                Match {
+                    id: 689,
+                    why: "the same Dhall convergence check".into(),
+                },
+                Settled {
+                    id: 689,
+                    subject: "k8s Dhall model apply".into(),
+                    dropped: false,
+                },
+            )],
+            984,
+            11,
+        );
+        let last = verdict(&text);
+        assert!(
+            last.contains("#689 (done: k8s Dhall model apply)"),
+            "{last}"
+        );
+        assert!(last.contains("`task reopen 689`"), "{last}");
+    }
+
+    #[test]
+    fn an_open_refusal_names_what_it_matched_in_its_last_line() {
+        let text = refusal(
+            &[Match {
+                id: 255,
+                why: "the same suspended cron".into(),
+            }],
+            &corpus(),
+        );
+        let last = verdict(&text);
+        assert!(last.contains("#255 (open task 255)"), "{last}");
+        assert!(last.contains("`task show 255`"), "{last}");
+    }
+
+    /// Several matches are all named, and no one of them is guessed for the
+    /// remedy.
+    #[test]
+    fn a_refusal_naming_several_names_each_and_spells_no_one_remedy() {
+        let text = refusal(
+            &[
+                Match {
+                    id: 255,
+                    why: "a".into(),
+                },
+                Match {
+                    id: 671,
+                    why: "b".into(),
+                },
+            ],
+            &corpus(),
+        );
+        let last = verdict(&text);
+        assert!(
+            last.contains("#255 (open task 255) or #671 (open task 671)"),
+            "{last}"
+        );
+        assert!(last.contains("`task show <id>`"), "{last}");
+    }
+
     #[test]
     fn a_closed_refusal_spends_one_line_per_finding_and_one_on_the_verdict() {
         let two: Vec<(Match, Settled)> = (1..=2)
@@ -645,7 +720,7 @@ mod what_survives_the_tail {
                 why: format!("finding {n}"),
             })
             .collect();
-        let text = refusal(&three);
+        let text = refusal(&three, &corpus());
         assert_eq!(text.lines().count(), 4, "{text}");
         let tail: Vec<&str> = text.lines().rev().take(3).collect();
         assert!(

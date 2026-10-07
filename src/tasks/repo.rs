@@ -716,7 +716,7 @@ fn check_assignee(assignee: &Assignee) -> Result<()> {
 /// Anything unparseable is dropped rather than defaulted: these are foreign keys
 /// the database itself produced, so a non-number here means the query changed,
 /// and inventing a `0` would point at a task that cannot exist.
-fn parse_ids(joined: Option<&str>) -> Vec<u64> {
+pub(crate) fn parse_ids(joined: Option<&str>) -> Vec<u64> {
     joined
         .unwrap_or("")
         .split(',')

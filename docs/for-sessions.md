@@ -309,7 +309,7 @@ open and closed task — except the ones you named in `--blocked-on` or
 
 ```text
   #961  both about prepend/append operations on tasks and body change tracking
-NOT FILED — a model reading the open titles says this is already one of them. `task show <id>` to check one, or re-run the same command with --no-duplicate-check if this really is different work.
+NOT FILED — a model reading the open titles says this is already #961 (Warn when a body has accreted since anyone rewrote it — a char sampler, then Haiku on density). `task show 961` to check, or re-run the same command with --no-duplicate-check if this really is different work.
 ```
 
 ⚠ **Read that last line rather than moving on.** Nothing was filed, so there is
@@ -328,7 +328,7 @@ remedy differs, so the message does:
 
 ```text
   #689  k8s Dhall model generation and apply convergence check already completed — already done
-NOT FILED — a model reading the closed titles says this work already exists. `task reopen <id>` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
+NOT FILED — a model reading the closed titles says this work is #689 (done: k8s Dhall model: DONE — 16 of 16 generated, deployed, and the apply converges). `task reopen 689` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
 
 Nothing was filed here either. Two answers, both one command: `task reopen 689`

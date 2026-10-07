@@ -61,6 +61,7 @@ async fn a_filing_check_is_recorded_before_there_is_a_task_to_name() {
             elapsed_ms: 24_000,
             outcome: Outcome::Quiet,
             subject_key: None,
+            matched: Vec::new(),
             said: None,
         },
     )
@@ -81,6 +82,42 @@ async fn a_filing_check_is_recorded_before_there_is_a_task_to_name() {
     assert_eq!(row.4, "quiet");
 }
 
+/// ⚠ **What a refusal named comes back out**, or a refusal nobody kept
+/// the tail of can never be judged afterwards.
+#[tokio::test]
+async fn a_refusal_keeps_the_tasks_it_named() {
+    let pool = common::fresh_db().await;
+    let run = |matched: Vec<u64>| Run {
+        kind: Kind::Filing,
+        task_id: None,
+        input_chars: 100,
+        accreted: None,
+        elapsed_ms: 1_000,
+        outcome: if matched.is_empty() {
+            Outcome::Quiet
+        } else {
+            Outcome::Spoke
+        },
+        subject_key: None,
+        matched,
+        said: None,
+    };
+    checks::record(&pool, "s-named", &run(vec![1842, 77]))
+        .await
+        .expect("recording a refusal");
+    checks::record(&pool, "s-named", &run(Vec::new()))
+        .await
+        .expect("recording a pass");
+    let mut named: Vec<Vec<u64>> = checks::recent(&pool, 1)
+        .await
+        .expect("reading back")
+        .into_iter()
+        .map(|ran| ran.matched)
+        .collect();
+    named.sort();
+    assert_eq!(named, vec![vec![], vec![77, 1842]]);
+}
+
 #[tokio::test]
 async fn a_density_run_keeps_what_crossed_the_sampler() {
     let pool = common::fresh_db().await;
@@ -95,6 +132,7 @@ async fn a_density_run_keeps_what_crossed_the_sampler() {
             elapsed_ms: 20_500,
             outcome: Outcome::Spoke,
             subject_key: None,
+            matched: Vec::new(),
             said: None,
         },
     )
@@ -125,6 +163,7 @@ fn spent(kind: Kind, elapsed_ms: u32, outcome: Outcome) -> Ran {
         accreted: None,
         elapsed_ms,
         outcome,
+        matched: Vec::new(),
     }
 }
 
@@ -187,6 +226,7 @@ async fn what_is_read_back_is_the_window_asked_for() {
                 elapsed_ms: 1_000,
                 outcome: Outcome::Quiet,
                 subject_key: None,
+                matched: Vec::new(),
                 said: None,
             },
         )
@@ -346,6 +386,7 @@ async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
             elapsed_ms: 9_500,
             outcome: Outcome::Spoke,
             subject_key: Some(checks::subject_key(subject)),
+            matched: Vec::new(),
             said: None,
         },
     )
@@ -389,6 +430,7 @@ async fn a_check_that_said_nothing_licenses_nothing() {
             elapsed_ms: 7_100,
             outcome: Outcome::Quiet,
             subject_key: None,
+            matched: Vec::new(),
             said: None,
         },
     )
@@ -457,6 +499,7 @@ mod sprawl {
                 elapsed_ms: 33_735,
                 outcome,
                 subject_key: None,
+                matched: Vec::new(),
                 said: said.map(str::to_string),
             },
         )

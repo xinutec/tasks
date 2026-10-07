@@ -1101,6 +1101,7 @@ async fn already_filed(
             elapsed_ms,
             outcome: checks::outcome(&said, !found.is_empty()),
             subject_key: refused,
+            matched: found.iter().map(|one| one.id).collect(),
             // A filing check judges a title against a list, and the caller is
             // holding the body it was about to file — there is no task yet to
             // keep anything on.
@@ -1736,7 +1737,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                         // ⚠ **`declined`, never `bail!`**, or the commonest
                         // refusal counts as a failure and prints its chain.
                         let said = match open.is_empty() {
-                            false => duplicates::refusal(&open),
+                            false => duplicates::refusal(&open, &candidates),
                             true => duplicates::reopen_instead(&over, settled.len(), unread),
                         };
                         return Err(commands::declined(said));
@@ -2284,6 +2285,7 @@ async fn accreting(client: &Client, id: TaskRef, updated: &Value) {
             outcome: checks::outcome(&said, advice.is_some()),
             // A density read has no subject to license anything with.
             subject_key: None,
+            matched: Vec::new(),
             // ⚠ **What the MODEL said, not what this prints**: the wrapper is
             // addressed to whoever ran this edit, not to the next reader.
             said: advice

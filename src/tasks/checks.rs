@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::MySqlPool;
 
 use crate::error::AppError;
+use crate::tasks::repo::parse_ids;
 use crate::wire::RequiredKeys;
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -93,6 +94,9 @@ pub struct Run {
     /// no subject and a check that passed has nothing to license.
     #[serde(default)]
     pub subject_key: Option<String>,
+    /// The tasks a filing check named. Empty on every other run.
+    #[serde(default)]
+    pub matched: Vec<u64>,
     /// What a density read said, verbatim, so it outlives the tool result.
     ///
     /// ⚠ **Sent on this run, not by a second call**: a `PATCH` to the task
@@ -134,7 +138,8 @@ impl RequiredKeys for Run {
 }
 
 pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
-    sqlx::query(
+    let mut tx = pool.begin().await.context("recording what a check did")?;
+    let id = sqlx::query(
         "INSERT INTO check_run \
          (ran_at, kind, session, task_id, input_chars, accreted, elapsed_ms, outcome, subject_key) \
          VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -147,9 +152,19 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     .bind(run.elapsed_ms)
     .bind(run.outcome.as_str())
     .bind(run.subject_key.as_deref())
-    .execute(pool)
+    .execute(&mut *tx)
     .await
-    .context("recording what a check did")?;
+    .context("recording what a check did")?
+    .last_insert_id();
+    for task in &run.matched {
+        sqlx::query("INSERT IGNORE INTO check_match (run_id, task_id) VALUES (?, ?)")
+            .bind(id)
+            .bind(task)
+            .execute(&mut *tx)
+            .await
+            .context("recording what a check named")?;
+    }
+    tx.commit().await.context("recording what a check did")?;
     remember(pool, run).await
 }
 
@@ -228,6 +243,9 @@ pub struct Ran {
     pub accreted: Option<u32>,
     pub elapsed_ms: u32,
     pub outcome: Outcome,
+    /// What a filing check named; see [`Run::matched`].
+    #[serde(default)]
+    pub matched: Vec<u64>,
 }
 
 impl Kind {
@@ -269,11 +287,14 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
         accreted: Option<u32>,
         elapsed_ms: u32,
         outcome: String,
+        matched: Option<String>,
     }
 
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT ran_at, kind, task_id, input_chars, accreted, elapsed_ms, outcome \
-         FROM check_run WHERE ran_at > NOW() - INTERVAL ? DAY ORDER BY ran_at DESC",
+        "SELECT r.ran_at, r.kind, r.task_id, r.input_chars, r.accreted, r.elapsed_ms, r.outcome, \
+           (SELECT GROUP_CONCAT(m.task_id ORDER BY m.task_id) FROM check_match m \
+            WHERE m.run_id = r.id) AS matched \
+         FROM check_run r WHERE r.ran_at > NOW() - INTERVAL ? DAY ORDER BY r.ran_at DESC",
     )
     .bind(days)
     .fetch_all(pool)
@@ -292,6 +313,7 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
                 outcome: Outcome::read(&row.outcome).with_context(|| {
                     format!("`{}` is not an outcome this version knows", row.outcome)
                 })?,
+                matched: parse_ids(row.matched.as_deref()),
             })
         })
         .collect()

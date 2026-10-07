@@ -241,7 +241,7 @@ repeats finished work is sent to reopen it:
 
 ```text
   #689  k8s Dhall model generation and apply convergence check already completed — already done
-NOT FILED — a model reading the closed titles says this work already exists. `task reopen <id>` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
+NOT FILED — a model reading the closed titles says this work is #689 (done: k8s Dhall model: DONE — 16 of 16 generated, deployed, and the apply converges). `task reopen 689` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
 
 The closed half is the weaker reader, so it refuses correct filings more often;
@@ -302,7 +302,8 @@ most tangled bodies come back `DENSE` in seconds — a false all-clear on the ta
 that most needs the read.
 
 **Both checks write down what they did** (`check_run`): kind, characters put to
-the model, elapsed, and `quiet`, `spoke`, `timeout` or `error`. The table has no
+the model, elapsed, `quiet`, `spoke`, `timeout` or `error`, and the tasks a
+refusal named (`check_match`). The table has no
 foreign keys, because an instrument its subject can refuse or delete is not one.
 `task checks` folds the last week into one line per kind, the abandoned calls
 included — leaving them out makes a bound that fires look comfortable.

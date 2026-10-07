@@ -191,17 +191,38 @@ fn one(line: &str) -> Option<Match> {
 /// ⚠ **The override is spelled out in full.** The caller still holds the text
 /// it tried to file, so the remedy is one re-run — saying so is what keeps a
 /// false positive cheap.
-pub fn refusal(found: &[Match]) -> String {
+pub fn refusal(found: &[Match], open: &[(u64, String)]) -> String {
     let mut out = String::new();
     for one in found {
         out.push_str(&format!("  #{:<4} {}\n", one.id, one.why));
     }
-    out.push_str(
-        "NOT FILED — a model reading the open titles says this is already one of them. \
-         `task show <id>` to check one, or re-run the same command with \
+    let named = found
+        .iter()
+        .map(|one| match open.iter().find(|(id, _)| *id == one.id) {
+            Some((id, subject)) => format!("#{id} ({subject})"),
+            None => format!("#{}", one.id),
+        });
+    out.push_str(&format!(
+        "NOT FILED — a model reading the open titles says this is already {}. \
+         `task show {}` to check, or re-run the same command with \
          --no-duplicate-check if this really is different work.",
-    );
+        either(named),
+        only(found.iter().map(|one| one.id)),
+    ));
     out
+}
+
+/// The matches as one phrase: `#1 (…)`, or `#1 (…) or #2 (…)`.
+fn either(named: impl Iterator<Item = String>) -> String {
+    named.collect::<Vec<_>>().join(" or ")
+}
+
+/// The id a remedy can be spelled with, when there is exactly one.
+fn only(mut ids: impl ExactSizeIterator<Item = u64>) -> String {
+    match (ids.len(), ids.next()) {
+        (1, Some(id)) => id.to_string(),
+        _ => "<id>".to_string(),
+    }
 }
 
 /// A closed task, as the check reads it.
@@ -280,8 +301,8 @@ pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, S
 /// open twin is folded into or re-run past; a closed one is `task reopen`, and
 /// a session not told so files anyway.
 ///
-/// ⚠ **The verdict is the LAST line, corpus counts and all**, because sessions
-/// pipe this to `tail -3`. See the `what_survives_the_tail` tests.
+/// ⚠ **The verdict is the LAST line, ids and corpus counts and all**, because
+/// sessions pipe this to `tail`. See the `what_survives_the_tail` tests.
 pub fn reopen_instead(found: &[(Match, Settled)], read: usize, unread: usize) -> String {
     let mut out = String::new();
     for (one, task) in found {
@@ -292,11 +313,17 @@ pub fn reopen_instead(found: &[(Match, Settled)], read: usize, unread: usize) ->
         };
         out.push_str(&format!("  #{:<4} {} — {status}\n", one.id, one.why));
     }
+    let named = found.iter().map(|(one, task)| {
+        let status = if task.dropped { "dropped" } else { "done" };
+        format!("#{} ({status}: {})", one.id, task.subject)
+    });
     out.push_str(&format!(
-        "NOT FILED — a model reading the closed titles says this work already exists. \
-         `task reopen <id>` if it is the same work and carry on in that task, or re-run the \
+        "NOT FILED — a model reading the closed titles says this work is {}. \
+         `task reopen {}` if it is the same work and carry on in that task, or re-run the \
          same command with --no-duplicate-check if it really is different \
-         (read against {read} closed tasks; {unread} skipped as having no body)."
+         (read against {read} closed tasks; {unread} skipped as having no body).",
+        either(named),
+        only(found.iter().map(|(one, _)| one.id)),
     ));
     out
 }
