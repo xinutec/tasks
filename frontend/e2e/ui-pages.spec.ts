@@ -4,10 +4,9 @@ import { expect, test } from '@playwright/test';
 import {
   expectIconFontLoaded,
   expectNoHorizontalOverflow,
-  expectNoTextOverlaps,
+  expectCleanLayout,
   expectRecoversFromMissingBundle,
   expectUpInTheBar,
-  expectNoClippedIcons,
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
 
@@ -46,11 +45,9 @@ test('the list — long subjects beside a holder chip @ phone width', async ({ p
   await page.goto('/');
   await page.getByText('Stop walking every transcript').waitFor();
   await expectIconFontLoaded(page);
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, FILTER_SCROLLERS);
+  await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
   // A holder chip is capped and told to ellipsise; clipped TEXT elsewhere is a
   // cap somebody added without meaning to.
-  await expectNoClippedIcons(page, testInfo);
 });
 
 /**
@@ -64,8 +61,7 @@ test('the list — filtered to one holder @ phone width', async ({ page }, testI
   await page.goto('/');
   await page.getByRole('radio', { name: 'with a session' }).click();
   await page.getByText('The console task reader').waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, FILTER_SCROLLERS);
+  await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
 });
 
 /**
@@ -86,9 +82,7 @@ test('a task — a 200-character subject, prose, and a raw session id in the his
   await page.getByRole('heading', { name: 'History' }).waitFor();
   // `/t/:id` declares up, so the bar leads with the arrow and names the task.
   await expectUpInTheBar(page);
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
-  await expectNoClippedIcons(page, testInfo);
+  await expectCleanLayout(page, testInfo, { allow: MD_SCROLLERS });
 });
 
 test('a task — the move menu, with an unnamed session in it @ phone width', async ({
@@ -105,7 +99,7 @@ test('a task — the move menu, with an unnamed session in it @ phone width', as
   // the task body against every menu item — four "collisions" that are the
   // feature working. What is worth asserting is that the menu does not collide
   // with itself, and that a 36-character id does not push it off the screen.
-  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-menu-panel');
+  await expectCleanLayout(page, testInfo, { root: '.mat-mdc-menu-panel' });
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
 });
 
@@ -118,7 +112,7 @@ test('a task — the overflow menu, whose one item is a sentence @ phone width',
   // The label is a phrase rather than a verb, because "drop" alone reads as
   // "delete" — and a phrase in a menu on a phone is where width runs out.
   await page.getByRole('menuitem', { name: 'Drop it' }).waitFor();
-  await expectNoTextOverlaps(page, testInfo, '.mat-mdc-menu-panel');
+  await expectCleanLayout(page, testInfo, { root: '.mat-mdc-menu-panel' });
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
 });
 
@@ -129,9 +123,7 @@ test('a dropped task — closed, and not counted as done @ phone width', async (
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DROPPED }));
   await page.goto('/t/92');
   await page.getByText('dropped').first().waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
-  await expectNoClippedIcons(page, testInfo);
+  await expectCleanLayout(page, testInfo, { allow: MD_SCROLLERS });
 });
 
 test('filing a task — a hint under a field, and a label under that @ phone width', async ({
@@ -143,9 +135,7 @@ test('filing a task — a hint under a field, and a label under that @ phone wid
   // Drilled into from `+`, so the bar leads with the arrow back to the list.
   await expectUpInTheBar(page);
   await page.getByLabel('Subject').fill(TASKS[1].subject);
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
-  await expectNoClippedIcons(page, testInfo);
+  await expectCleanLayout(page, testInfo);
 });
 
 test('a task — closed with nothing written since it last moved @ phone width', async ({
@@ -169,8 +159,7 @@ test('a task — closed with nothing written since it last moved @ phone width',
     .getByRole('radio', { name: 'done' })
     .click();
   await page.getByRole('heading', { name: 'Closed with its text as it was' }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+  await expectCleanLayout(page, testInfo, { allow: MD_SCROLLERS });
 });
 
 test('filing a task that names one you just closed @ phone width', async ({ page }, testInfo) => {
@@ -194,8 +183,7 @@ test('filing a task that names one you just closed @ phone width', async ({ page
   await page.getByRole('button', { name: 'File it' }).click();
   await page.getByRole('heading', { name: 'You closed what this names' }).waitFor();
   await page.getByRole('link', { name: '#89' }).waitFor();
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
+  await expectCleanLayout(page, testInfo, { allow: MD_SCROLLERS });
 
   // The one tap: reopen #89 FIRST, then drop the filing, then go to #89.
   const patches: string[] = [];
