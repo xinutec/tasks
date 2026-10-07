@@ -216,7 +216,6 @@
     // The same reasoning `.md-content code` carries in styles.scss: monospace
     // runs optically larger than Roboto at one size, so this tracks the text
     // around it rather than adding a step to the scale.
-    // dev-lint: allow-font-size optical match to the enclosing text
     font-size: 0.85em;
     font-family: ui-monospace, monospace;
   }
