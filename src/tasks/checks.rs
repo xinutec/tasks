@@ -14,7 +14,7 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::MySqlPool;
+use sqlx::{MySqlConnection, MySqlPool};
 
 use crate::error::AppError;
 use crate::tasks::repo::parse_ids;
@@ -164,17 +164,19 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
             .await
             .context("recording what a check named")?;
     }
+    remember(&mut tx, run).await?;
     tx.commit().await.context("recording what a check did")?;
-    remember(pool, run).await
+    Ok(())
 }
 
-/// Keep what a density read said, on the task it was about.
+/// Keep what a density read said, on the task it was about, in the same
+/// transaction as the run that said it.
 ///
 /// ⚠ **Only `spoke` and `quiet` touch the flag; a timeout or an error must
 /// not.** Those two mean the body was never judged, and clearing on them lets a
 /// slow model retire a finding nobody has addressed. Silence from a checker that
 /// never ran is not a verdict — the distinction [`Outcome`] exists to preserve.
-async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
+async fn remember(conn: &mut MySqlConnection, run: &Run) -> Result<()> {
     let (Kind::Density, Some(id)) = (run.kind, run.task_id) else {
         return Ok(());
     };
@@ -186,7 +188,7 @@ async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
                 .bind(run.said.as_deref())
                 .bind(run.input_chars)
                 .bind(id)
-                .execute(pool)
+                .execute(&mut *conn)
                 .await
                 .context("keeping what a density read said")?;
         }
@@ -197,7 +199,7 @@ async fn remember(pool: &MySqlPool, run: &Run) -> Result<()> {
         Outcome::Quiet => {
             sqlx::query("UPDATE tasks SET sprawl_said = NULL, sprawl_chars = NULL WHERE id = ?")
                 .bind(id)
-                .execute(pool)
+                .execute(&mut *conn)
                 .await
                 .context("clearing what a density read said")?;
         }
