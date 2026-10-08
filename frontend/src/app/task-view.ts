@@ -56,6 +56,7 @@ export class TaskView {
   private api = inject(TasksApi);
   private router = inject(Router);
   private store = inject(TaskStore);
+  readonly extrasFailed = this.store.extrasFailed;
 
   readonly statusIcon = STATUS_ICON;
   readonly statusLabel = STATUS_LABEL;

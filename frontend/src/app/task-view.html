@@ -97,6 +97,9 @@
           <mat-icon>inbox</mat-icon>
           <span>the pile</span>
         </button>
+        @if (extrasFailed(); as why) {
+          <button mat-menu-item disabled>Sessions could not be read ({{ why }})</button>
+        }
         @for (session of sessionOptions(); track session.id) {
           <button mat-menu-item (click)="moveTo({ kind: 'session', id: session.id })">
             <mat-icon>smart_toy</mat-icon>

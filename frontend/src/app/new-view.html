@@ -38,6 +38,9 @@
         <mat-option [value]="session.id">{{ session.label }}</mat-option>
       }
     </mat-select>
+    @if (extrasFailed(); as why) {
+      <mat-hint>Sessions could not be read ({{ why }}).</mat-hint>
+    }
   </mat-form-field>
 
   <!-- Only for the pile, the one holder that has to be argued for: filings

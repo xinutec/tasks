@@ -39,6 +39,7 @@ import { TasksApi } from './tasks-api';
 })
 export class WhoView {
   private store = inject(TaskStore);
+  readonly extrasFailed = this.store.extrasFailed;
   private api = inject(TasksApi);
 
   readonly loading = this.store.loading;

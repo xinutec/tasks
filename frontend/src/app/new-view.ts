@@ -40,6 +40,7 @@ export class NewView {
 
   private api = inject(TasksApi);
   private store = inject(TaskStore);
+  readonly extrasFailed = this.store.extrasFailed;
   private router = inject(Router);
 
   readonly subject = signal('');

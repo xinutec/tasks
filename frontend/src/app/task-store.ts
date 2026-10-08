@@ -30,6 +30,8 @@ export class TaskStore {
    *  behind an already-drawn list must not blank it. */
   readonly loading = signal(true);
   readonly failed = signal<string | null>(null);
+  /** Holders or sessions could not be read: their lists are not empty, unknown. */
+  readonly extrasFailed = signal<string | null>(null);
 
   /** The signed-in person's id, or null when a session is driving the page. */
   personId(): string | null {
@@ -40,6 +42,7 @@ export class TaskStore {
   /** Load everything. Safe to call again — that is what a write does after it
    *  lands, so the list, the counts and the history agree. */
   refresh(): void {
+    this.extrasFailed.set(null);
     this.api.me().subscribe({
       next: (me) => this.me.set(me),
       // Not recorded as a failure: the interceptor raises the sign-in wall on
@@ -59,11 +62,11 @@ export class TaskStore {
     });
     this.api.holders().subscribe({
       next: (holders) => this.holders.set(holders),
-      error: () => this.holders.set([]),
+      error: (err: unknown) => this.extrasFailed.set(reason(err)),
     });
     this.api.sessions().subscribe({
       next: (sessions) => this.sessions.set(sessions),
-      error: () => this.sessions.set([]),
+      error: (err: unknown) => this.extrasFailed.set(reason(err)),
     });
   }
 

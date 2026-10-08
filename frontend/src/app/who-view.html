@@ -5,7 +5,9 @@
     <span class="all">{{ total() }} filed in all</span>
   </header>
 
-  @if (rows().length === 0) {
+  @if (extrasFailed(); as why) {
+    <p class="failed">Could not read who holds what ({{ why }}).</p>
+  } @else if (rows().length === 0) {
     <p class="empty">Nobody has anything. That is allowed.</p>
   }
 
