@@ -230,11 +230,15 @@ pub async fn callback(
     (jar.add(session_cookie(signed)), Redirect::to(&dest)).into_response()
 }
 
-/// POST /logout → clear the cookie (sessions are stateless).
+/// POST /logout → clear the cookie (sessions are stateless); 204, the page reloads
+/// itself.
 pub async fn logout(
     State(app): State<AppState>,
     jar: CookieJar,
-) -> Result<(CookieJar, Redirect), AppError> {
+) -> Result<(CookieJar, StatusCode), AppError> {
     app.cfg.auth.as_ref().ok_or(AppError::NotFound)?;
-    Ok((jar.remove(Cookie::from(COOKIE_NAME)), Redirect::to("/")))
+    Ok((
+        jar.remove(Cookie::from(COOKIE_NAME)),
+        StatusCode::NO_CONTENT,
+    ))
 }
