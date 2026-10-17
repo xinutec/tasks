@@ -57,7 +57,7 @@ fn token() -> Option<String> {
 /// drop the second as a duplicate, and the chart would show a gap exactly when
 /// the tracker was quiet but alive.
 pub fn minted() -> String {
-    ulid::Ulid::new().to_string()
+    ulid::Ulid::generate().to_string()
 }
 
 fn check(label: &str, observed: String, value: f64, unit: &str, verdict: &str) -> Value {

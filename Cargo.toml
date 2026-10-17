@@ -63,7 +63,7 @@ hex = "0.4"
 subtle = "2"
 base64 = "0.23"
 rand = "0.10"
-ulid = "1"
+ulid = "3"
 anyhow = "1"
 thiserror = "2"
 # The CLI's argument table. A hand-rolled one is how `--body` ends up silently
