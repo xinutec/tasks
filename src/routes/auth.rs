@@ -208,6 +208,14 @@ pub async fn callback(
         )
             .into_response();
     }
+    // The lookup found the entry by this key; the proof is the comparison
+    // itself, which the exchange cannot be called without.
+    let Some(proof) = identity::StateMatched::check(&from_url, &pending.state) else {
+        return sign_in_problem(
+            StatusCode::UNAUTHORIZED,
+            "This sign-in did not start here, or it took too long.",
+        );
+    };
     let Some(code) = q.code else {
         return sign_in_problem(
             StatusCode::BAD_REQUEST,
@@ -215,7 +223,7 @@ pub async fn callback(
         );
     };
 
-    let token = match identity::exchange_code(&app.http, auth, &code).await {
+    let token = match identity::exchange_code(&app.http, auth, &code, proof).await {
         Ok(token) => token,
         Err(e) => {
             // Logged in full, shown as one sentence: the detail here is about
