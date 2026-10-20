@@ -35,6 +35,7 @@ async fn file(pool: &sqlx::MySqlPool, subject: &str) -> u64 {
         NewTask {
             subject: subject.into(),
             checked: true,
+            not_duplicate_of: Vec::new(),
             body: String::new(),
             priority: Ranking::At(Priority::P2),
             due: None,

@@ -72,6 +72,8 @@ pub fn router(state: AppState) -> Router {
         .route("/holders", get(api::holders))
         .route("/sessions/{id}", patch(api::rename))
         .route("/checks", get(api::checks_ran).post(api::check_ran))
+        .route("/checks/licence", get(api::check_licence))
+        .route("/checks/overrules", get(api::check_overrules))
         .route("/commands", get(api::commands_ran).post(api::command_ran))
         .route("/telemetry", post(telemetry::record))
         // ⚠ **`/api/*` must never reach the page.** Otherwise an unknown API path

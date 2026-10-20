@@ -465,10 +465,15 @@ pub struct NewTask {
     /// Whether the filer let the duplicate check run.
     ///
     /// ⚠ **Absent means "it ran", so an old client is not silently exempted**
-    /// from the refusal of a pre-emptive `--no-duplicate-check`. `false` has to
+    /// from the refusal of an unlicensed skip. `false` has to
     /// be SAID.
     #[serde(default = "yes")]
     pub checked: bool,
+    /// The tasks a refusal named that the filer judged different work, when
+    /// `checked` is false. The service requires every one the refusal named,
+    /// and the filing's history records them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not_duplicate_of: Vec<u64>,
     /// How urgent — and **the one field a filer may not leave out**.
     ///
     /// ⚠ **No `serde(default)`, and no `skip_serializing_if`, deliberately**: a
@@ -1073,6 +1078,20 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     .map_err(|e| unknown_holder(e, session, "filing a task"))?;
     let id = done.last_insert_id();
     record(&mut tx, id, actor, Moved::Created, Some(subject.clone())).await?;
+    if !new.checked {
+        // In the filing's own transaction: an override that is not on the record
+        // is the habit this exists to make visible.
+        let named: Vec<String> = new
+            .not_duplicate_of
+            .iter()
+            .map(|id| format!("#{id}"))
+            .collect();
+        let said = match named.as_slice() {
+            [] => "filed past a duplicate refusal".to_string(),
+            _ => format!("filed past a duplicate refusal naming {}", named.join(", ")),
+        };
+        record(&mut tx, id, actor, Moved::Overrode, Some(said)).await?;
+    }
     if let Some(moved) = set_blockers(&mut tx, id, &new.blocked_on).await? {
         record(&mut tx, id, actor, Moved::Blocked, Some(moved)).await?;
         blocking_is_consistent(&mut tx, id, new.priority.stored(), new.due).await?;

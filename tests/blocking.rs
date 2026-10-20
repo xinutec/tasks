@@ -22,6 +22,7 @@ fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
         subject: subject.into(),
         // The check ran: these file through the service the way a session does.
         checked: true,
+        not_duplicate_of: Vec::new(),
         body: String::new(),
         priority: priority.map_or(Ranking::Unassessed, Ranking::At),
         due: None,

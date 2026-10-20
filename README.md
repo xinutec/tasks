@@ -224,11 +224,14 @@ the local `claude` (the cheapest model, on the caller's own subscription) is
 asked whether the subject is one of the open tasks in different words — the
 duplicate nobody can catch by hand, since sessions cannot see each other's lists.
 An exact subject is caught by string equality first. A match ends the command
-with `NOT FILED`, naming what it matched. **`--no-duplicate-check` overrules a
-refusal you have just seen, and only then**: the service refuses the flag unless
-this session was recently refused that exact subject, because passed
-pre-emptively it means the check never runs. The caller still holds the body, so
-overruling is one re-run.
+with `NOT FILED`, naming what it matched. **`--not-duplicate-of <ids>` overrules
+a refusal you have just seen, naming each task it named.** The check is skipped
+only when this session was refused that exact subject in the last 30 minutes and
+the override names every task the refusal named; otherwise it runs as usual, so
+asking to skip it first time gains nothing. The filing's history records what it
+overruled (`overrode`), and `task checks` counts refusals and overrides per
+session: a session that files past every refusal is not judging them. The
+caller still holds the body, so overruling is one re-run.
 
 ⚠ **Only a model that names something refuses.** A failed, slow or missing
 `claude`, or a list that could not be read, prints `duplicate check did not run:
@@ -241,7 +244,7 @@ repeats finished work is sent to reopen it:
 
 ```text
   #689  k8s Dhall model generation and apply convergence check already completed — already done
-NOT FILED — a model reading the closed titles says this work is #689 (done: k8s Dhall model: DONE — 16 of 16 generated, deployed, and the apply converges). `task reopen 689` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
+NOT FILED — a model reading the closed titles says this work is #689 (done: k8s Dhall model: DONE — 16 of 16 generated, deployed, and the apply converges). `task reopen 689` if it is the same work and carry on in that task, or re-run the same command with --not-duplicate-of 689 if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
 
 The closed half is the weaker reader, so it refuses correct filings more often;

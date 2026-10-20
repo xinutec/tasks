@@ -142,6 +142,7 @@ async fn seed(pool: &MySqlPool) {
                 subject: subject.into(),
                 // The check ran: these file through the service the way a session does.
                 checked: true,
+                not_duplicate_of: Vec::new(),
                 body: String::new(),
                 priority: Ranking::Unassessed,
                 due: None,
@@ -357,6 +358,7 @@ mod handed_out {
                 NewTask {
                     subject: subject.into(),
                     checked: true,
+                    not_duplicate_of: Vec::new(),
                     body: String::new(),
                     priority: Ranking::Unassessed,
                     due: None,

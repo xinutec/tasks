@@ -33,6 +33,7 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
             subject: "a task with a filing worth keeping".into(),
             // The check ran: these file through the service the way a session does.
             checked: true,
+            not_duplicate_of: Vec::new(),
             body: body.into(),
             priority: Ranking::At(Priority::P2),
             due: None,

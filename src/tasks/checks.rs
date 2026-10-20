@@ -30,6 +30,9 @@ pub enum Kind {
     Filing,
     /// After an edit, against the one body that has grown.
     Density,
+    /// Before a filing, an open task with exactly this subject: string
+    /// equality, no model. Recorded so the refusal licenses its override.
+    Collision,
 }
 
 /// What came of it.
@@ -56,6 +59,7 @@ impl Kind {
         match self {
             Kind::Filing => "filing",
             Kind::Density => "density",
+            Kind::Collision => "collision",
         }
     }
 }
@@ -90,7 +94,7 @@ pub struct Run {
     /// What was refused, hashed — see [`subject_key`].
     ///
     /// ⚠ **Only a filing check that REFUSED sets this**, and it is what licenses
-    /// a later `--no-duplicate-check` for the same subject. A density read has
+    /// a later `--not-duplicate-of` for the same subject. A density read has
     /// no subject and a check that passed has nothing to license.
     #[serde(default)]
     pub subject_key: Option<String>,
@@ -125,7 +129,7 @@ pub fn subject_key(subject: &str) -> String {
 impl RequiredKeys for Run {
     fn required() -> &'static [(&'static str, &'static str)] {
         &[
-            ("kind", "`filing` or `density`"),
+            ("kind", "`filing`, `density` or `collision`"),
             ("input_chars", "how many characters were put to the model"),
             ("elapsed_ms", "how long the call took, in milliseconds"),
             (
@@ -254,6 +258,7 @@ impl Kind {
     fn read(word: &str) -> Option<Kind> {
         match word {
             "filing" => Some(Kind::Filing),
+            "collision" => Some(Kind::Collision),
             "density" => Some(Kind::Density),
             _ => None,
         }
@@ -348,7 +353,8 @@ fn rank(sorted: &[u32], part: f64) -> u32 {
     sorted[at.clamp(1, sorted.len()) - 1]
 }
 
-/// Fold runs into one line per kind, in the order the kinds are declared.
+/// Fold runs into one line per model check, in the order the kinds are
+/// declared. A collision asks no model, so it has no latency to report.
 pub fn tally(runs: &[Ran]) -> Vec<Tally> {
     [Kind::Filing, Kind::Density]
         .into_iter()
@@ -381,20 +387,21 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
 /// licence in the morning and skip checks all afternoon.**
 const LICENCE: i64 = 1800;
 
-/// Whether this session has been refused this exact subject, recently.
+/// What this session's latest refusal of `subject` named, if it was refused
+/// within [`LICENCE`]: the tasks an override has to name.
 ///
-/// ⚠ **This is what makes `--no-duplicate-check` cost a re-run.** Passed
-/// pre-emptively, the flag means the check never runs. It stays — without it
-/// every false positive would lose a body — but it cannot be used FIRST.
-///
-/// Keyed on the subject, not merely the session: one refusal licenses re-filing
-/// the thing that was refused, and nothing else.
-pub async fn refused_recently(pool: &MySqlPool, session: &str, subject: &str) -> Result<bool> {
+/// Keyed on the subject, not merely the session: one refusal licenses
+/// re-filing THAT subject, never a different one filed next.
+pub async fn licence(pool: &MySqlPool, session: &str, subject: &str) -> Result<Option<Vec<u64>>> {
     let key = subject_key(subject);
-    let found: Option<(i64,)> = sqlx::query_as(
-        "SELECT 1 FROM check_run \
-         WHERE session = ? AND subject_key = ? AND outcome = 'spoke' AND kind = 'filing' \
-           AND ran_at > NOW() - INTERVAL ? SECOND LIMIT 1",
+    let found: Option<(u64, Option<String>)> = sqlx::query_as(
+        "SELECT r.id, (SELECT GROUP_CONCAT(m.task_id ORDER BY m.task_id) FROM check_match m \
+                       WHERE m.run_id = r.id) \
+         FROM check_run r \
+         WHERE r.session = ? AND r.subject_key = ? AND r.outcome = 'spoke' \
+           AND r.kind IN ('filing', 'collision') \
+           AND r.ran_at > NOW() - INTERVAL ? SECOND \
+         ORDER BY r.id DESC LIMIT 1",
     )
     .bind(session)
     .bind(&key)
@@ -402,16 +409,80 @@ pub async fn refused_recently(pool: &MySqlPool, session: &str, subject: &str) ->
     .fetch_optional(pool)
     .await
     .context("looking for a refusal that would licence this filing")?;
-    Ok(found.is_some())
+    Ok(found.map(|(_, named)| parse_ids(named.as_deref())))
+}
+
+/// The answer to `GET /api/checks/licence`: what the refusal named, or `None`
+/// when nothing has refused this subject, so the check has to run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Licence {
+    pub matched: Option<Vec<u64>>,
+}
+
+/// What a filing is told when its override leaves out a task the refusal
+/// named.
+pub fn unnamed(missing: &[u64]) -> String {
+    let ids: Vec<String> = missing.iter().map(|id| format!("#{id}")).collect();
+    format!(
+        "NOT FILED — the refusal of this subject named {}, and this override does not. \
+         An override is a judgment about each task the refusal named: add {} to \
+         --not-duplicate-of if each really is different work.",
+        ids.join(" and "),
+        missing
+            .iter()
+            .map(u64::to_string)
+            .collect::<Vec<_>>()
+            .join(","),
+    )
+}
+
+/// How often each session was refused, and how often it filed past one.
+///
+/// A session that overrules every refusal is not judging them; this is where
+/// that shows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Overrules {
+    pub session: String,
+    pub refused: u64,
+    pub overruled: u64,
+}
+
+pub async fn overrules(pool: &MySqlPool, days: u32) -> Result<Vec<Overrules>> {
+    let rows: Vec<(String, Option<String>, i64, i64)> = sqlx::query_as(
+        "SELECT x.session, s.name, CAST(SUM(x.refused) AS SIGNED), CAST(SUM(x.overruled) AS SIGNED) FROM ( \
+           SELECT session, 1 AS refused, 0 AS overruled FROM check_run \
+            WHERE outcome = 'spoke' AND kind IN ('filing', 'collision') \
+              AND ran_at > NOW() - INTERVAL ? DAY \
+           UNION ALL \
+           SELECT actor_id, 0, 1 FROM task_events \
+            WHERE kind = 'overrode' AND actor_kind = 'session' \
+              AND at > NOW() - INTERVAL ? DAY \
+         ) x LEFT JOIN sessions s ON s.id = x.session \
+         GROUP BY x.session, s.name ORDER BY SUM(x.overruled) DESC, SUM(x.refused) DESC",
+    )
+    .bind(days)
+    .bind(days)
+    .fetch_all(pool)
+    .await
+    .context("counting refusals and overrides")?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, refused, overruled)| Overrules {
+            session: name.filter(|n| !n.is_empty()).unwrap_or(id),
+            refused: refused.max(0) as u64,
+            overruled: overruled.max(0) as u64,
+        })
+        .collect())
 }
 
 /// What a filing is told when it skipped the check without having been refused.
 ///
 /// ⚠ **It must not read as a bug**: the caller passed a documented flag, so the
-/// message says plainly what to do — drop it.
+/// message says plainly what to do.
 pub fn unlicensed() -> String {
-    "NOT FILED — --no-duplicate-check is for overruling a refusal you have already seen, \
-     and nothing has refused this one. Re-run without it. If the check then names something \
-     that is genuinely different work, re-run the same command WITH the flag and it will file."
+    "NOT FILED — nothing has refused this subject in this conversation, so there is \
+     nothing to overrule. Re-run without --not-duplicate-of: the check runs, and if it \
+     names something that is genuinely different work, re-run with \
+     --not-duplicate-of <the ids it named>."
         .to_string()
 }

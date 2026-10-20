@@ -371,27 +371,20 @@ enum Command {
         /// a quoting mistake.
         #[arg(long = "subject", hide = true)]
         subject_flag: Option<String>,
-        /// File it even though something open or closed already says this.
+        /// File past a duplicate refusal you have just seen, naming each task
+        /// it named that you judged different work: `--not-duplicate-of 2037,12`.
         ///
-        /// ⚠ **For overruling a refusal you have just seen, and only then.** An
-        /// open task with the same subject is caught by string equality; the
-        /// rest by a model reading the open and closed titles, which takes
-        /// seconds — a closed match is sent to `task reopen`. The body you were
-        /// filing is still in the command you just ran, so overruling is one
-        /// re-run. Passed without a recent refusal of the same subject, the
-        /// service refuses the filing. A check that cannot run files the task
-        /// and says so.
-        #[arg(long)]
+        /// Only after a refusal of the same subject in this conversation, and
+        /// only naming every task it named; otherwise the check runs as usual.
+        /// The filing's history records what it overruled. A check that cannot
+        /// run files the task and says so.
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        not_duplicate_of: Vec<u64>,
+        /// Kept for older habits. The check runs anyway, and if it refuses, the
+        /// refusal says which ids `--not-duplicate-of` must name.
+        #[arg(long, hide = true)]
         no_duplicate_check: bool,
-
-        /// Ask the check what it would say, and file NOTHING.
-        ///
-        /// ⚠ **So the check can be tried without filing probe rows** into a
-        /// shared tracker, where they would be matched against real work.
-        ///
-        /// It runs BOTH halves, exactly as a filing does: the string-equality
-        /// collision and the model's reading, against open and closed alike.
-        #[arg(long, conflicts_with = "no_duplicate_check")]
+        #[arg(long, conflicts_with = "not_duplicate_of")]
         check_only: bool,
     },
     /// Mark a task as being worked on.
@@ -996,6 +989,21 @@ const READING: std::time::Duration = std::time::Duration::from_secs(90);
 ///
 /// ⚠ **Read before the POST**, so both halves of the check refuse while there
 /// is still nothing to undo.
+/// What this conversation's latest refusal of `subject` named, or `None` when
+/// nothing has refused it.
+async fn licence(client: &Client, subject: &str) -> Result<Option<Vec<u64>>> {
+    let req = client
+        .request(reqwest::Method::GET, "/api/checks/licence")
+        .query(&[("subject", subject)]);
+    let got = client
+        .send(req)
+        .await?
+        .context("no licence answer came back")?;
+    let said: checks::Licence =
+        serde_json::from_value(got).context("reading whether a refusal licenses this")?;
+    Ok(said.matched)
+}
+
 /// Every open task as `(id, subject)`, and the ids of those this session holds.
 async fn open_now(client: &Client) -> Result<(Vec<(u64, String)>, Vec<u64>)> {
     let query = list_query(true, false, false, false, false, None, None)?;
@@ -1097,7 +1105,7 @@ async fn already_filed(
         Err(_) => Vec::new(),
     };
     // ⚠ **Only when it actually named something.** The key is what licenses a
-    // later `--no-duplicate-check` for this subject, so recording it on a check
+    // later `--not-duplicate-of` for this subject, so recording it on a check
     // that passed would hand out a licence nobody was refused.
     let refused = (!found.is_empty()).then(|| checks::subject_key(subject));
     recorded(
@@ -1660,6 +1668,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             repo,
             project,
             subject_flag,
+            not_duplicate_of,
             no_duplicate_check,
             check_only,
         } => {
@@ -1704,13 +1713,47 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 refused => return Err(commands::declined(refused.said_to_cli())),
             }
             client.writing()?;
+            // ⚠ **Skipped only for an override the service will accept**: a
+            // refusal of this subject, in this conversation, every task it named
+            // named here. Anything less runs the check, so asking to skip it
+            // first time costs nothing and gains nothing.
+            let skip = match (
+                not_duplicate_of.is_empty() && !no_duplicate_check,
+                check_only,
+            ) {
+                (true, _) | (_, true) => false,
+                (false, false) => match licence(&client, &subject).await {
+                    Ok(Some(named)) => {
+                        let missing: Vec<u64> = named
+                            .into_iter()
+                            .filter(|id| !not_duplicate_of.contains(id))
+                            .collect();
+                        if !missing.is_empty() {
+                            return Err(commands::declined(checks::unnamed(&missing)));
+                        }
+                        true
+                    }
+                    Ok(None) => {
+                        eprintln!(
+                            "(nothing has refused this subject yet, so the duplicate check runs)"
+                        );
+                        false
+                    }
+                    Err(why) => {
+                        eprintln!(
+                            "(could not ask whether a refusal licenses this, so the check runs: {why:#})"
+                        );
+                        false
+                    }
+                },
+            };
             // Two questions, both answered before the POST and both refusing:
             // does something open carry this exact subject, and does a model
             // see the same problem in different words. `--check-only` runs both
             // and stops before anything is sent.
             //
             // ⚠ **A list that could not be read costs a note, never a filing.**
-            let (corpus, mine) = match no_duplicate_check {
+            let (corpus, mine) = match skip {
                 true => (Vec::new(), Vec::new()),
                 false => open_now(&client).await.unwrap_or_else(|why| {
                     eprintln!("(duplicate check did not run: {why:#})");
@@ -1718,6 +1761,23 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 }),
             };
             if let Some(already) = duplicates::same_subject(&subject, &corpus) {
+                // Recorded like a model's refusal, so the override it offers is
+                // one the service accepts.
+                recorded(
+                    &client,
+                    checks::Run {
+                        kind: checks::Kind::Collision,
+                        task_id: None,
+                        input_chars: 0,
+                        accreted: None,
+                        elapsed_ms: 0,
+                        outcome: checks::Outcome::Spoke,
+                        subject_key: Some(checks::subject_key(&subject)),
+                        matched: vec![already],
+                        said: None,
+                    },
+                )
+                .await;
                 return Err(commands::declined(duplicates::collision(already)));
             }
             // ⚠ **The model runs BEFORE the POST**: a refusal after the fact is
@@ -1730,11 +1790,11 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             let candidates = duplicates::edged(&corpus, &blocked_on, &blocks);
             // The closed list is never narrowed by the edges: nothing can wait
             // for a task that is over.
-            let (settled, unread) = match no_duplicate_check {
+            let (settled, unread) = match skip {
                 true => (Vec::new(), 0),
                 false => settled_now(&client).await,
             };
-            if !no_duplicate_check {
+            if !skip {
                 match already_filed(&client, &candidates, &settled, &subject).await {
                     Ok(found) if !found.is_empty() => {
                         let (open, over) = duplicates::split(&found, &settled);
@@ -1766,8 +1826,11 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 "body": raw.as_deref().map(body).transpose()?.unwrap_or_default(),
                 // ⚠ **Said plainly**: the service must tell "skipped" from an
                 // older client that never mentioned it.
-                "checked": !no_duplicate_check,
+                "checked": !skip,
             });
+            if skip {
+                payload["not_duplicate_of"] = json!(not_duplicate_of);
+            }
             // Always present, null when unassessed: the service refuses a
             // filing that omits it. clap's group guarantees one of the two.
             payload["priority"] = match priority {
@@ -2038,6 +2101,15 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             let rows = client.send(req).await?.unwrap_or(json!([]));
             let runs: Vec<checks::Ran> =
                 serde_json::from_value(rows.clone()).context("reading what the checks did")?;
+            // Who files past refusals, and how often: a session that overrules
+            // every one is not judging them.
+            let req = client
+                .request(reqwest::Method::GET, "/api/checks/overrules")
+                .query(&[("days", days)]);
+            let overrules: Vec<checks::Overrules> = match client.send(req).await? {
+                Some(rows) => serde_json::from_value(rows).context("reading the overrides")?,
+                None => Vec::new(),
+            };
             emit(cli.json, &rows, || {
                 if runs.is_empty() {
                     println!("nothing recorded in the last {days} days");
@@ -2045,6 +2117,12 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 }
                 for line in checks::tally(&runs) {
                     println!("{}", tallied(&line));
+                }
+                for who in &overrules {
+                    println!(
+                        "{:24} refused {:3}, filed past {:3}",
+                        who.session, who.refused, who.overruled
+                    );
                 }
             });
         }
@@ -2328,6 +2406,7 @@ fn tallied(line: &checks::Tally) -> String {
     let kind = match line.kind {
         checks::Kind::Filing => "filing",
         checks::Kind::Density => "density",
+        checks::Kind::Collision => "collision",
     };
     let outcomes: Vec<String> = [
         ("quiet", line.quiet),

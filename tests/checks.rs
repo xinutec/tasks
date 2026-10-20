@@ -369,9 +369,10 @@ async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
     let subject = "Compact MEMORY.md by merging files";
 
     assert!(
-        !checks::refused_recently(&pool, "s-1", subject)
+        checks::licence(&pool, "s-1", subject)
             .await
-            .expect("asking"),
+            .expect("asking")
+            .is_none(),
         "nothing has refused this session anything"
     );
 
@@ -394,21 +395,24 @@ async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
     .expect("recording the refusal");
 
     assert!(
-        checks::refused_recently(&pool, "s-1", subject)
+        checks::licence(&pool, "s-1", subject)
             .await
-            .expect("asking"),
+            .expect("asking")
+            .is_some(),
         "the session that was refused may now overrule it"
     );
     assert!(
-        !checks::refused_recently(&pool, "s-2", subject)
+        checks::licence(&pool, "s-2", subject)
             .await
-            .expect("asking"),
+            .expect("asking")
+            .is_none(),
         "a refusal licenses the session that received it and no other"
     );
     assert!(
-        !checks::refused_recently(&pool, "s-1", "something else entirely")
+        checks::licence(&pool, "s-1", "something else entirely")
             .await
-            .expect("asking"),
+            .expect("asking")
+            .is_none(),
         "a refusal licenses the subject it refused and no other"
     );
 }
@@ -437,9 +441,10 @@ async fn a_check_that_said_nothing_licenses_nothing() {
     .await
     .expect("recording a quiet check");
     assert!(
-        !checks::refused_recently(&pool, "s-quiet", subject)
+        checks::licence(&pool, "s-quiet", subject)
             .await
             .expect("asking")
+            .is_none()
     );
 }
 
@@ -473,6 +478,7 @@ mod sprawl {
             NewTask {
                 subject: "a body that grows".into(),
                 checked: true,
+                not_duplicate_of: Vec::new(),
                 body: body.into(),
                 priority: Ranking::Unassessed,
                 due: None,

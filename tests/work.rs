@@ -38,6 +38,7 @@ async fn file(pool: &MySqlPool, subject: &str, assignee: Option<Assignee>) -> u6
                 .then(|| "left for whoever picks it up".to_string()),
             subject: subject.into(),
             checked: true,
+            not_duplicate_of: Vec::new(),
             body: String::new(),
             priority: Ranking::Unassessed,
             due: None,

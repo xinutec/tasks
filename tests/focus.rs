@@ -254,6 +254,7 @@ async fn a_task(pool: &sqlx::MySqlPool, subject: &str) -> u64 {
             subject: subject.into(),
             // The check ran: these file through the service the way a session does.
             checked: true,
+            not_duplicate_of: Vec::new(),
             body: String::new(),
             priority: Ranking::At(Priority::P2),
             due: None,

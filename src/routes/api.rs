@@ -273,8 +273,15 @@ pub async fn create(
                     .into(),
             ));
         };
-        if !checks::refused_recently(&app.db, id, &new.subject).await? {
+        let Some(named) = checks::licence(&app.db, id, &new.subject).await? else {
             return Err(AppError::BadRequest(checks::unlicensed()));
+        };
+        let missing: Vec<u64> = named
+            .into_iter()
+            .filter(|id| !new.not_duplicate_of.contains(id))
+            .collect();
+        if !missing.is_empty() {
+            return Err(AppError::BadRequest(checks::unnamed(&missing)));
         }
     }
     if let Viewer::Session(id) = &viewer {
@@ -379,6 +386,37 @@ pub async fn check_ran(
     };
     checks::record(&app.db, session, &run).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct LicenceQuery {
+    subject: String,
+}
+
+/// What this conversation's latest refusal of a subject named, so the CLI can
+/// skip the check only for an override the service will accept.
+pub async fn check_licence(
+    Access(viewer): Access,
+    State(app): State<AppState>,
+    Query(q): Query<LicenceQuery>,
+) -> Result<Json<checks::Licence>, AppError> {
+    let Viewer::Session(session) = &viewer else {
+        return Err(AppError::BadRequest(
+            "only a conversation is refused a filing, and this request is a person's.".into(),
+        ));
+    };
+    Ok(Json(checks::Licence {
+        matched: checks::licence(&app.db, session, &q.subject).await?,
+    }))
+}
+
+/// How often each conversation was refused, and filed past a refusal.
+pub async fn check_overrules(
+    Access(_viewer): Access,
+    State(app): State<AppState>,
+    Query(window): Query<ChecksQuery>,
+) -> Result<Json<Vec<checks::Overrules>>, AppError> {
+    Ok(Json(checks::overrules(&app.db, window.days).await?))
 }
 
 /// How far back to read the checks.

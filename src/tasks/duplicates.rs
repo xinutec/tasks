@@ -5,7 +5,7 @@
 //! catch that — two spellings of one problem often share no words — so a model
 //! is asked, before the filing rather than after.
 //!
-//! Every arm refuses and `--no-duplicate-check` passes all of them: a refusal
+//! Every arm refuses and `--not-duplicate-of` passes any of them: a refusal
 //! costs one re-run, since the caller still holds the body it tried to file,
 //! where a duplicate costs somebody's attention twice.
 //!
@@ -39,7 +39,7 @@ pub fn collision(already: u64) -> String {
     format!(
         "NOT FILED — #{already} is already open with this exact subject. \
          `task show {already}` to read it, `task edit {already}` if this is an update to it, \
-         or re-run with --no-duplicate-check if they really are two tasks."
+         or re-run with --not-duplicate-of {already} if they really are two tasks."
     )
 }
 
@@ -227,9 +227,10 @@ pub fn refusal(found: &[Match], open: &[(u64, String)], mine: &[u64]) -> String 
     out.push_str(&format!(
         "NOT FILED — a model reading the open titles says this is already {}. \
          `task show {}` to check, or re-run the same command with \
-         --no-duplicate-check if this really is different work.{hand_on}",
+         --not-duplicate-of {} if this really is different work.{hand_on}",
         either(named),
         only(found.iter().map(|one| one.id)),
+        ids(found.iter().map(|one| one.id)),
     ));
     out
 }
@@ -237,6 +238,11 @@ pub fn refusal(found: &[Match], open: &[(u64, String)], mine: &[u64]) -> String 
 /// The matches as one phrase: `#1 (…)`, or `#1 (…) or #2 (…)`.
 fn either(named: impl Iterator<Item = String>) -> String {
     named.collect::<Vec<_>>().join(" or ")
+}
+
+/// Every id, as `--not-duplicate-of` takes them.
+fn ids(all: impl Iterator<Item = u64>) -> String {
+    all.map(|id| id.to_string()).collect::<Vec<_>>().join(",")
 }
 
 /// The id a remedy can be spelled with, when there is exactly one.
@@ -342,10 +348,11 @@ pub fn reopen_instead(found: &[(Match, Settled)], read: usize, unread: usize) ->
     out.push_str(&format!(
         "NOT FILED — a model reading the closed titles says this work is {}. \
          `task reopen {}` if it is the same work and carry on in that task, or re-run the \
-         same command with --no-duplicate-check if it really is different \
+         same command with --not-duplicate-of {} if it really is different \
          (read against {read} closed tasks; {unread} skipped as having no body).",
         either(named),
         only(found.iter().map(|(one, _)| one.id)),
+        ids(found.iter().map(|(one, _)| one.id)),
     ));
     out
 }

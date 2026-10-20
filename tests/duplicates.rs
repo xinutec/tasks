@@ -205,7 +205,7 @@ fn a_refusal_says_nothing_was_filed_and_how_to_file_it_anyway() {
     // ⚠ The verdict lives in the LAST line — see `what_survives_the_tail`. This
     // asserts both halves are present at all.
     assert!(text.contains("NOT FILED"), "{text}");
-    assert!(text.contains("--no-duplicate-check"), "{text}");
+    assert!(text.contains("--not-duplicate-of"), "{text}");
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn a_closed_match_refuses_and_names_reopen() {
         "the old advisory sentence says the opposite of what happens: {text}"
     );
     assert!(
-        text.contains("--no-duplicate-check"),
+        text.contains("--not-duplicate-of"),
         "a refusal with no way past it turns a false positive into lost work: {text}"
     );
     assert!(
@@ -538,7 +538,7 @@ mod what_survives_the_tail {
             "no way to update it: {last}"
         );
         assert!(
-            last.contains("--no-duplicate-check"),
+            last.contains("--not-duplicate-of"),
             "no way past it: {last}"
         );
     }
@@ -577,7 +577,7 @@ mod what_survives_the_tail {
             "it no longer says who is talking: {last}"
         );
         assert!(
-            last.contains("--no-duplicate-check"),
+            last.contains("--not-duplicate-of"),
             "no way past it: {last}"
         );
     }
@@ -617,7 +617,7 @@ mod what_survives_the_tail {
             "it no longer says who is talking: {last}"
         );
         assert!(
-            last.contains("--no-duplicate-check"),
+            last.contains("--not-duplicate-of"),
             "no way past it: {last}"
         );
         assert!(
@@ -679,7 +679,7 @@ mod what_survives_the_tail {
         }];
         let last = verdict(&refusal(&one, &corpus(), &[255])).to_string();
         assert!(last.contains("`task edit 255 --to"), "{last}");
-        assert!(last.contains("--no-duplicate-check"), "{last}");
+        assert!(last.contains("--not-duplicate-of"), "{last}");
         let theirs = verdict(&refusal(&one, &corpus(), &[])).to_string();
         assert!(!theirs.contains("task edit 255 --to"), "{theirs}");
     }

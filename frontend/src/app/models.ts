@@ -246,10 +246,16 @@ export interface NewTask {
    * Whether the filer let the duplicate check run.
    *
    * ⚠ **Required here, and said rather than left out.** The service refuses
-   * `false` unless that session was just refused this exact subject. The web UI
+   * `false` unless that session was just refused this exact subject, and the
+   * override names every task the refusal named. The web UI
    * cannot skip the check, so it says `true`.
    */
   checked: boolean;
+  /**
+   * The tasks a refusal named that the filer judged different work. The web UI
+   * never skips the check, so it never sends this.
+   */
+  not_duplicate_of?: number[];
   /**
    * ⚠ **Required, and the only field here that is** — note there is no `?`.
    * Every other key means *leave it alone* when absent; this one has no such

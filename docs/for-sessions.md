@@ -309,36 +309,37 @@ open and closed task — except the ones you named in `--blocked-on` or
 
 ```text
   #961  both about prepend/append operations on tasks and body change tracking
-NOT FILED — a model reading the open titles says this is already #961 (Warn when a body has accreted since anyone rewrote it — a char sampler, then Haiku on density). `task show 961` to check, or re-run the same command with --no-duplicate-check if this really is different work.
+NOT FILED — a model reading the open titles says this is already #961 (Warn when a body has accreted since anyone rewrote it — a char sampler, then Haiku on density). `task show 961` to check, or re-run the same command with --not-duplicate-of 961 if this really is different work.
 ```
 
 ⚠ **Read that last line rather than moving on.** Nothing was filed, so there is
 no task to come back to and no `task drop` to do — if you treat this like a
 warning you have lost the filing. Two answers, both one command: `task show 961`
 and fold your text into that one, or re-run **the same command** with
-`--no-duplicate-check`, which is what you want when it matched your topic rather
-than your work. You are still holding the body; it is a re-run, not a rewrite.
+`--not-duplicate-of 961`, which is what you want when it matched your topic
+rather than your work. You are still holding the body; it is a re-run, not a rewrite.
 
 **When the match is a task you hold, the refusal says so: hand it on.** You
 are usually finishing your half and filing the rest for someone else. Don't
 close yours and file a second task: rewrite it to what is left and reassign it,
 `task edit <id> --to <who> --body -`. One task keeps the whole history.
 
-⚠ **`--no-duplicate-check` is for overruling a refusal you have just seen, and
-only that.** Passed without one, the service refuses the filing and tells you to
-drop the flag.
+**`--not-duplicate-of` overrules a refusal you have just seen, and names what it
+overrules.** Each id is your judgment that that task is different work, so it
+must list every task the refusal named. Passed with no refusal behind it, the
+check simply runs. The task's history keeps what you filed past.
 
 ⚠ **A CLOSED match stops you too, and the way past it is `task reopen`.** The
 remedy differs, so the message does:
 
 ```text
   #689  k8s Dhall model generation and apply convergence check already completed — already done
-NOT FILED — a model reading the closed titles says this work is #689 (done: k8s Dhall model: DONE — 16 of 16 generated, deployed, and the apply converges). `task reopen 689` if it is the same work and carry on in that task, or re-run the same command with --no-duplicate-check if it really is different (read against 984 closed tasks; 11 skipped as having no body).
+NOT FILED — a model reading the closed titles says this work is #689 (done: k8s Dhall model: DONE — 16 of 16 generated, deployed, and the apply converges). `task reopen 689` if it is the same work and carry on in that task, or re-run the same command with --not-duplicate-of 689 if it really is different (read against 984 closed tasks; 11 skipped as having no body).
 ```
 
 Nothing was filed here either. Two answers, both one command: `task reopen 689`
 and carry on in that task, or re-run **the same command** with
-`--no-duplicate-check` when it matched your topic and not your work.
+`--not-duplicate-of 689` when it matched your topic and not your work.
 
 ⚠ **`dropped` is not a verdict.** A drop records a status and no reason, so a
 dropped twin does not mean the work was rejected — read the task and find out.

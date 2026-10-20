@@ -564,6 +564,8 @@ pub enum Moved {
     Due,
     Blocked,
     Assigned,
+    /// Filed past a duplicate refusal.
+    Overrode,
 }
 
 impl Moved {
@@ -576,6 +578,7 @@ impl Moved {
             Moved::Due => "due",
             Moved::Blocked => "blocked",
             Moved::Assigned => "assigned",
+            Moved::Overrode => "overrode",
         }
     }
 }
