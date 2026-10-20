@@ -264,10 +264,10 @@ verdict is always the LAST line, because sessions pipe this to `tail -3`.
 **The model checks cost seconds, so the lifecycle checks are store queries**
 (`tasks::lifecycle`), cheap enough for any command. The first: a filing whose
 subject or body names `#<id>` of a task its filer closed in the last day is told,
-under the task line,
+on the task line itself, so a caller keeping `| head -1` still sees it,
 
 ```text
-#89 was closed (done) by you 40 min ago. If this continues it: `task reopen 89` and `task drop 1700 --reason "continues #89"`.
+- [ ] #1700 ...  #89 was closed (done) by you 40 min ago. If this continues it: `task reopen 89` and `task drop 1700 --reason "continues #89"`.
 ```
 
 This is the follow-up the duplicate check misses: it cites the closed task by id
@@ -276,8 +276,8 @@ finished task is often right. The task's last status change decides, read from
 columns rather than the history line.
 
 **A close that rewrote nothing says so.** `task done` or `task drop` on a task
-with nothing written since it last changed status (or since filing) prints when
-its text was last written and `task edit <id> --body -`: a body still describing
+with nothing written since it last changed status (or since filing) says, on the
+task line, when its text was last written and `task edit <id> --body -`: a body still describing
 the problem, under a closed status, is what the next reader believes. `--note`
 and `--reason` write before closing, so they satisfy it.
 

@@ -191,7 +191,11 @@ fn one(line: &str) -> Option<Match> {
 /// ⚠ **The override is spelled out in full.** The caller still holds the text
 /// it tried to file, so the remedy is one re-run — saying so is what keeps a
 /// false positive cheap.
-pub fn refusal(found: &[Match], open: &[(u64, String)]) -> String {
+///
+/// **A match the filer holds gets the hand-off.** A session finishing its
+/// half and filing the rest for someone else should hand the open task on, not
+/// close it and file a second one.
+pub fn refusal(found: &[Match], open: &[(u64, String)], mine: &[u64]) -> String {
     let mut out = String::new();
     for one in found {
         out.push_str(&format!("  #{:<4} {}\n", one.id, one.why));
@@ -202,10 +206,28 @@ pub fn refusal(found: &[Match], open: &[(u64, String)]) -> String {
             Some((id, subject)) => format!("#{id} ({subject})"),
             None => format!("#{}", one.id),
         });
+    let held: Vec<u64> = found
+        .iter()
+        .map(|one| one.id)
+        .filter(|id| mine.contains(id))
+        .collect();
+    let hand_on = match held.as_slice() {
+        [] => String::new(),
+        ids => {
+            let named: Vec<String> = ids.iter().map(|id| format!("#{id}")).collect();
+            let is = if ids.len() == 1 { "is" } else { "are" };
+            format!(
+                " {} {is} yours: if this is what is left of it, hand it on rather than \
+                 filing a second task — `task edit {} --to <who> --body -` with what is left.",
+                named.join(" and "),
+                only(ids.iter().copied()),
+            )
+        }
+    };
     out.push_str(&format!(
         "NOT FILED — a model reading the open titles says this is already {}. \
          `task show {}` to check, or re-run the same command with \
-         --no-duplicate-check if this really is different work.",
+         --no-duplicate-check if this really is different work.{hand_on}",
         either(named),
         only(found.iter().map(|one| one.id)),
     ));

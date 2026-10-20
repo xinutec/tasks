@@ -996,19 +996,28 @@ const READING: std::time::Duration = std::time::Duration::from_secs(90);
 ///
 /// ⚠ **Read before the POST**, so both halves of the check refuse while there
 /// is still nothing to undo.
-async fn open_now(client: &Client) -> Result<Vec<(u64, String)>> {
+/// Every open task as `(id, subject)`, and the ids of those this session holds.
+async fn open_now(client: &Client) -> Result<(Vec<(u64, String)>, Vec<u64>)> {
     let query = list_query(true, false, false, false, false, None, None)?;
     let req = client
         .request(reqwest::Method::GET, "/api/tasks")
         .query(&query);
     let open = client.send(req).await?.unwrap_or(json!([]));
-    Ok(open
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default()
+    let rows = open.as_array().map(Vec::as_slice).unwrap_or_default();
+    let me = client.session.as_deref();
+    let mine = rows
+        .iter()
+        .filter(|task| {
+            task["assignee"]["kind"] == "session"
+                && me.is_some_and(|me| task["assignee"]["id"] == me)
+        })
+        .filter_map(|task| task["id"].as_u64())
+        .collect();
+    let corpus = rows
         .iter()
         .filter_map(|task| Some((task["id"].as_u64()?, task["subject"].as_str()?.to_string())))
-        .collect())
+        .collect();
+    Ok((corpus, mine))
 }
 
 /// Every closed task worth reading, as the block that gets cached.
@@ -1701,11 +1710,11 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             // and stops before anything is sent.
             //
             // ⚠ **A list that could not be read costs a note, never a filing.**
-            let corpus = match no_duplicate_check {
-                true => Vec::new(),
+            let (corpus, mine) = match no_duplicate_check {
+                true => (Vec::new(), Vec::new()),
                 false => open_now(&client).await.unwrap_or_else(|why| {
                     eprintln!("(duplicate check did not run: {why:#})");
-                    Vec::new()
+                    (Vec::new(), Vec::new())
                 }),
             };
             if let Some(already) = duplicates::same_subject(&subject, &corpus) {
@@ -1737,7 +1746,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                         // ⚠ **`declined`, never `bail!`**, or the commonest
                         // refusal counts as a failure and prints its chain.
                         let said = match open.is_empty() {
-                            false => duplicates::refusal(&open, &candidates),
+                            false => duplicates::refusal(&open, &candidates, &mine),
                             true => duplicates::reopen_instead(&over, settled.len(), unread),
                         };
                         return Err(commands::declined(said));
@@ -1787,11 +1796,12 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             let created: Created = serde_json::from_value(task.clone())
                 .context("the service answered with a task this CLI could not read")?;
             emit(cli.json, &task, || {
-                println!("{}", line(&created.task));
                 let now = chrono::Utc::now();
-                for closed in &created.closed {
-                    println!("{}", lifecycle::reopen_hint(closed, created.task.id, now));
-                }
+                let hints = created
+                    .closed
+                    .iter()
+                    .map(|closed| lifecycle::reopen_hint(closed, created.task.id, now));
+                println!("{}", lifecycle::on_the_line(line(&created.task), hints));
             });
             // ⚠ **After the POST, because the edge needs this task's id.** Recorded
             // on the OTHER task: `blocked_on` belongs to the thing that waits.
@@ -2225,21 +2235,16 @@ async fn patch(client: &Client, json: bool, id: TaskRef, change: Value) -> Resul
     let shown: Task = serde_json::from_value(task.clone())
         .context("the service answered with a task this CLI could not read")?;
     emit(json, &task, || {
-        println!("{}", line(&shown));
+        let unwritten = task["unwritten"]
+            .as_str()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .map(|written| lifecycle::rewrite_hint(id, written.to_utc(), chrono::Utc::now()));
+        println!("{}", lifecycle::on_the_line(line(&shown), unwritten));
         if task["changed"].as_array().is_some_and(|c| c.is_empty()) {
             println!("nothing changed — it was already like that");
         }
         if let Some(was) = displaced(&task, id) {
             println!("{was}");
-        }
-        if let Some(written) = task["unwritten"]
-            .as_str()
-            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
-        {
-            println!(
-                "{}",
-                lifecycle::rewrite_hint(id, written.to_utc(), chrono::Utc::now())
-            );
         }
     });
     Ok(task)

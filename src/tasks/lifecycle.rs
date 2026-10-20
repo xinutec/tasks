@@ -176,3 +176,13 @@ pub fn reopen_hint(closed: &Closed, filed: u64, now: DateTime<Utc>) -> String {
         closed.status.as_str()
     )
 }
+
+/// A command's line with its hints on it.
+///
+/// **One line, never a line below.** Sessions keep `| head -1` of a write;
+/// a hint underneath is the part they drop.
+pub fn on_the_line(row: String, hints: impl IntoIterator<Item = String>) -> String {
+    hints
+        .into_iter()
+        .fold(row, |line, hint| format!("{line}  {hint}"))
+}

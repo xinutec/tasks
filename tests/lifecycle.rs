@@ -163,6 +163,32 @@ fn the_hint_names_both_halves_of_the_remedy() {
     assert!(hint.contains("by you 2 h ago"), "{hint}");
 }
 
+/// **The hint rides on the task line.** Printed below it, a caller that keeps
+/// `| head -1` sees the filing and loses the reopen it was told to do.
+#[test]
+fn the_hint_survives_a_caller_that_keeps_one_line() {
+    let at = chrono::DateTime::parse_from_rfc3339("2026-09-26T10:00:00Z")
+        .unwrap()
+        .to_utc();
+    let closed = lifecycle::Closed {
+        id: 89,
+        status: Status::Done,
+        at,
+    };
+    let said = lifecycle::on_the_line(
+        "- [ ] #1700 the next bug  (memview)".into(),
+        [lifecycle::reopen_hint(&closed, 1700, at)],
+    );
+    assert_eq!(said.lines().count(), 1, "{said}");
+    assert!(said.starts_with("- [ ] #1700"), "{said}");
+    assert!(said.contains("`task reopen 89`"), "{said}");
+    assert_eq!(
+        lifecycle::on_the_line("- [ ] #1700 x".into(), []),
+        "- [ ] #1700 x",
+        "nothing to say adds nothing"
+    );
+}
+
 const TOKEN: &str = "test-agent-token";
 
 async fn send(app: &axum::Router, method: &str, uri: &str, body: &str) -> serde_json::Value {

@@ -181,6 +181,7 @@ fn a_refusal_admits_it_is_a_model_reading_titles() {
             why: "the same suspended cron".into(),
         }],
         &corpus(),
+        &[],
     );
     assert!(text.contains("model"), "{text}");
     assert!(text.contains("#255"), "{text}");
@@ -199,6 +200,7 @@ fn a_refusal_says_nothing_was_filed_and_how_to_file_it_anyway() {
             why: "the same signal.dhall apply".into(),
         }],
         &corpus(),
+        &[],
     );
     // ⚠ The verdict lives in the LAST line — see `what_survives_the_tail`. This
     // asserts both halves are present at all.
@@ -562,6 +564,7 @@ mod what_survives_the_tail {
                 },
             ],
             &corpus(),
+            &[],
         );
         let last = verdict(&text);
         assert!(
@@ -658,10 +661,27 @@ mod what_survives_the_tail {
                 why: "the same suspended cron".into(),
             }],
             &corpus(),
+            &[],
         );
         let last = verdict(&text);
         assert!(last.contains("#255 (open task 255)"), "{last}");
         assert!(last.contains("`task show 255`"), "{last}");
+    }
+
+    /// **A match the filer holds is usually its own remainder.** A session
+    /// finishing its half files the rest for someone else, and the refusal is
+    /// the moment to hand the open task on rather than close it and file anew.
+    #[test]
+    fn a_match_the_filer_holds_is_handed_on_not_refiled() {
+        let one = [Match {
+            id: 255,
+            why: "the harness half".into(),
+        }];
+        let last = verdict(&refusal(&one, &corpus(), &[255])).to_string();
+        assert!(last.contains("`task edit 255 --to"), "{last}");
+        assert!(last.contains("--no-duplicate-check"), "{last}");
+        let theirs = verdict(&refusal(&one, &corpus(), &[])).to_string();
+        assert!(!theirs.contains("task edit 255 --to"), "{theirs}");
     }
 
     /// Several matches are all named, and no one of them is guessed for the
@@ -680,6 +700,7 @@ mod what_survives_the_tail {
                 },
             ],
             &corpus(),
+            &[],
         );
         let last = verdict(&text);
         assert!(
@@ -720,7 +741,7 @@ mod what_survives_the_tail {
                 why: format!("finding {n}"),
             })
             .collect();
-        let text = refusal(&three, &corpus());
+        let text = refusal(&three, &corpus(), &[]);
         assert_eq!(text.lines().count(), 4, "{text}");
         let tail: Vec<&str> = text.lines().rev().take(3).collect();
         assert!(

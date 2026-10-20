@@ -319,6 +319,11 @@ and fold your text into that one, or re-run **the same command** with
 `--no-duplicate-check`, which is what you want when it matched your topic rather
 than your work. You are still holding the body; it is a re-run, not a rewrite.
 
+**When the match is a task you hold, the refusal says so: hand it on.** You
+are usually finishing your half and filing the rest for someone else. Don't
+close yours and file a second task: rewrite it to what is left and reassign it,
+`task edit <id> --to <who> --body -`. One task keeps the whole history.
+
 ⚠ **`--no-duplicate-check` is for overruling a refusal you have just seen, and
 only that.** Passed without one, the service refuses the filing and tells you to
 drop the flag.
@@ -354,8 +359,8 @@ cannot write things down is worse than any duplicate. The check costs seconds,
 and it costs them *before* the task exists rather than after.
 
 **Naming a task you closed today gets a reopen hint.** If the subject or body
-cites `#89` and you closed #89 in the last day, the filing lands and says so,
-with both commands: `task reopen 89`, and `task drop` for the task just filed. A
+cites `#89` and you closed #89 in the last day, the filing lands and says so
+on its task line, with both commands: `task reopen 89`, and `task drop` for the task just filed. A
 follow-up to finished work usually belongs in the old task.
 
 ## What to do next: P0 to P4
