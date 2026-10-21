@@ -1,39 +1,24 @@
-//! Turning what somebody typed after `move` into a conversation.
-//!
-//! ⚠ **Every place this tool prints a holder it prints the NAME**, so a name
-//! has to be accepted as input — otherwise the tool's own output is not valid
-//! input to it, and every handover starts with a `task sessions | grep` to
-//! translate.
-//!
-//! ⚠ **What is NOT resolved is refused here.** `fk_tasks_session` would refuse
-//! the write anyway, but as a 500 "internal error"; a typo deserves "no session
-//! called that, did you mean …", and the names have just been fetched.
-//!
-//! In the library rather than the CLI: a decision, testable as public API
-//! instead of through a binary.
+//! Turning a typed holder into a conversation. The tool prints holders by name,
+//! so it takes names as input. An unknown one is refused here with the names
+//! that exist, where the foreign key would only answer 500.
 
 /// What a typed holder turned out to be.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Holder {
-    /// One conversation, by id. Either it was typed as one, or its name
-    /// resolved to exactly one.
+    /// One conversation, by id, typed or resolved from its name.
     Session(String),
-    /// The name belongs to more than one conversation.
-    ///
-    /// ⚠ **Names are reused, and sessions get renamed.** Guessing would hand
-    /// work to whichever held the name first, so every id is returned.
+    /// More than one conversation answers to it (names are reused); guessing
+    /// would misroute work.
     Ambiguous(Vec<String>),
-    /// Nothing answers to it. Carries the names that do exist, because the
-    /// reader's next question is always "what should I have typed".
+    /// Nothing answers to it; carries the names that do exist.
     Unknown(Vec<String>),
 }
 
-/// Resolve `typed` against the known `(id, name)` pairs.
+/// Resolve `typed` against `(id, name)` pairs.
 ///
-/// ⚠ **A word that is one conversation's id and another's name is refused with
-/// both.** Handing it to the id would silently misroute everything addressed to
-/// the name. Ids are not all UUIDs: a script names itself
-/// (`TASKS_SESSION=claude-sync`), so the two can collide.
+/// ⚠ A word that is one conversation's id and another's name is ambiguous, not
+/// the id's: ids are not all UUIDs (`TASKS_SESSION=claude-sync`), and picking
+/// the id silently misroutes everything sent to the name.
 pub fn resolve<'a>(
     known: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
     typed: &str,
@@ -60,26 +45,21 @@ pub fn resolve<'a>(
     }
 }
 
-/// Whether a filing's holder and its `--spare` reason fit each other.
-///
-/// ⚠ **Issued twice, so decided once.** The CLI refuses BEFORE the duplicate
-/// check, so a filing that cannot land spends no model call; the service
-/// refuses too, for the web form and any API caller. A CLI stricter than the
-/// service would block filings the service accepts, so the verdict is shared
-/// and only the WORDS differ.
+/// Whether a filing's holder and its `--spare` reason fit. Shared by the CLI
+/// (which refuses before spending a model call) and the service, so they
+/// cannot disagree; only the wording differs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PileVerdict {
     /// Held with no reason, or the pile with one.
     Fits,
     /// `--to nobody` with nothing saying why it is nobody's.
     PileNeedsReason,
-    /// A reason for the pile on a task that has a holder. Refused rather than
-    /// ignored: it would be stored against a task it does not describe.
+    /// A pile reason on a task with a holder: it would describe nothing.
     ReasonWithoutPile,
 }
 
-/// Decide it. `has_reason` must already have had blank reasons discarded — an
-/// empty `--spare ""` is not a reason — or the two callers will disagree.
+/// `has_reason` must already exclude blanks (`--spare ""`), or the callers
+/// disagree.
 pub fn pile_verdict(to_nobody: bool, has_reason: bool) -> PileVerdict {
     match (to_nobody, has_reason) {
         (true, false) => PileVerdict::PileNeedsReason,
@@ -89,8 +69,7 @@ pub fn pile_verdict(to_nobody: bool, has_reason: bool) -> PileVerdict {
 }
 
 impl PileVerdict {
-    /// For somebody who typed a command: name the flag they typed, and say
-    /// plainly that nothing was written.
+    /// Names the flag, and says nothing was filed.
     pub fn said_to_cli(self) -> &'static str {
         match self {
             PileVerdict::Fits => "",
@@ -106,8 +85,7 @@ impl PileVerdict {
         }
     }
 
-    /// For the service, which answers the web form and any API caller as well —
-    /// so it must not name a flag that only the CLI has.
+    /// For the service, which also answers the web form: no CLI flags.
     pub fn said_to_api(self) -> &'static str {
         match self {
             PileVerdict::Fits => "",

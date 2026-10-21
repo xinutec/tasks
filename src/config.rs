@@ -1,8 +1,7 @@
 //! Runtime configuration from the environment.
 //!
-//! Auth is *inert unless configured*: the Nextcloud login wall rises only when
-//! `SESSION_SECRET` is set (and then the rest of [`AuthConfig`] is required),
-//! so local dev serves open and only the deployment raises the wall.
+//! The Nextcloud login wall exists only when `SESSION_SECRET` is set (then all
+//! of [`AuthConfig`] is required), so local dev serves open.
 
 use anyhow::{Context, Result};
 
@@ -18,16 +17,11 @@ pub struct Config {
     /// Nextcloud OAuth2 (identity-only). None → the browser wall is disabled.
     pub auth: Option<AuthConfig>,
 
-    /// The shared secret a Claude session presents to act on its own tasks.
+    /// The secret Claude sessions present. None closes the agent API.
     ///
-    /// ⚠ **It authenticates the machine, not the session.** Every session on
-    /// the Mac reads the same file, so one can act as another by declaring a
-    /// different `X-Session-Id`. No boundary is lost — they run as one user and
-    /// can read each other's transcripts anyway — but it must never be relied on
-    /// as per-session authentication.
-    ///
-    /// None → the agent API is closed entirely, which is what a browser-only
-    /// deployment wants and what the tests use to prove the wall exists.
+    /// ⚠ It authenticates the machine, not the session: every session reads the
+    /// same file and names itself with `X-Session-Id`. Never rely on it to tell
+    /// sessions apart.
     pub agent_token: Option<String>,
 }
 
@@ -58,12 +52,8 @@ fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
-/// An env var that is absent when empty as well as when unset.
-///
-/// Kubernetes supplies an optional secret reference as an empty string rather
-/// than by omitting the variable, so `Some("")` is what an unconfigured
-/// deployment actually produces — and an empty agent token that compared equal
-/// to an empty header would admit everybody.
+/// An env var, treating empty as unset: Kubernetes gives a missing optional
+/// secret as `""`, and an empty agent token would match an empty header.
 fn env_set(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|v| !v.trim().is_empty())
 }

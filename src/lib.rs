@@ -1,17 +1,13 @@
 //! tasks — the work Claude sessions and the user hand between each other.
 //!
-//! **Why a service and not a file.** A task list kept in a file is
-//! re-serialised into the conversation every turn and grows until it dominates
-//! the transcript. The fix is a different shape: **inject an index, fetch the
-//! content.** Every change here keeps one property:
+//! A task list in a file is re-sent into the conversation every turn and grows
+//! until it dominates the transcript, so this injects an index and fetches the
+//! content. The one property every change keeps:
 //!
 //! > **What reaches a prompt is one line per OPEN task, and nothing else.**
 //!
-//! [`digest`] enforces it and is the only module whose output a hook sees.
-//! Bodies, history and who moved what are fetched by whoever opens a task.
-//!
-//! Done tasks are kept and `task_events` records every move; the property is
-//! held by the query — nothing injected selects a done row — not by deletion.
+//! [`digest`] enforces it and is the only module a hook reads. Closed tasks and
+//! their history are kept; the query, not deletion, keeps them out.
 
 pub mod access;
 pub mod agent_name;

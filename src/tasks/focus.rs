@@ -1,24 +1,14 @@
-//! What one conversation is working on right now.
+//! What one conversation is working on right now: for a period, its digest
+//! recites the chosen tasks and only counts the rest.
 //!
-//! A session pays for every open task it holds on every turn, while working on
-//! one or two. This lets it say which are worth paying for: for the period
-//! named, its digest recites the chosen tasks and **counts** the rest.
+//! ⚠ The only thing that hides an open task, so three rules hold:
 //!
-//! ⚠ **This is the only thing in the service that hides an open task, so three
-//! rules hold and a change that breaks one is a regression however convenient
-//! it looks.**
+//! 1. It always expires ([`MAX`]); there is no "until I say otherwise".
+//! 2. What is hidden is counted, with how to end the focus.
+//! 3. The urgent breaks through ([`breaks_through`]), or a P0 filed mid-focus
+//!    is buried.
 //!
-//! 1. **It expires, and there is no "until I say otherwise".** The expiry is
-//!    what makes hiding safe: a focus nobody clears stops applying at its hour.
-//!    See [`MAX`].
-//! 2. **What is hidden is counted, never silent.** The digest says how many of
-//!    each kind it left out and how to end the focus.
-//! 3. **The urgent breaks through** — see [`breaks_through`]. Without it a focus
-//!    buries a P0 filed minutes into it, and a P0 is the drop-everything signal.
-//!
-//! **It applies to the digest and to nothing else.** The digest is the channel
-//! nobody asked for; a list somebody typed is one they wanted, and a focused
-//! session running `task list` is asking what to pick up next.
+//! It applies to the digest only; a typed `task list` shows everything.
 
 use std::collections::BTreeSet;
 
@@ -32,64 +22,44 @@ use crate::tasks::types::{Priority, Task};
 
 type Result<T> = std::result::Result<T, AppError>;
 
-/// The shortest focus worth entering.
-///
-/// Below this the period lapses before the work starts, and an expired focus
-/// looks exactly like a broken one.
+/// Shorter lapses before the work starts, and looks broken.
 pub const MIN: Duration = Duration::minutes(15);
 
-/// The longest.
-///
-/// ⚠ **Refused past this, not clamped**: clamping leaves the caller believing a
-/// number that was never applied. Longer than a day is not a focus but a quiet
-/// reassignment, and `task move` is how work changes hands where everybody
-/// can see it.
+/// Refused past this, not clamped (a clamp leaves the caller believing a number
+/// never applied). Longer is a quiet handover; `task move` is the visible one.
 pub const MAX: Duration = Duration::hours(24);
 
 /// A session's focus period: what it is on, and when it lapses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Focus {
     pub until: DateTime<Utc>,
-    /// The task ids. A set: focus says *which* tasks are recited, never in what
-    /// order.
+    /// Which tasks are recited; order is not part of it.
     pub tasks: BTreeSet<u64>,
 }
 
 impl Focus {
-    /// Whether this focus still applies, at a given moment.
-    ///
-    /// `now` is an argument so a test can state the hour it means.
+    /// Whether it still applies at `now` (an argument, for tests).
     pub fn holds_at(&self, now: DateTime<Utc>) -> bool {
         Self::live_at(self.until, now)
     }
 
-    /// The rule itself, before there is a [`Focus`] to ask.
-    ///
-    /// ⚠ **One spelling of the rule**: [`current`] decides it from a bare
-    /// timestamp before reading the task ids, and an inline comparison there
-    /// would be an untested second copy.
+    /// The rule on a bare timestamp, so [`current`] needn't spell its own copy.
     pub fn live_at(until: DateTime<Utc>, now: DateTime<Utc>) -> bool {
         until > now
     }
 }
 
-/// Whether a task is shown whatever the focus is.
+/// Whether a task shows whatever the focus.
 ///
-/// ⚠ **The effective rank, not the chosen one.** A near deadline raises a task
-/// to `P0` without anything being written, so reading `priority` would let a
-/// focus bury exactly the task the escalation exists to raise.
-///
-/// Overdue is its own arm: a task can be past its date with no rank at all,
-/// and a passed deadline must not go quiet.
+/// ⚠ By effective rank, not the stored one: a near deadline makes a task `P0`
+/// without a write. Overdue is its own arm, since an overdue task may have no
+/// rank at all.
 pub fn breaks_through(task: &Task) -> bool {
     task.overdue || task.urgency() == Some(Priority::P0)
 }
 
-/// Read a session's focus, if it has one that still applies.
-///
-/// **Expiry is answered here rather than by a sweep.** The row survives its
-/// period so that `task focus` can say what the last one was; this returns
-/// `None` for it, so no caller has to remember to compare the clock.
+/// A session's focus, if it still applies. Expiry is decided here, not by a
+/// sweep: the row outlives its period so `task focus` can show the last one.
 pub async fn current(pool: &MySqlPool, session: &str) -> Result<Option<Focus>> {
     let Some(until): Option<Option<NaiveDateTime>> =
         sqlx::query_scalar("SELECT focus_until FROM sessions WHERE id = ?")
@@ -119,15 +89,9 @@ pub async fn current(pool: &MySqlPool, session: &str) -> Result<Option<Focus>> {
     }))
 }
 
-/// Enter a focus period, replacing whatever the session was focused on.
-///
-/// ⚠ **Naming no task is refused.** An empty focus counts every task and
-/// recites none, and the way back out is a task id the session can no longer
-/// see.
-///
-/// ⚠ **Ids nobody holds are accepted**: focusing on a pile task is how a session
-/// says it has picked it up before moving it. An id that names nothing is
-/// refused — a typo would otherwise narrow the focus silently.
+/// Enter a focus, replacing any current one. Naming no task is refused (it
+/// would hide everything). Pile tasks are allowed; an id that names nothing is
+/// refused, so a typo can't silently narrow the focus.
 pub async fn enter(
     pool: &MySqlPool,
     session: &str,
@@ -142,8 +106,6 @@ pub async fn enter(
         ));
     }
     if period < MIN || period > MAX {
-        // Two bounds, two mistakes, and the advice for one is nonsense for the
-        // other.
         let why = if period > MAX {
             "Longer than a day is not a focus but a handover — `task move <id> <who>` is \
              how work changes hands where everybody can see it."
@@ -180,8 +142,7 @@ pub async fn enter(
         .execute(&mut *tx)
         .await
         .context("starting a focus")?;
-    // The whole set is replaced, as `--blocked-on` is: a caller states what it
-    // is on, never what to add.
+    // Replaced whole, like `--blocked-on`.
     sqlx::query("DELETE FROM session_focus WHERE session = ?")
         .bind(session)
         .execute(&mut *tx)
@@ -203,8 +164,7 @@ pub async fn enter(
     })
 }
 
-/// End a focus period early. Silent about there not having been one — the
-/// caller asked to be unfocused and is.
+/// End a focus early; quiet if there was none.
 pub async fn leave(pool: &MySqlPool, session: &str) -> Result<()> {
     sqlx::query("UPDATE sessions SET focus_until = NULL WHERE id = ?")
         .bind(session)
@@ -214,10 +174,7 @@ pub async fn leave(pool: &MySqlPool, session: &str) -> Result<()> {
     Ok(())
 }
 
-/// A period as somebody would say it: `4h`, `90m`, `2h30m`.
-///
-/// Used in the refusal above, so the bound a caller is told is spelled the same
-/// way as the argument they typed.
+/// A period as typed: `4h`, `90m`, `2h30m`.
 pub fn spell(period: Duration) -> String {
     let (hours, minutes) = (period.num_hours(), period.num_minutes() % 60);
     match (hours, minutes) {
@@ -227,11 +184,8 @@ pub fn spell(period: Duration) -> String {
     }
 }
 
-/// Read a period the way somebody types one: `4h`, `90m`, `2h30m`, `45`.
-///
-/// ⚠ **A bare number is minutes**, because the unit somebody omits is the small
-/// one. Both readings of `--for 30` sit inside [`MAX`], so the wrong one would
-/// pass silently.
+/// Read `4h`, `90m`, `2h30m` or `45`. ⚠ A bare number is minutes: both
+/// readings of `--for 30` fit under [`MAX`], so the wrong one would pass.
 pub fn parse(text: &str) -> anyhow::Result<Duration> {
     let text = text.trim().to_ascii_lowercase();
     anyhow::ensure!(!text.is_empty(), "a focus needs a period: --for 4h");

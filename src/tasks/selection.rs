@@ -1,9 +1,6 @@
-//! What `task list` asks the service for.
-//!
-//! ⚠ **The default is the caller, not the fleet.** Every open task there is
-//! would land in a conversation's context, almost none of it work that
-//! conversation can act on — the cost `digest.rs` exists to refuse. So each
-//! question is named:
+//! What `task list` asks the service for. The default is the caller, not the
+//! fleet: everything would fill a conversation's context with work it cannot
+//! act on. Each question has its flag:
 //!
 //! | | means | asks for |
 //! | --- | --- | --- |
@@ -13,30 +10,19 @@
 //! | `--all` | what is going on | every holder |
 //! | `--handed-out` | what did I hand out | filed by me, held by anyone else |
 //!
-//! ⚠ **A missing view is not neutral — it gets answered anyway, by guesswork**:
-//! a session hand-filtering `--all --json` for a view with no flag can invent
-//! a field and report a wrong count. Every question worth asking gets a flag
-//! and its tests.
+//! A view with no flag still gets asked for, by a session hand-filtering
+//! `--all --json`, which invents fields and miscounts; so every question worth
+//! asking gets a flag. `--handed-out` exists because the digest never shows a
+//! session the work it handed to others. The bare form includes the pile, as
+//! [`Filter::digest_for`](super::repo::Filter) does, so left-over work is seen.
 //!
-//! ⚠ **`--handed-out` is the only one not about the holder**, and a routing
-//! session needs it most: the digest shows a session its own work and the pile,
-//! never another conversation's, so work it handed out is by construction what
-//! it never sees again.
-//!
-//! The bare form matches [`Filter::digest_for`](super::repo::Filter) rather than
-//! `--mine`: the pile is the handover channel, and a session that cannot see it
-//! cannot take work left for whichever conversation is around.
-//!
-//! In the library rather than the CLI because the parameters it emits are
-//! defined by `ListQuery` in `routes::api`, and keeping the two beside each
-//! other stops them drifting.
+//! Lives in the library, beside `ListQuery` in `routes::api`, so the two
+//! cannot drift.
 
 use anyhow::{Context, Result};
 
-/// Whose list is being asked for, once a name has been resolved.
-///
-/// ⚠ **A person and a session are different columns**, which is why this is not
-/// a string: naming a session in the person column silently matches nothing.
+/// Whose list, once a name is resolved. Not a string: a person and a session
+/// are different columns, and the wrong one silently matches nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Holder<'a> {
     Person(&'a str),
@@ -44,11 +30,8 @@ pub enum Holder<'a> {
     Nobody,
 }
 
-/// The query parameters for `GET /api/tasks`.
-///
-/// **Without a session id there is no "own" to narrow to**, so the caller gets
-/// everything — as `/api/digest` does for a person who names no session. The
-/// token path refuses to run without an id, so this is not a live case.
+/// The query parameters for `GET /api/tasks`. Without a session id there is no
+/// "own" to narrow to, so the caller gets everything, as `/api/digest` does.
 pub fn list_query(
     all: bool,
     mine: bool,
@@ -65,14 +48,12 @@ pub fn list_query(
     if all {
         return Ok(query);
     }
-    // Before the session clauses and without an id: the pile has no holder, so
-    // an id alongside would intersect two disjoint sets.
+    // Without an id: the pile has no holder, so adding one would match nothing.
     if pile {
         query.push(("unheld".into(), "true".into()));
         return Ok(query);
     }
-    // Before `--mine` and needing the same id, because it asks about the same
-    // session from the other side: what it wrote rather than what it holds.
+    // Needs the id, like `--mine`: what this session filed, not what it holds.
     if handed_out {
         let session =
             session.context("--handed-out needs a session id (--session, or $TASKS_SESSION)")?;
@@ -85,13 +66,11 @@ pub fn list_query(
         query.push(("session".into(), session.into()));
         return Ok(query);
     }
-    // ⚠ **Strictly that holder, with no pile**: `--to` answers "what is X
-    // carrying", and the pile is on no holder's plate.
+    // Strictly that holder: the pile is on nobody's plate.
     if let Some(holder) = to {
         match holder {
             Holder::Person(name) => query.push(("person".into(), name.into())),
             Holder::Session(id) => query.push(("session".into(), id.into())),
-            // The pile IS a holder in the vocabulary.
             Holder::Nobody => query.push(("unheld".into(), "true".into())),
         }
         return Ok(query);

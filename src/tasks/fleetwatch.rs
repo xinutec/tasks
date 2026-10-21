@@ -1,33 +1,22 @@
 //! Pushing the tool's own timings to fleetwatch.
 //!
-//! **In the library, not the binary, so `tests/` can reach it**: a private
-//! module in a binary has no seam, and a push the receiver rejects stays
-//! invisible to every test. Success is a row in fleetwatch's database, so check
-//! it there after changing what is sent.
-//!
-//! ⚠ **No timer, and no prober.** Every number came from a command somebody
-//! ran, and the service hands one caller at a time the job of forwarding them
-//! ([`crate::tasks::commands::due_to_report`]). On a day nobody uses the
-//! tracker nothing is sent, and fleetwatch's staleness reporting says so.
-//!
-//! ⚠ **The token is read ONLY when the job is handed over**: it is a fleet
-//! credential no other command needs.
+//! In the library so `tests/` can reach it; success is a row in fleetwatch's
+//! database, so check there after changing what is sent. No timer: numbers come
+//! from commands people ran, forwarded by one caller at a time
+//! ([`crate::tasks::commands::due_to_report`]). The fleet token is read only then.
 
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::tasks::checks;
 
-/// Where reports go. Ingest is token-authed; the read UI is not.
+/// Token-authed ingest.
 const URL: &str = "https://fleetwatch.xinutec.org/api/reports";
 
 /// The macOS Keychain item every producer on this Mac already uses.
 const KEYCHAIN_ITEM: &str = "fleetwatch-ingest-token";
 
-/// The ingest token, or nothing.
-///
-/// ⚠ **Absence is not an error and must never reach the caller**: a machine
-/// with no token is one that does not report.
+/// The ingest token. None means this machine doesn't report: not an error.
 fn token() -> Option<String> {
     let out = std::process::Command::new("security")
         .args([
@@ -47,15 +36,9 @@ fn token() -> Option<String> {
     (!token.is_empty()).then_some(token)
 }
 
-/// A ULID, which fleetwatch dedupes on.
-///
-/// ⚠ **Minted with the crate the RECEIVER parses it with.** `ingest` rejects a
-/// bad id before storing anything, and a "ULID-shaped" hex string is not one.
-///
-/// ⚠ **Random, not derived from the numbers.** Two reports can carry identical
-/// tallies when nothing was recorded between them; a content-derived id would
-/// drop the second as a duplicate, and the chart would show a gap exactly when
-/// the tracker was quiet but alive.
+/// A ULID, which fleetwatch dedupes on, from the crate it parses with. Random,
+/// not derived from content: two identical quiet tallies would otherwise collapse
+/// into one, leaving a gap exactly when the tracker was quiet but alive.
 pub fn minted() -> String {
     ulid::Ulid::generate().to_string()
 }
@@ -71,12 +54,9 @@ fn check(label: &str, observed: String, value: f64, unit: &str, verdict: &str) -
     })
 }
 
-/// Turn the service's tally into checks.
-///
-/// ⚠ **Values, and almost no verdicts.** A threshold with no distribution to
-/// derive it from publishes a guess as a measurement. A verdict is given only
-/// where zero is the one defensible expectation — unchecked filings, overdue
-/// tasks — and the rest are numbers fleetwatch charts.
+/// Turn the service's tally into checks: values, and a verdict only where zero
+/// is the one defensible expectation (unchecked filings, overdue tasks). A
+/// threshold with no distribution behind it is a guess.
 pub fn checks(report: &Value) -> Vec<Value> {
     let mut out = Vec::new();
     let mut failed_total = 0u64;
@@ -99,12 +79,9 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
-        // ⚠ **The line above is the MIX; this one is the service.** See
-        // `commands::Tally::unchecked_p90_ms` for why the mix cannot be read as
-        // a latency. This one moves only for the service.
-        //
-        // ⚠ **Emitted only where the client said**: falling back to the mix
-        // would make a second copy of the number it corrects.
+        // The line above mixes checked and unchecked commands
+        // (`commands::Tally::unchecked_p90_ms`); this one is the service alone, sent only
+        // when the client reported it.
         if let Some(alone) = line["unchecked_p90_ms"].as_u64() {
             let waited = line["waited"].as_u64().unwrap_or(0);
             out.push(check(
@@ -122,12 +99,7 @@ pub fn checks(report: &Value) -> Vec<Value> {
             worst = Some((verb.to_string(), failed));
         }
     }
-    // ⚠ **Failures as a VALUE**: charts are built from values, and prose in
-    // a latency line is neither. One aggregate, not a series per verb, since
-    // it is almost always zero.
-    //
-    // ⚠ **No verdict**: this is faults alone (refusals are the next line), and
-    // without a normal day's count a threshold fires on noise.
+    // Faults as one value, no verdict: there is no normal day to set a bound from.
     if !report["commands"]
         .as_array()
         .unwrap_or(&Vec::new())
@@ -146,8 +118,7 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "",
             "pass",
         ));
-        // ⚠ **Its own line, because it is not a fault** — `commands::Ended`
-        // carries why declining and failing must not share a figure.
+        // Refusals apart from faults (`commands::Ended`).
         out.push(check(
             "commands the tool declined",
             format!("{refused_total} of {run_total} runs"),
@@ -171,10 +142,8 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "ms",
             "pass",
         ));
-        // ⚠ **A COUNT, with its denominator in the sentence — not a rate.** An
-        // improving rate cannot say which half moved: fewer checks speaking and
-        // fewer running look identical in a percentage. Spoke, quiet, timeout
-        // and error sum to `runs`, so the series read against each other.
+        // Counts, not a rate: a rate can't say which half moved. Spoke, quiet,
+        // timeout and error sum to `runs`.
         out.push(check(
             &format!("{kind} checks that spoke"),
             format!("{spoke} of {runs}"),
@@ -182,24 +151,16 @@ pub fn checks(report: &Value) -> Vec<Value> {
             "",
             "pass",
         ));
-        // ⚠ **A timeout and an error are summed HERE and nowhere else.** They
-        // have different causes and the tally keeps them apart, but both mean
-        // the same thing to a reader of this line: the input was never judged.
-        // `Quiet` is the one that must never join them — a check that ran and
-        // had nothing to say is the opposite finding, and is its own line above.
-        //
-        // ⚠ **Only `filing` gets a verdict, and the asymmetry is deliberate.**
-        // Zero is defensible there: an unchecked filing is how a duplicate gets
-        // in. A density read is advisory and no bound has been derived for it,
-        // so warning would publish a guess as a finding.
+        // Timeouts and errors summed: either way the input was never judged. Only
+        // `filing` gets a verdict, because an unchecked filing is how a duplicate gets
+        // in; no bound has been derived for density.
         let unanswered = timeout + errored;
         out.push(check(
             &format!("{kind} checks that never answered"),
             format!("{timeout} timed out, {errored} errored, of {runs}"),
             unanswered as f64,
             "",
-            // ⚠ From [`checks::Kind`], not spelled, or a rename would silently
-            // stop this warning firing.
+            // From [`checks::Kind`], so a rename can't silence it.
             if kind == checks::Kind::Filing.as_str() && unanswered > 0 {
                 "warn"
             } else {
@@ -207,15 +168,13 @@ pub fn checks(report: &Value) -> Vec<Value> {
             },
         ));
     }
-    // ⚠ **The WORK**, where everything above measures the machinery. Absent
-    // when the service could not count, rather than zeros.
+    // The backlog itself. Absent, not zero, when the service couldn't count.
     if let Some(work) = report.get("work").filter(|w| w.is_object()) {
         for (label, key) in [
             ("open tasks", "open"),
             ("tasks in the pile", "unheld"),
             ("tasks at P0 or P1", "urgent"),
             ("tasks blocked on open work", "blocked"),
-            // The number the digest's sprawl mark exists to move.
             ("bodies carrying an unaddressed finding", "sprawling"),
         ] {
             let Some(count) = work[key].as_u64() else {
@@ -223,9 +182,7 @@ pub fn checks(report: &Value) -> Vec<Value> {
             };
             out.push(check(label, format!("{count}"), count as f64, "", "pass"));
         }
-        // ⚠ **A bound, because zero is defensible**: a deadline was set from
-        // outside the tracker, and the digest and the rank already treat a
-        // missed date as a change of state.
+        // A bound: a missed deadline is a change of state everywhere else too.
         if let Some(overdue) = work["overdue"].as_u64() {
             out.push(check(
                 "tasks past their deadline",
@@ -264,9 +221,7 @@ pub async fn send(http: &reqwest::Client, report: &Value) -> Result<()> {
         .send()
         .await
         .context("sending the timings to fleetwatch")?;
-    // ⚠ **Silent on success, LOUD on failure**: a push nobody sees failing
-    // looks like a quiet day. It still cannot fail the command — the work is
-    // done — so the note goes to stderr.
+    // Loud on failure (a silent failed push looks like a quiet day), but never fails the command.
     if !answer.status().is_success() {
         eprintln!(
             "(the timings did not reach fleetwatch: HTTP {})",

@@ -1,22 +1,14 @@
 //! Who is asking: the person in a browser, or a Claude session.
 //!
-//! ⚠ **The actor is derived from the credential, never from the request body.**
-//! A write says what to change, not who is changing it, so a session cannot
-//! file history as though the user had moved a task: there is no field to put
-//! it in.
+//! ⚠ The actor comes from the credential, never the request body, so a
+//! session cannot file history as the person.
 //!
-//! Two credentials, and they are not the same strength:
-//!
-//! * the **person** signs in through Nextcloud and carries an HMAC session
-//!   cookie (`session.rs`);
-//! * a **session** presents the shared `AGENT_TOKEN` and declares which
-//!   conversation it is in `X-Session-Id`. That token authenticates the machine
-//!   rather than the conversation — see [`crate::config::Config::agent_token`],
-//!   which is where the consequence is written down.
-//!
-//! With auth unconfigured every request is the local owner, which is the dev
-//! mode; `AGENT_TOKEN` is separate and stays closed unless set, so a dev server
-//! is open to the desk and not to a stale script.
+//! The person signs in through Nextcloud (an HMAC cookie, `session.rs`). A
+//! session presents `AGENT_TOKEN` and names its conversation in `X-Session-Id`;
+//! that token identifies the machine, not the conversation
+//! ([`crate::config::Config::agent_token`]). With auth unconfigured every
+//! request is the local owner, and the agent API stays closed unless its token
+//! is set.
 
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::request::Parts;
@@ -34,12 +26,8 @@ pub const SESSION_HEADER: &str = "X-Session-Id";
 /// Header carrying what Claude Code calls that conversation.
 pub const SESSION_NAME_HEADER: &str = "X-Session-Name";
 
-/// A name a caller reports for *itself*, read from its own transcript.
-///
-/// ⚠ **Deliberately not part of [`Viewer`]**, which must hold nothing
-/// client-supplied. A name is only ever applied to the row of the session that
-/// sent it, so the worst a lying caller achieves is renaming itself — which
-/// `task rename` already offers.
+/// The name a caller reports for itself. Not in [`Viewer`], which holds nothing
+/// client-supplied; it only ever renames the sender's own row.
 pub struct SeenAs(pub Option<String>);
 
 impl<S: Send + Sync> FromRequestParts<S> for SeenAs {
@@ -91,15 +79,11 @@ enum Offered {
     Nothing,
     /// Our token, on behalf of a named conversation.
     On(String),
-    /// Our token, and nothing saying which conversation it speaks for.
-    ///
-    /// Refused — history must not hold a change filed against nobody — but
-    /// refused *by name*: a bare "not authenticated" would send somebody to
-    /// re-check a token that is right.
+    /// Our token without a conversation: refused, saying so, rather than a bare
+    /// "not authenticated" that sends someone to re-check a correct token.
     Nameless,
 }
 
-/// The remedy, not the diagnosis: this reaches a person as the CLI's error line.
 const NAMELESS: &str = "the agent token is accepted, but nothing says which conversation \
                         it is for — send X-Session-Id, or use a `task` CLI new enough to \
                         read $CLAUDE_CODE_SESSION_ID";
@@ -116,9 +100,7 @@ fn agent(app: &AppState, parts: &Parts) -> Offered {
     let Some(offered) = offered else {
         return Offered::Nothing;
     };
-    // Constant-time, and length-checked first: `ct_eq` on differing lengths is
-    // not defined to be constant-time, and the length of a secret is itself
-    // worth not leaking.
+    // Constant-time; `ct_eq` isn't for differing lengths, so check length first.
     if offered.len() != expected.len() || !bool::from(offered.as_bytes().ct_eq(expected.as_bytes()))
     {
         return Offered::Nothing;
@@ -133,12 +115,9 @@ fn agent(app: &AppState, parts: &Parts) -> Offered {
 }
 
 fn resolve(app: &AppState, parts: &Parts) -> Result<Viewer, AppError> {
-    // The agent credential first, so a session driven from a signed-in
-    // browser does not write history under the user's name.
+    // The token first, so a session in a signed-in browser isn't filed as the user.
     match agent(app, parts) {
         Offered::On(session) => return Ok(Viewer::Session(session)),
-        // Not a fall-through to the cookie: whoever holds this token is a
-        // script, and the cookie would misattribute it.
         Offered::Nameless => return Err(AppError::Unauthorized(NAMELESS)),
         Offered::Nothing => {}
     }

@@ -15,27 +15,16 @@ use tracing::Level;
 
 use crate::state::AppState;
 
-/// How long a static response may be reused without asking again.
+/// How long a static response may be reused without asking.
 ///
-/// ⚠ **`index.html` MUST REVALIDATE.** With no `Cache-Control` a client falls
-/// back to heuristic freshness and may keep the page for days without asking.
-/// The page names the content-hashed bundle, so the new `main-*.js` is never
-/// fetched either and a deploy is invisible. `no-cache` means "ask first", not
-/// "never keep": the `ETag` still makes the usual case a bodiless 304.
-///
-/// Everything else Angular emits carries a content hash in its NAME, so a new
-/// build is a new URL — the one kind of response `immutable` is honest for.
-///
-/// Generic over the body because this `ServeDir` falls back to the `spa`
-/// HANDLER, not a `ServeFile`, so its body type is not
-/// `ServeFileSystemResponseBody`. The predicate only reads a header.
+/// ⚠ `index.html` must revalidate (`no-cache`, still a bodiless 304 via `ETag`):
+/// cached heuristically, it keeps naming the old hashed bundle and a deploy is
+/// invisible. Everything else has a content hash in its name, so `immutable` is
+/// honest there. Generic over the body because the fallback is the `spa` handler.
 fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
-    // ⚠ **An error is not an asset.** [`spa`] 404s a missing path that looks
-    // like a file, by design and often, and a year of `immutable` on that is a
-    // client that will not ask for the name again.
-    //
-    // ⚠ NOT `!is_success()`: that excludes **304 Not Modified**, which must
-    // carry the headers a 200 would, or every revalidation becomes a re-fetch.
+    // Errors aren't assets: [`spa`] 404s missing files often, and a year of
+    // `immutable` on one stops the client asking again. Not `!is_success()`,
+    // which would drop the headers from a 304.
     if res.status().is_client_error() || res.status().is_server_error() {
         return None;
     }
@@ -54,11 +43,9 @@ fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
 pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(api::me))
-        // The index a prompt receives. `text/plain`, because its one consumer
-        // prints it, on the latency path of every prompt.
+        // The prompt's index: plain text, on the latency path of every prompt.
         .route("/digest", get(api::digest))
-        // What the calling conversation is focused on. No id in the path: a
-        // session may only focus itself, so the credential names it.
+        // A session may only focus itself, so the credential names it.
         .route(
             "/focus",
             get(api::read_focus)
@@ -76,10 +63,8 @@ pub fn router(state: AppState) -> Router {
         .route("/checks/overrules", get(api::check_overrules))
         .route("/commands", get(api::commands_ran).post(api::command_ran))
         .route("/telemetry", post(telemetry::record))
-        // ⚠ **`/api/*` must never reach the page.** Otherwise an unknown API path
-        // falls through to the `ServeDir` fallback — `spa()` passes it, having
-        // no dot in its last segment — and a caller asking for JSON gets
-        // `200 text/html`, which reads as a client bug.
+        // `/api/*` must never fall through to the page, or an unknown API path
+        // answers `200 text/html`.
         .fallback(api::not_found);
 
     let app = Router::new()
@@ -88,24 +73,19 @@ pub fn router(state: AppState) -> Router {
         .route("/logout", post(auth::logout))
         .nest("/api", api);
 
-    // Serve the built Angular bundle (single origin), SPA-fallback to
-    // index.html so deep links load the shell. API-only when STATIC_DIR is
-    // unset (dev: `ng serve` proxies).
+    // The built Angular bundle, falling back to index.html for deep links;
+    // API-only without STATIC_DIR (dev, where `ng serve` proxies).
     //
-    // ⚠ **A missing FILE must 404, not fall back to the page.** The obvious
-    // `ServeDir::fallback(ServeFile::new(index))` answers a missing font with
-    // `200 text/html`, and the browser renders broken icons and reports
-    // nothing. The test is a dot in the last path segment: `/t/1` is a route,
-    // `/main-ABC123.js` a file. A heuristic, but enumerating the bundle's asset
-    // names would change with every build.
+    // ⚠ A missing file must 404, not get the page, or a missing font renders as
+    // broken icons with no error. A dot in the last segment marks a file: `/t/1`
+    // is a route, `/main-ABC123.js` a file.
     let app = if let Some(dir) = state.cfg.static_dir.clone() {
         let index = format!("{dir}/index.html");
         let serve = ServeDir::new(&dir).fallback(get(move |uri: axum::http::Uri| {
             let index = index.clone();
             async move { spa(&index, uri.path()) }
         }));
-        // ⚠ The layer wraps the STATIC SERVICE ALONE, or API JSON would be
-        // stamped `immutable` for a year.
+        // Wraps the static service only, or API JSON would be cached as `immutable`.
         let serve = ServiceBuilder::new()
             .layer(SetResponseHeaderLayer::overriding(
                 header::CACHE_CONTROL,
@@ -117,24 +97,19 @@ pub fn router(state: AppState) -> Router {
         app
     };
 
-    // One line per request: method, path, status, latency. Levels explicit:
-    // TraceLayer logs under `tower_http`, which an `info` filter leaves at info,
-    // so its default DEBUG would never emit a line.
+    // One line per request. Levels are explicit: TraceLayer's default DEBUG never
+    // shows under an `info` filter.
     let trace = TraceLayer::new_for_http()
         .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
         .on_response(DefaultOnResponse::new().level(Level::INFO));
 
-    // /healthz is registered AFTER the layer, so it is untraced: kubelet's
-    // probes would bury the requests a person made.
+    // /healthz is added after the layer, so probes don't bury real requests.
     app.layer(trace)
         .route("/healthz", get(|| async { "ok" }))
         .with_state(state)
 }
 
-/// The SPA shell, or a 404 for something that was meant to be a file.
-///
-/// Public so `tests/serving.rs` can exercise it: its mistake is a 200, visible
-/// only as missing icons in a browser.
+/// The SPA shell, or 404 for a path that looks like a file.
 pub fn spa(index: &str, path: &str) -> axum::response::Response {
     use axum::response::IntoResponse as _;
 
@@ -148,8 +123,7 @@ pub fn spa(index: &str, path: &str) -> axum::response::Response {
     match std::fs::read_to_string(index) {
         Ok(page) => axum::response::Html(page).into_response(),
         Err(error) => {
-            // A deployment with STATIC_DIR set and no index is misconfigured,
-            // and saying so beats serving an empty page that looks like the app.
+            // STATIC_DIR without an index is a misconfiguration; say so.
             tracing::error!("the app's index could not be read: {error}");
             (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "no index").into_response()
         }

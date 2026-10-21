@@ -1,13 +1,6 @@
-//! Checks on what happens to a task, answered from the store.
-//!
-//! The model checks ([`duplicates`](super::duplicates), [`density`](super::density))
-//! read prose and cost tens of seconds, so they run only where prose is
-//! written. A lifecycle question — is this id closed, by whom, when — is a keyed
-//! read, cheap enough to ask on any command.
-//!
-//! ⚠ **These warn and never refuse.** Each looks at facts the caller may have
-//! good reason to act against; what is wrong is acting without having seen
-//! them.
+//! Checks on what happens to a task, answered by keyed reads, cheap enough for
+//! any command (the model checks cost seconds). They warn and never refuse: the
+//! caller may have reason to act against them, just not without seeing them.
 
 use std::collections::BTreeSet;
 
@@ -21,8 +14,7 @@ use crate::tasks::types::{Actor, Moved, Status};
 
 type Result<T> = std::result::Result<T, AppError>;
 
-/// How long after closing a task a filing that names it is likely to continue
-/// it, in seconds. A day: a session's working stretch, not its whole life.
+/// How long after a close a filing naming the task likely continues it, in seconds.
 pub const RECENT: i64 = 24 * 60 * 60;
 
 /// A task the filer closed recently, named by what they are filing now.
@@ -34,10 +26,8 @@ pub struct Closed {
     pub at: DateTime<Utc>,
 }
 
-/// The ids a text names as `#<digits>`, in order, each once.
-///
-/// Only the hashed spelling: a bare number in prose is as often a count or a
-/// port as a task.
+/// The ids a text names as `#<digits>`, in order, each once. A bare number is
+/// as often a count or a port.
 pub fn mentioned(text: &str) -> Vec<u64> {
     let mut seen = BTreeSet::new();
     let mut ids = Vec::new();
@@ -60,13 +50,9 @@ struct Row {
     at: NaiveDateTime,
 }
 
-/// The tasks among `ids` that `actor` closed within [`RECENT`].
-///
-/// ⚠ **Decided on the task's LAST status change.** A task the filer closed and
-/// somebody else reopened and closed again is that other closer's call now.
-///
-/// Read from columns, never from `task_events.detail`: that is one line
-/// rendered for a person, and parsing it would make it a wire format.
+/// The tasks among `ids` that `actor` closed within [`RECENT`], by the last
+/// status change: if somebody reopened and reclosed it, it is theirs now. Read
+/// from columns, never `task_events.detail`, which is prose.
 pub async fn closed_by(pool: &MySqlPool, actor: &Actor, ids: &[u64]) -> Result<Vec<Closed>> {
     let mut closed = Vec::new();
     for &id in ids {
@@ -106,15 +92,9 @@ struct Written {
 }
 
 /// When a just-closed task's text was last written, if nothing was written
-/// since it last changed status — or, never having changed one, since it was
-/// filed.
-///
-/// ⚠ **Closing is a rewrite.** A body still saying what was wrong, under a done
-/// status, is what the next reader and the duplicate check both believe. `task
-/// done --note` writes before it closes, so it is never named here.
-///
-/// Call it only right after a close: the task's latest status event is taken
-/// to be that close.
+/// since its previous status change (or its filing). A body still describing
+/// the problem under a done status misleads the next reader and the duplicate
+/// check. Call only right after a close.
 pub async fn unwritten(pool: &MySqlPool, id: u64) -> Result<Option<DateTime<Utc>>> {
     let last: Option<Written> = sqlx::query_as(
         "SELECT id, kind, at FROM task_events \
@@ -127,7 +107,7 @@ pub async fn unwritten(pool: &MySqlPool, id: u64) -> Result<Option<DateTime<Utc>
     let Some(last) = last else {
         return Ok(None);
     };
-    // The status event before the close: the moment the task last moved.
+    // The status event before the close.
     let moved: Option<(u64,)> = sqlx::query_as(
         "SELECT id FROM task_events WHERE task_id = ? AND kind = 'status' \
          ORDER BY id DESC LIMIT 1 OFFSET 1",
@@ -162,11 +142,8 @@ pub fn rewrite_hint(id: u64, written: DateTime<Utc>, now: DateTime<Utc>) -> Stri
     )
 }
 
-/// What a filing is told about a task its filer closed, `now` being when it
-/// was filed.
-///
-/// Both halves of the remedy: the filing has landed, so continuing the old task
-/// also means dropping the new one.
+/// What a filing is told about a task its filer closed. It gives both halves of
+/// the remedy, since the new task has already landed.
 pub fn reopen_hint(closed: &Closed, filed: u64, now: DateTime<Utc>) -> String {
     let ago = ago(closed.at, now);
     let id = closed.id;
@@ -177,10 +154,8 @@ pub fn reopen_hint(closed: &Closed, filed: u64, now: DateTime<Utc>) -> String {
     )
 }
 
-/// A command's line with its hints on it.
-///
-/// **One line, never a line below.** Sessions keep `| head -1` of a write;
-/// a hint underneath is the part they drop.
+/// A command's line with its hints appended: sessions keep `| head -1` of a
+/// write, so a hint on the next line is lost.
 pub fn on_the_line(row: String, hints: impl IntoIterator<Item = String>) -> String {
     hints
         .into_iter()

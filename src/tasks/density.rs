@@ -1,61 +1,18 @@
-//! Whether a body that has grown without being read is still worth reading.
+//! Whether a body that has grown without anyone rewriting it should be.
 //!
-//! A task body is written by whoever is holding it, in the order things
-//! happened, and read by whoever picks it up next. Those are rarely the same
-//! conversation and never the same moment, so the text drifts from being an
-//! account of the work into being a transcript of somebody talking to
-//! themselves — and nothing in the tracker noticed, because every individual
-//! edit was reasonable.
+//! Bodies grow by append and prepend, written by one conversation and read by
+//! the next, until earlier layers contradict later ones. [`worth_asking`] is
+//! arithmetic and only decides when to ask; a model judges, because
+//! supersession is semantic.
 //!
-//! ## Accretion is the shape, and it is measurable
-//!
-//! `task_revision` holds the body as it stood before each edit, so every edit
-//! classifies exactly: the new body starts with the old (an append), ends with
-//! it (a prepend), or neither (a rewrite). Appends and prepends dominate. The
-//! corpus grows by accretion and shrinks only when somebody rewrites, and a
-//! single task can run dozens of growing edits without once being consolidated.
-//!
-//! ⚠ **Removing `--prepend` was considered and refuted by the same data.**
-//! Before those flags existed, sessions typed the same edits by hand as
-//! `--body "<new>\n\n<the whole old body>"` — a session that pastes the body
-//! back has read it into context and appends anyway. Taking the flags away
-//! returns to that regime and makes `--body` the only way to add a line, which
-//! is the write that silently replaces a whole body with one word.
-//!
-//! ## A sampler, then a judge
-//!
-//! [`worth_asking`] is arithmetic and deterministic: characters grown since the
-//! last edit that made the body smaller. It decides WHEN the question is asked,
-//! and nothing else. The question itself goes to a model, because the defect is
-//! semantic: a body can be mostly superseded by its own later layers, and no
-//! threshold can see that.
-//!
-//! ⚠ **Never a refusal.** `duplicates.rs` refuses because whether a title is
-//! already on a list is a fact about that list; whether prose is dense is
-//! taste. A gate on taste that fires on one edit and not the identical next
-//! teaches sessions to edit until it goes quiet. And the write has landed by
-//! the time this runs.
-//!
-//! ⚠ **The judge has a bar, or it always speaks.** Asked what is wrong with a
-//! body against [`RUBRIC`], a model finds something in nearly every one,
-//! bodies just rewritten included — and a check that speaks on everything is a
-//! banner. So [`prompt`] lets it speak only for a self-contradiction, however
-//! short, or a rewrite that would remove a third. Calibrated against bodies
-//! whose last edit was a consolidating rewrite, which should pass: a change to
-//! the prompt is judged by how often it speaks on those as well as on grown
-//! ones.
-//!
-//! ⚠ **Never "as few words as possible".** Told to compress, a model drops the
-//! numbers and keeps the prose, because prose reads like the argument — and a
-//! body is believed for its measurements. [`RUBRIC`] therefore asks for density
-//! and lets length be its consequence, and its second rule is deliberately
-//! asymmetric: it cuts restatement and never evidence.
+//! ⚠ It never refuses: the edit has landed, and a gate on taste teaches
+//! sessions to edit until it goes quiet. It speaks only for a contradiction or
+//! a rewrite that would remove a third, or it would speak on every body.
+//! [`RUBRIC`] asks for density, never brevity: told to compress, a model drops
+//! the numbers and keeps the prose.
 
-/// Characters of unconsolidated growth before the question is worth asking.
-///
-/// **From the distribution, not taste**: roughly two ordinary additions. The
-/// check spends the caller's clock and allowance, and most edits are one
-/// paragraph on a body that was recently whole.
+/// Growth since the body last shrank before a model is asked: about two
+/// ordinary additions, from the distribution of edits.
 pub const SAMPLER: usize = 3_000;
 
 /// Whether this much unconsolidated growth is worth a model's opinion.
@@ -63,11 +20,8 @@ pub fn worth_asking(accreted: usize) -> bool {
     accreted > SAMPLER
 }
 
-/// The standard a body is held to, stated once and used twice.
-///
-/// ⚠ **The judge applies it and `task edit --help` prints it, from this same
-/// string.** Stated only to the judge it arrives after the writing; in the help
-/// it arrives before, where it can prevent something.
+/// The standard a body is held to. `task edit --help` prints it too, so a
+/// writer sees it before writing, not only after.
 pub const RUBRIC: &str = "\
 1. Every paragraph earns its place one of three ways: it tells the holder what \
 to do, it is the evidence for that, or it records a refutation that stops \
@@ -108,29 +62,21 @@ pub fn prompt(id: u64, accreted: usize, body: &str) -> String {
     )
 }
 
-/// What to print, if anything.
-///
-/// ⚠ **The line bound is on findings, not characters.** Asked for four lines a
-/// model returns one wide one holding four, so [`prompt`] asks for `ONE FINDING
-/// PER LINE`; truncating mid-sentence would cut the specific half of a finding.
-///
-/// ⚠ **An unreadable answer is silence, not a warning**: the write has landed,
-/// and a line about the checker spends attention that belongs to the task.
+/// What to print, if anything. At most four findings, never cut mid-line; an
+/// unreadable answer prints nothing.
 pub fn advice(said: &str, id: u64) -> Option<String> {
     let said = said.trim();
     if said.is_empty() || said.eq_ignore_ascii_case(FINE) {
         return None;
     }
-    // A model that answers DENSE and then explains itself has said the useful
-    // part first, exactly as `duplicates::parse` treats NONE.
+    // DENSE followed by an explanation is still DENSE, as `duplicates::parse`
+    // treats NONE.
     let first = said.lines().next().map(str::trim).unwrap_or_default();
     if first.eq_ignore_ascii_case(FINE) {
         return None;
     }
     let mut out = String::from("a model read this body, and it is a guess:\n");
-    // ⚠ **Blank lines are not findings.** A model asked for one finding per
-    // line separates them with blank ones, and a bound on LINES then drops half
-    // the answer. The bound is on what it found.
+    // Blank lines don't count against the four.
     for line in said
         .lines()
         .map(str::trim)

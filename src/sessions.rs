@@ -1,14 +1,7 @@
-//! The conversations work can be handed to.
-//!
-//! ⚠ **The CLI's session id is the identity; the name is an attribute.**
-//! Everything points at the id, so a rename touches one column and no task
-//! moves. The CLI reads the name from the conversation's own transcript
-//! ([`crate::agent_name`]) and sends it on every request, so the column is a
-//! cache of what Claude Code calls the conversation; [`touch`] stores it.
-//!
-//! A row is created by the first thing a session does, not by a registration
-//! step: a session that must be enrolled before it can be given work will be
-//! given work before it is enrolled.
+//! The conversations work can be handed to. The session id is the identity
+//! and everything points at it; the name is a cached attribute the CLI reads
+//! from the transcript ([`crate::agent_name`]) and sends on every request. A
+//! session's first request creates its row: there is no enrolment step.
 
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -27,8 +20,7 @@ pub struct Session {
     pub name: Option<String>,
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
-    /// How much is on this session's plate, counted for every session in one
-    /// query because the front page draws it per row.
+    /// Open tasks held, counted in the same query.
     pub open: i64,
 }
 
@@ -41,16 +33,11 @@ struct Row {
     open: i64,
 }
 
-/// Record that a session exists, and what it calls itself.
+/// Record that a session exists, and its name.
 ///
-/// ⚠ **An absent name does not erase the stored one**, or the prompt hook,
-/// which knows only the id, would blank it on every prompt. `Some("")` counts
-/// as absent: the CLI reports an empty name before a session has one.
-///
-/// ⚠ **An id that is another conversation's name is refused**, or that id
-/// would capture every `--to <name>` meant for the named one. Ids are not all
-/// UUIDs (a script names itself, `TASKS_SESSION=claude-sync`). A UUID cannot be
-/// a name, so only other ids pay for the lookup.
+/// An absent or empty name keeps the stored one (the prompt hook sends only
+/// the id). ⚠ A non-UUID id equal to another conversation's name is refused, or
+/// it would capture every `--to <name>` meant for that one.
 pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()> {
     let name = name.map(str::trim).filter(|n| !n.is_empty());
     if !is_uuid(id) {
@@ -81,37 +68,25 @@ pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()>
     Ok(())
 }
 
-/// One party's share of the work: what they are holding, and what they have held.
-///
-/// ⚠ **`total` counts finished work — the reason this type exists apart from
-/// [`Session`].** `open` says who is busy, not who has done anything: `0/56`
-/// is a cleared plate, where a bare `0` reads as an idle one.
-///
-/// ⚠ **A dropped task is in neither number.** It is neither in hand nor done;
-/// counting it would make dropping ten stale items read as finishing ten.
+/// One party's share of the work. `total` adds what they finished, so `0/56`
+/// reads as a cleared plate, not an idle one. Dropped tasks count in neither.
 #[derive(Debug, Clone, Serialize)]
 pub struct Holder {
-    /// `session`, `person` or `nobody` — the same vocabulary as an assignee.
+    /// `session`, `person` or `nobody`, as for an assignee.
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// What to call them. A session may have none, and the client shows the id;
-    /// the pile and the person always have one.
+    /// A session may have none; the client then shows the id.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub open: i64,
-    /// Open plus finished. Never derived on a client: two numbers that must
-    /// agree should be counted by one query.
+    /// Open plus finished, counted by the same query as `open`.
     pub total: i64,
 }
 
-/// Count a group of tasks as `open` and `done`.
-///
-/// ⚠ **Both halves are counted, and `total` is added in Rust.** Spelling it as
-/// "everything except dropped" in SQL would be a `<> 'something'`, which
-/// silently miscounts when a status is added; `still_open!` and `= 'done'` are
-/// the only two things these queries say. `SUM` of a boolean comes back
-/// DECIMAL, which sqlx will not decode into `i64` — hence the cast.
+/// Count a group of tasks as `open` and `done`, each named positively: "all
+/// but dropped" would miscount when a status is added. The CAST is because
+/// `SUM` comes back DECIMAL, which sqlx won't decode into `i64`.
 macro_rules! tally {
     ($extra:literal, $tail:literal) => {
         concat!(
@@ -126,21 +101,11 @@ macro_rules! tally {
     };
 }
 
-/// Who holds what: every session that has held something, the user, and the pile.
-///
-/// Three queries rather than one union: the groups are counted from different
-/// columns — `assignee_session`, `assignee_person`, and the absence of both.
-/// Most open first, since the question is "who is loaded"; ties go to the
-/// larger history.
-///
-/// ⚠ **A session that has never been given a task is left out.** Every
-/// conversation that ever ran has a row, and nearly all of them never held
-/// anything; listing them would bury the holders under `0/0` lines. The
-/// predicate is *ever assigned*, not *anything open*, so a cleared plate still
-/// says who cleared it. [`list`] is every session known (`task sessions --all`).
+/// Who holds what: every session ever given a task, the person, and the pile,
+/// most loaded first. Sessions never given one are left out (nearly all of
+/// them); [`list`] has every session.
 pub async fn holders(pool: &MySqlPool, person: &str) -> Result<Vec<Holder>> {
-    // `COUNT(t.id)` over the left join is *ever assigned anything* —
-    // deliberately not spelled with the status vocabulary.
+    // `COUNT(t.id)` over the left join: ever assigned anything.
     let sessions: Vec<(String, Option<String>, i64, i64, i64)> = sqlx::query_as(tally!(
         "s.id, s.name, CAST(COUNT(t.id) AS SIGNED) AS ever, ",
         "FROM sessions s LEFT JOIN tasks t ON t.assignee_session = s.id GROUP BY s.id, s.name"
