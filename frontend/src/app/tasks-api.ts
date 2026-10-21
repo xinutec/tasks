@@ -47,7 +47,8 @@ export class TasksApi {
   }
 
   /**
-   * The version before the last edit (404 if none); call only when `restorable`, as it is a whole body.
+   * The version before the last edit (404 if none); call only when `restorable`, as it is a
+   * whole body.
    */
   previous(id: number): Observable<Revision> {
     return this.http.get<Revision>(`/api/tasks/${id}/previous`);

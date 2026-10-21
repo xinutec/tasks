@@ -1,6 +1,6 @@
 //! What the `/api/digest` route selects, through the real router.
 //!
-//! ⚠ `tests/tasks_db.rs` proves `Filter::digest_for` is right; one `match` in
+//! `tests/tasks_db.rs` proves `Filter::digest_for` is right; one `match` in
 //! `routes::api` decides to call it, and changing it would leave every other test
 //! green while sessions carry every open task. Same for `/api/tasks` and
 //! `pile=true`: `tests/selection.rs` only checks what the CLI sends. These use the
@@ -400,7 +400,8 @@ mod handed_out {
 
     #[tokio::test]
     async fn it_is_not_the_callers_own_plate() {
-        // A route ignoring the parameter would show the router what it holds, not what it handed out.
+        // A route ignoring the parameter would show a routing session what it holds, not what it
+        // handed out.
         let pool = common::fresh_db().await;
         seed_filings(&pool).await;
         let app = app(pool);
@@ -428,7 +429,7 @@ mod handed_out {
     }
 }
 
-/// A request names its session unprompted. ⚠ Passing `None` to `sessions::touch`
+/// A request names its session unprompted. Passing `None` to `sessions::touch`
 /// still compiles and passes everything else, so this goes through HTTP.
 mod naming {
     use super::*;
@@ -722,7 +723,7 @@ mod reporting {
 
     #[tokio::test]
     async fn only_one_caller_an_hour_pays_for_it() {
-        // ⚠ **The guard that keeps this off the hot path.** Every command posts
+        // The guard that keeps this off the hot path. Every command posts
         // here, so the second caller must get nothing.
         let pool = common::fresh_db().await;
         seed(&pool).await;

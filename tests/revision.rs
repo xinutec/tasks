@@ -82,7 +82,7 @@ async fn an_edited_body_leaves_the_one_it_replaced_behind() {
 
 #[tokio::test]
 async fn a_subject_edit_snapshots_the_body_it_did_not_touch() {
-    // ⚠ Both columns always: after a subject-only edit, `undo` still needs the body,
+    // Both columns always: after a subject-only edit, `undo` still needs the body,
     // and mixing revisions would restore a pair that never coexisted.
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "the first body").await;
@@ -175,7 +175,7 @@ async fn a_change_that_moves_no_text_leaves_no_revision() {
 
 #[tokio::test]
 async fn the_newest_revision_is_the_one_that_comes_back() {
-    // ⚠ Ordered by id, not `at`, which has one-second resolution: both events are
+    // Ordered by id, not `at`, which has one-second resolution: both events are
     // forced to one timestamp to make that the case under test.
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "first").await;

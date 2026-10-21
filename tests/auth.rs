@@ -20,7 +20,7 @@ fn rejects_open_redirects_and_falls_back_to_root() {
 
 /// Which pending sign-in a callback answers, and what it may do with it.
 ///
-/// ⚠ The security-relevant half of the sign-in, and a pure function so it can
+/// The security-relevant half of the sign-in, and a pure function so it can
 /// be pinned here: the live flow needs Nextcloud, which no test has.
 mod which_signin {
     use tasks::routes::auth::{Answer, state_to_consume};
@@ -34,7 +34,7 @@ mod which_signin {
         assert!(matches!(state_to_consume("abc", ""), Answer::Refuse(_)));
     }
 
-    /// ⚠ **The live case, and never trusted (RFC 6749 §10.12).** With `state`
+    /// The live case, and never trusted (RFC 6749 §10.12). With `state`
     /// empty nothing ties the URL's code to this browser: anyone's code would
     /// do. The cookie names the sign-in to retry, never one to finish.
     #[test]
@@ -47,7 +47,7 @@ mod which_signin {
         assert!(matches!(state_to_consume("", ""), Answer::Refuse(_)));
     }
 
-    /// ⚠ **Two different attempts must not be spliced.** A callback naming one
+    /// Two different attempts must not be spliced. A callback naming one
     /// sign-in, arriving in a browser holding another, is answering somebody
     /// else's.
     #[test]
@@ -129,7 +129,7 @@ mod retry {
             .unwrap_or_default()
     }
 
-    /// ⚠ **The code is dropped, not exchanged.** An exchange would reach
+    /// The code is dropped, not exchanged. An exchange would reach
     /// `dash.example` and answer 502; a redirect to authorize means it never
     /// left. The fresh `state` rides in both the URL and the cookie.
     #[tokio::test]

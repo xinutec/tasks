@@ -36,7 +36,7 @@ fn own_name<'a>(viewer: &Viewer, called: &'a Option<String>) -> Option<&'a str> 
     }
 }
 
-/// As `/api/me` answers; mirrored by `Me` in `models.ts`.
+/// Who the caller is, as `/api/me` answers; mirrored by `Me` in `models.ts`.
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Me {
@@ -346,7 +346,8 @@ pub struct LicenceQuery {
     subject: String,
 }
 
-/// What this conversation's latest refusal of a subject named, so the CLI skips the check only when the service will accept it.
+/// What this conversation's latest refusal of a subject named, so the CLI skips the check
+/// only when the service will accept it.
 pub async fn check_licence(
     Access(viewer): Access,
     State(app): State<AppState>,

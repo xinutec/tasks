@@ -120,7 +120,7 @@
     opacity: 0.7;
   }
 
-  // ⚠ **Weight, not hue alone.** P0 and P1 are the two that have to be spotted
+  // Weight, not hue alone. P0 and P1 are the two that have to be spotted
   // while scrolling; P3 and P4 are marked so they can be recognised and passed
   // over, which is the opposite job and wants the opposite emphasis. Reading
   // this by colour alone would fail anybody who cannot separate red from grey,
@@ -142,7 +142,7 @@
     &.P4 {
       opacity: 0.6;
     }
-    // ⚠ **A raised level must not look like a chosen one.** The `!` says it in
+    // A raised level must not look like a chosen one. The `!` says it in
     // text; the outline says it at a glance, so a reader scanning the top of the
     // list can tell "somebody decided this" from "a date did". Same treatment in
     // both views, because the two are read minutes apart.

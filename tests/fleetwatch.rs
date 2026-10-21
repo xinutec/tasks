@@ -1,6 +1,6 @@
 //! What fleetwatch's ingest will and will not accept from us.
 //!
-//! ⚠ **Each test asserts a rule the RECEIVER enforces**, not one this crate
+//! Each test asserts a rule the RECEIVER enforces, not one this crate
 //! happens to implement: a push fleetwatch rejects is invisible from here, and
 //! a local side can be self-consistent while disagreeing with the other end.
 
@@ -147,7 +147,7 @@ mod what_reaches_the_wire {
     }
 }
 
-/// The fixtures above are hand-written JSON. ⚠ `checks()` reads keys out of a
+/// The fixtures above are hand-written JSON. `checks()` reads keys out of a
 /// `Value` and falls back to 0, so a renamed `Tally` field would zero every line
 /// and fail nothing. This drives the real structs through serde.
 #[test]

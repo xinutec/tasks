@@ -101,7 +101,7 @@ async fn the_pile_is_something_said_rather_than_something_fallen_into() {
     .expect("filing");
     assert_eq!(task.assignee.kind, AssigneeKind::Nobody);
 
-    // ⚠ **The pile is recorded too**, with its reason: a decision that leaves
+    // The pile is recorded too, with its reason: a decision that leaves
     // no record is not one the tool can report on.
     let moves = kinds(&pool, task.id).await;
     assert_eq!(moves, vec!["created", "assigned"], "the pile is recorded");
@@ -394,7 +394,7 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
     .expect("filing");
     assert!(task.detailed, "the body was not noticed");
 
-    // ⚠ The listing type has no body field at all — this is the property, and
+    // The listing type has no body field at all — this is the property, and
     // it is enforced by the type rather than by remembering not to select it.
     let listed = repo::list(&pool, &Filter::default())
         .await
@@ -723,7 +723,7 @@ async fn who_holds_what_counts_the_finished_work_too() {
     let cleared = find("session", Some("sess-2"));
     assert_eq!((cleared.open, cleared.total), (0, 1));
 
-    // ⚠ **A session that has never been given anything is not a holder** — see
+    // A session that has never been given anything is not a holder — see
     // `sessions::holders`. They are still *sessions*, and `sessions::list` has
     // them.
     assert!(
@@ -751,7 +751,7 @@ async fn who_holds_what_counts_the_finished_work_too() {
 
 /// The one test tying `Status::is_open` to the SQL that means the same thing.
 ///
-/// ⚠ **`status <> 'done'` miscounts `dropped` silently**, so this puts one task
+/// `status <> 'done'` miscounts `dropped` silently, so this puts one task
 /// in each state and asks every counting query what it sees, rather than
 /// trusting that every call site uses `still_open!`.
 #[tokio::test]
@@ -926,7 +926,7 @@ async fn dropping_a_task_credits_nobody_with_doing_it() {
 
 /// The holder column has to be able to describe the present, not only the past.
 ///
-/// ⚠ **`start` claims a task from the pile**, or a session mid-task reads as
+/// `start` claims a task from the pile, or a session mid-task reads as
 /// `0 open` and looks idle for as long as it is actually working.
 #[tokio::test]
 async fn starting_a_task_claims_it_the_way_finishing_one_does() {
@@ -1510,7 +1510,7 @@ async fn an_open_task_may_still_be_put_in_the_pile() {
 
 /// A holder nobody has heard of is a 400 that names it, not a 500.
 ///
-/// ⚠ **The FOREIGN KEY does the refusing**; what is under test is the answer —
+/// The FOREIGN KEY does the refusing; what is under test is the answer —
 /// a 500 would send somebody to look at a service that is working correctly.
 mod unknown_holder {
     use super::*;
@@ -1576,7 +1576,7 @@ mod unknown_holder {
         );
     }
 
-    /// ⚠ Keeps the mapping honest: a move failing for no reason still succeeds, and
+    /// Keeps the mapping honest: a move failing for no reason still succeeds, and
     /// `a_task_may_not_be_closed_into_the_pile` keeps the other refusals their own.
     #[tokio::test]
     async fn a_holder_the_service_has_seen_is_untouched_by_any_of_this() {
@@ -1630,7 +1630,7 @@ mod unknown_holder {
         );
     }
 
-    /// ⚠ A person isn't checked: `assignee_person` has no foreign key (there is no
+    /// A person isn't checked: `assignee_person` has no foreign key (there is no
     /// table of people), so only conversations can be refused.
     #[tokio::test]
     async fn a_person_nobody_has_heard_of_is_still_accepted() {
@@ -1652,7 +1652,7 @@ mod unknown_holder {
     }
 }
 
-/// How many lines a body has. ⚠ The oracle is the stored body, counted with
+/// How many lines a body has. The oracle is the stored body, counted with
 /// Rust's `trim().lines()` as `task show` prints it; a hand-written number would
 /// encode my reading of the projection under test.
 mod how_much_prose {
@@ -1709,7 +1709,7 @@ mod how_much_prose {
         }
     }
 
-    /// ⚠ `detailed` and the count are two expressions over one column, so they must agree.
+    /// `detailed` and the count are two expressions over one column, so they must agree.
     #[tokio::test]
     async fn nothing_to_read_is_zero_and_detailed_agrees() {
         let pool = common::fresh_db().await;
@@ -1736,7 +1736,7 @@ mod how_much_prose {
         assert_eq!(counted, 1, "one line of prose counted as {counted}");
     }
 
-    /// ⚠ The list carries it too, from the same `select!`, so one body has one count.
+    /// The list carries it too, from the same `select!`, so one body has one count.
     #[tokio::test]
     async fn a_list_row_carries_the_same_count_as_the_task_itself() {
         let pool = common::fresh_db().await;

@@ -59,7 +59,8 @@ export interface Task {
   /** Body lines, for the CLI; no view draws it. */
   body_lines: number;
   /**
-   * What the filing session calls itself; absent when not said. Drawn only where there is no holder.
+   * What the filing session calls itself; absent when not said. Drawn only where there is
+   * no holder.
    */
   filed_by?: string;
   /**
@@ -73,7 +74,8 @@ export interface Task {
 }
 
 /**
- * A task just filed, and the closed tasks it names that the filer closed today (`tasks::lifecycle`).
+ * A task just filed, and the closed tasks it names that the filer closed in the last day
+ * (`tasks::lifecycle`).
  */
 export interface Created extends Task {
   /** Absent, not empty, when it names none. */
@@ -93,7 +95,8 @@ export interface Updated extends Task {
   /** What this write overwrote; absent unless it moved prose. */
   replaced?: Replaced;
   /**
-   * When the text was last written, if this closed the task without a rewrite (`tasks::lifecycle::unwritten`).
+   * When the text was last written, if this closed the task without a rewrite
+   * (`tasks::lifecycle::unwritten`).
    */
   unwritten?: string;
 }
@@ -152,7 +155,8 @@ export interface Session {
 }
 
 /**
- * One party's share, as `/api/holders` answers; `total` adds finished work, so a cleared plate isn't idle.
+ * One party's share, as `/api/holders` answers; `total` adds finished work, so a cleared
+ * plate isn't idle.
  */
 export interface Holder {
   /** The same closed vocabulary as an assignee's. */

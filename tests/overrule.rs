@@ -143,7 +143,7 @@ async fn an_overrule_naming_what_was_named_files_and_is_recorded() {
     );
 }
 
-/// ⚠ **Each named task is a judgment, so each must be named.** A bare skip is
+/// Each named task is a judgment, so each must be named. A bare skip is
 /// how a script files past every refusal without reading one.
 #[tokio::test]
 async fn an_overrule_must_name_every_task_the_refusal_named() {

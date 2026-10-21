@@ -14,7 +14,7 @@ fn the_four_inputs_have_one_verdict_each() {
     assert_eq!(pile_verdict(false, true), PileVerdict::ReasonWithoutPile);
 }
 
-/// ⚠ **A bare `--spare ""` is not a reason**, or the CLI and the service would
+/// A bare `--spare ""` is not a reason, or the CLI and the service would
 /// disagree about the same input.
 #[test]
 fn an_empty_reason_is_no_reason() {

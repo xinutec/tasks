@@ -1,4 +1,4 @@
-//! What is served for a non-API path. ⚠ The wrong answer is a `200`: HTML for a
+//! What is served for a non-API path. The wrong answer is a `200`: HTML for a
 //! font renders broken icons and reports nothing.
 
 use tasks::routes::spa;

@@ -10,7 +10,8 @@ use sqlx::MySqlPool;
 
 use crate::config::Config;
 
-/// How long a sign-in stays valid: one number for the entry and its cookie, so the cookie can't outlive it.
+/// How long a sign-in stays valid: one number for the entry and its cookie, so the cookie
+/// can't outlive it.
 pub const OAUTH_TTL_SECS: i64 = 600; // 10 minutes
 
 const OAUTH_TTL: Duration = Duration::from_secs(OAUTH_TTL_SECS as u64);

@@ -113,7 +113,7 @@ fn a_holder_is_named_and_nobody_is_not() {
 
 /// The pile is the one part of a digest that nothing else bounds.
 ///
-/// ⚠ **[`MAX_BYTES`] is not this guard** — see `digest::PILE_LINES` for the
+/// [`MAX_BYTES`] is not this guard — see `digest::PILE_LINES` for the
 /// pile's denominator.
 #[test]
 fn the_pile_is_bounded_however_long_it_gets() {
@@ -275,7 +275,7 @@ fn the_header_countermands_the_built_in_task_tools() {
     );
 }
 
-/// ⚠ A rank costs nothing until set: an unranked line carries no marker (a `P2`
+/// A rank costs nothing until set: an unranked line carries no marker (a `P2`
 /// default, rejected in `migrations/0005_priority.sql`, would cost bytes on every
 /// line to say nothing).
 #[test]
@@ -342,7 +342,7 @@ fn what_is_parked_is_said_and_still_counted() {
     assert!(out.contains("task list"), "no way back to it:\n{out}");
 }
 
-/// ⚠ **The effective rank, not the chosen one**, as in `focus::breaks_through`.
+/// The effective rank, not the chosen one, as in `focus::breaks_through`.
 #[test]
 fn a_parked_task_a_deadline_has_raised_is_recited() {
     let mut raised = held(2, "parked until the date got close", "life");
@@ -420,7 +420,7 @@ fn a_session_below_the_floor_pays_nothing_for_the_hint() {
     );
 }
 
-/// ⚠ **What the session HOLDS, not what the page shows** — see
+/// What the session HOLDS, not what the page shows — see
 /// `digest::FOCUS_HINT_LINES`.
 #[test]
 fn the_pile_does_not_push_a_session_over_the_floor() {

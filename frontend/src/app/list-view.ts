@@ -79,7 +79,8 @@ export class ListView {
 
   readonly shown = computed(() =>
     this.store.tasks().filter((task) =>
-      // While `/api/me` loads, `inBucket` treats null as any person, so the list isn't briefly empty.
+      // While `/api/me` loads, `inBucket` treats null as any person, so the list isn't
+      // briefly empty.
       inBucket(task.assignee, this.who(), this.store.personId()),
     ),
   );

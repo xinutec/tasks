@@ -103,7 +103,7 @@ fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
 
 /// A flag naming a field this tool deleted has to say so.
 ///
-/// ⚠ **`unexpected argument '--repo' found` reads as a typo**, and the session
+/// `unexpected argument '--repo' found` reads as a typo, and the session
 /// leaves believing the field exists.
 #[test]
 fn a_field_that_was_removed_is_refused_by_name() {

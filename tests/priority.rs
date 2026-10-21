@@ -1,8 +1,8 @@
 //! What `P0`–`P4` do to an order, against a real MariaDB.
 //!
-//! ⚠ The feature is one `COALESCE`, written twice (SQL and [`Priority::rank`]);
+//! The feature is one `COALESCE`, written twice (SQL and [`Priority::rank`]);
 //! only a test keeps them level. And unranked is not simply last: `P4` must sink
-//! below the unread tasks.
+//! below the unranked tasks.
 
 mod common;
 
@@ -148,7 +148,7 @@ async fn ranking_a_task_afterwards_says_so_in_its_history() {
     .await
     .expect("ranking");
     assert_eq!(updated.task.priority, Some(Priority::P1));
-    // ⚠ `Moved::Ranked`, not "priority": the history and this list are one
+    // `Moved::Ranked`, not "priority": the history and this list are one
     // vocabulary.
     assert_eq!(updated.changed, vec![Moved::Ranked]);
 
@@ -190,7 +190,7 @@ async fn re_ranking_a_task_to_what_it_already_is_writes_no_history() {
     assert!(again.changed.is_empty(), "{:?}", again.changed);
 }
 
-/// ⚠ A rank must not change what counts as open; the clauses sit side by side in one builder.
+/// A rank must not change what counts as open; the clauses sit side by side in one builder.
 #[tokio::test]
 async fn ranking_changes_the_order_and_nothing_else() {
     let pool = common::fresh_db().await;

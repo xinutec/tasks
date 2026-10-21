@@ -108,7 +108,7 @@ async fn a_refused_edit_leaves_no_trace() {
         .await
         .expect_err("a 3,000-character body was emptied");
 
-    // ⚠ Refused inside the transaction, possibly after the subject was written: it
+    // Refused inside the transaction, possibly after the subject was written: it
     // must roll back, or a rejected edit moves half the task and `restorable` offers
     // to undo a change nobody made.
     let after = repo::get(&pool, id).await.expect("reading").expect("there");
@@ -170,7 +170,7 @@ async fn putting_back_a_body_an_edit_had_grown() {
         .await
         .expect("growing a body");
 
-    // ⚠ This undo looks exactly like the mistake (600 characters replacing 4,000);
+    // This undo looks exactly like the mistake (600 characters replacing 4,000);
     // it passes because whoever restores has just read what they restore.
     let was = repo::previous(&pool, id, &human())
         .await
@@ -232,7 +232,7 @@ async fn the_history_says_how_much_of_a_body_moved() {
         .await
         .expect("editing");
 
-    // ⚠ The reply goes with the writer's scrollback; this is the copy the NEXT
+    // The reply goes with the writer's scrollback; this is the copy the NEXT
     // reader gets, or the history says `edited body` and nothing about a body
     // reduced to four characters.
     let detail = repo::get(&pool, id)

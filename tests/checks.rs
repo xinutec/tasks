@@ -1,4 +1,4 @@
-//! What a model check did, recorded. ⚠ `Quiet` and `Timeout` both leave the
+//! What a model check did, recorded. `Quiet` and `Timeout` both leave the
 //! caller with no advice, so they look alike; counted together they report a
 //! tool that ran and found nothing when it never ran. The classification turns
 //! on the error chain, not its message.
@@ -78,7 +78,7 @@ async fn a_filing_check_is_recorded_before_there_is_a_task_to_name() {
     assert_eq!(row.4, "quiet");
 }
 
-/// ⚠ **What a refusal named comes back out**, or a refusal nobody kept
+/// What a refusal named comes back out, or a refusal nobody kept
 /// the tail of can never be judged afterwards.
 #[tokio::test]
 async fn a_refusal_keeps_the_tasks_it_named() {
@@ -134,7 +134,7 @@ async fn a_density_run_keeps_what_crossed_the_sampler() {
     )
     .await
     .expect("recording a density read");
-    // ⚠ There is no task #982 in this database, and the row lands anyway. The
+    // The task id above is in no table here, and the row lands anyway. The
     // table carries no foreign keys on purpose: an instrument that could be
     // refused — or removed — by the thing it measures is not one.
 
@@ -165,7 +165,7 @@ fn spent(kind: Kind, elapsed_ms: u32, outcome: Outcome) -> Ran {
 
 #[test]
 fn a_timeout_counts_towards_the_latency_it_cost() {
-    // ⚠ The bound is being judged from these numbers. Leaving the abandoned
+    // The bound is being judged from these numbers. Leaving the abandoned
     // call out of the spread is what would make a bound that fires look
     // comfortable — the run took the whole patience, and it is the worst case.
     let runs = vec![
@@ -354,8 +354,8 @@ async fn a_browser_has_no_check_to_report() {
     assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
 }
 
-/// ⚠ **`--no-duplicate-check` may only overrule a refusal you have already
-/// seen**; passed pre-emptively, the check never runs.
+/// Only a refusal of this subject, given to this session, licenses skipping the
+/// check; nothing else does.
 #[tokio::test]
 async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
     let pool = common::fresh_db().await;
@@ -410,7 +410,7 @@ async fn a_skipped_check_is_licensed_only_by_a_refusal_of_that_subject() {
     );
 }
 
-/// ⚠ **A check that PASSED licenses nothing**, or every quiet filing would hand
+/// A check that PASSED licenses nothing, or every quiet filing would hand
 /// out permission to skip the next one — which is the habit, with extra steps.
 #[tokio::test]
 async fn a_check_that_said_nothing_licenses_nothing() {

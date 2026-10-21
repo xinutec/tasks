@@ -88,7 +88,7 @@ async fn the_content_hashed_bundle_may_be_kept() {
     assert_eq!(cc, "public, max-age=31536000, immutable");
 }
 
-/// ⚠ The case this app hits by DESIGN. `spa()` refuses a path whose last
+/// The case this app hits by DESIGN. `spa()` refuses a path whose last
 /// segment has a dot, so a missing asset 404s rather than being handed the
 /// shell — and a 404 stamped `immutable` would be a client that stops asking
 /// for that name for a year. The header must be absent, not merely shorter.
@@ -99,7 +99,7 @@ async fn a_missing_asset_is_not_told_how_long_to_keep_the_404() {
     assert_eq!(cc, "", "a 404 must carry no Cache-Control at all");
 }
 
-/// ⚠ **A 304 is not an error.** `!status.is_success()` would catch it, and a
+/// A 304 is not an error. `!status.is_success()` would catch it, and a
 /// 304 must carry the headers a 200 would, or every revalidation becomes a
 /// full re-fetch.
 #[tokio::test]

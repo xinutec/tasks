@@ -1,4 +1,4 @@
-//! Whose edit an undo would revert. ⚠ `task undo` reverts the last edit, maybe
+//! Whose edit an undo would revert. `task undo` reverts the last edit, maybe
 //! another session's. Under test is [`Revision::mine`], judged on stored identity,
 //! not the label: wrong either way, it blocks your own undo or allows theirs.
 
@@ -93,7 +93,7 @@ async fn another_conversations_edit_is_not() {
 #[tokio::test]
 async fn the_same_id_under_a_different_kind_is_a_different_actor() {
     let pool = common::fresh_db().await;
-    // ⚠ A person and a session may hold the same string. Comparing ids alone
+    // A person and a session may hold the same string. Comparing ids alone
     // would make each look like the other, which is the failure that matters:
     // it waves an undo through as "yours".
     let (as_person, as_session) = (person("user"), known(&pool, "user").await);
@@ -114,7 +114,7 @@ async fn only_the_last_edit_counts_because_only_one_version_is_kept() {
     edit(&pool, id, "my over-deletion", &me).await;
     edit(&pool, id, "their append on top of it", &them).await;
 
-    // ⚠ The version waiting to come back is now MY text — which is exactly why
+    // The version waiting to come back is now MY text — which is exactly why
     // this reads as safe and is not. Restoring it reverts THEIR edit. `mine`
     // answers about the edit being reverted, never about the text returning.
     let was = seen_by(&pool, id, &me).await;

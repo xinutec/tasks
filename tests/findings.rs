@@ -42,7 +42,7 @@ fn a_supersession_needs_the_later_text_quoted() {
     assert!(v.rejected_for(Reason::NoResolvingQuote), "{v:?}");
 }
 
-/// ⚠ **The check that does the work.** Resolving text BEFORE the problem text
+/// The check that does the work. Resolving text BEFORE the problem text
 /// is not a supersession but the reading order reversed — what a model
 /// produces when it has pattern-matched rather than read.
 #[test]
@@ -73,7 +73,7 @@ fn a_real_supersession_survives() {
     assert!(v.supported(), "{v:?}");
 }
 
-/// ⚠ **Instrument mistake**: the subject is not part of the body, so a
+/// Instrument mistake: the subject is not part of the body, so a
 /// `subject-stale` quote must be looked for in both.
 #[test]
 fn a_subject_quote_is_looked_for_in_the_subject() {
@@ -85,7 +85,7 @@ fn a_subject_quote_is_looked_for_in_the_subject() {
     );
 }
 
-/// ⚠ **Instrument mistake**: counting occurrences of the whole quote calls
+/// Instrument mistake: counting occurrences of the whole quote calls
 /// every repetition false, because a model quotes one instance plus a lead-in
 /// that appears once. So a repetition finding must name BOTH.
 #[test]

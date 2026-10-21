@@ -103,7 +103,7 @@ async fn appending_puts_it_under() {
 
 #[tokio::test]
 async fn one_blank_line_at_the_seam_whatever_was_typed() {
-    // ⚠ Not cosmetic. Markdown joins adjacent lines into one paragraph, so a
+    // Not cosmetic. Markdown joins adjacent lines into one paragraph, so a
     // one-line note butted onto a body that opens with prose silently becomes
     // the first sentence OF that prose — two claims read as one.
     let pool = common::fresh_db().await;
@@ -114,7 +114,7 @@ async fn one_blank_line_at_the_seam_whatever_was_typed() {
         .expect("prepending");
 
     let now = stored(&pool, id).await;
-    // ⚠ **The indentation survives.** Only newlines are eaten at the seam:
+    // The indentation survives. Only newlines are eaten at the seam:
     // whitespace inside a line is markdown content — two trailing spaces are a
     // hard break, leading spaces set continuation — so a `trim` here would edit
     // what the task says while claiming to keep it.
@@ -250,7 +250,7 @@ async fn adding_waits_for_whoever_is_already_writing_the_body() {
 
     let now = stored(&pool, id).await;
     assert!(now.contains("mine"), "my addition was lost: {now:?}");
-    // ⚠ The assertion that fails without `FOR UPDATE`: an addition that read
+    // The assertion that fails without `FOR UPDATE`: an addition that read
     // the body before their commit builds from `the filing` alone and stores a
     // version their text was never in.
     assert!(now.contains("theirs"), "their write was lost: {now:?}");
@@ -313,7 +313,7 @@ async fn the_history_counts_an_addition_as_what_it_is() {
 
 #[tokio::test]
 async fn the_reply_counts_the_body_that_was_written_not_the_one_that_was_sent() {
-    // ⚠ `Replaced.now` comes from the resolved body: `change.body` is None for an
+    // `Replaced.now` comes from the resolved body: `change.body` is None for an
     // addition, and the reply would say "nothing moved", the wrong reassurance.
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
@@ -359,7 +359,7 @@ async fn replacing_and_adding_at_once_is_refused_as_a_contradiction() {
 
 #[tokio::test]
 async fn adding_nothing_is_refused_rather_than_quietly_doing_nothing() {
-    // ⚠ These fields are filled from heredocs, variables and piped commands.
+    // These fields are filled from heredocs, variables and piped commands.
     // The way one arrives empty is that whatever was meant to produce the text
     // produced none, and reporting success is how that goes unnoticed.
     let pool = common::fresh_db().await;

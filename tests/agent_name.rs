@@ -1,6 +1,6 @@
 //! Reading a conversation's name from Claude Code's transcript.
 //!
-//! ⚠ The line shape belongs to a binary nobody here controls; if it changes,
+//! The line shape belongs to a binary nobody here controls; if it changes,
 //! the failure must be no name, never a wrong one, so the assertions are about
 //! which candidate wins. Precedence: `agentName`, then `customTitle` ([`in_tail`]).
 

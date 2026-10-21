@@ -1,4 +1,4 @@
-//! What a focused prompt says, and must never stop saying. ⚠ Focus is the only
+//! What a focused prompt says, and must never stop saying. Focus is the only
 //! thing hiding an open task, so the tests that pin what breaks through matter
 //! most: a buried P0 would fail silently.
 //!
@@ -80,7 +80,7 @@ fn only_what_is_focused_on_is_recited() {
 
 #[test]
 fn what_is_hidden_is_counted_and_never_silent() {
-    // ⚠ The property the whole feature stands on. A short list a session cannot
+    // The property the whole feature stands on. A short list a session cannot
     // tell from an empty plate is how work gets forgotten, and the pile cap
     // already answers this the same way: hiding is allowed, silence is not.
     let tasks = [
@@ -116,7 +116,7 @@ fn a_focus_that_hides_nothing_still_says_it_is_on() {
 
 #[test]
 fn a_p0_arrives_whatever_the_focus_is() {
-    // ⚠ A P0 filed mid-focus must break through: it is the drop-everything signal.
+    // A P0 filed mid-focus must break through: it is the drop-everything signal.
     let mut urgent = mine(9, "the roof is off");
     urgent.priority = Some(Priority::P0);
     let out = render(&[mine(1, "what I am on"), urgent], Some(&on(&[1])));
@@ -128,7 +128,7 @@ fn a_p0_arrives_whatever_the_focus_is() {
 
 #[test]
 fn a_raised_rank_arrives_the_same_way_a_chosen_one_does() {
-    // ⚠ By `escalated_to`, not `priority`: a near deadline raises a task to P0 without a write.
+    // By `escalated_to`, not `priority`: a near deadline raises a task to P0 without a write.
     let mut soon = mine(9, "due on Tuesday");
     soon.priority = Some(Priority::P3);
     soon.escalated_to = Some(Priority::P0);
@@ -177,7 +177,7 @@ fn focusing_on_something_in_the_pile_takes_it_out_of_the_pile() {
 
 #[test]
 fn the_pile_cap_counts_what_the_focus_left() {
-    // ⚠ Focus runs FIRST and the cap runs on what survives, or the pile lines
+    // Focus runs FIRST and the cap runs on what survives, or the pile lines
     // would be spent on tasks the focus then hid.
     let mut tasks = vec![mine(1, "what I am on")];
     for id in 2..=9 {
@@ -209,7 +209,7 @@ fn a_period_is_read_the_way_somebody_types_one() {
     assert_eq!(focus::parse("90m").unwrap(), Duration::minutes(90));
     assert_eq!(focus::parse("2h30m").unwrap(), Duration::minutes(150));
     assert_eq!(focus::parse(" 4H ").unwrap(), Duration::hours(4));
-    // ⚠ A bare number is MINUTES: the unit somebody leaves off is the small one,
+    // A bare number is MINUTES: the unit somebody leaves off is the small one,
     // and `--for 30` read as hours would pass silently.
     assert_eq!(focus::parse("30").unwrap(), Duration::minutes(30));
     for bad in ["", "soon", "4 hours", "h", "4d"] {
@@ -319,7 +319,7 @@ async fn one_session_is_not_focused_by_another() {
 
 #[tokio::test]
 async fn a_focus_that_has_run_out_is_no_focus() {
-    // ⚠ **Nothing sweeps the table**, so this is the only thing that makes an
+    // Nothing sweeps the table, so this is the only thing that makes an
     // expiry real: every read compares against the clock. A focus whose session
     // never came back stops applying at its hour regardless.
     let pool = common::fresh_db().await;
@@ -358,7 +358,7 @@ async fn ending_one_early() {
 
 #[tokio::test]
 async fn a_focus_on_nothing_is_refused() {
-    // ⚠ The one state with no way out: every task counted, none recited, and
+    // The one state with no way out: every task counted, none recited, and
     // the ids needed to refocus are the ones that cannot be seen.
     let pool = common::fresh_db().await;
     let me = known(&pool, "sess-a").await;
@@ -383,12 +383,12 @@ async fn a_period_outside_the_bounds_is_refused_with_the_bounds_named() {
                 .await
                 .expect_err("a period outside the bounds"),
         );
-        // ⚠ Named, not clamped: clamping leaves the caller believing a number
+        // Named, not clamped: clamping leaves the caller believing a number
         // that was never applied.
         assert!(said.contains("15m"), "{said}");
         assert!(said.contains("24h"), "{said}");
         assert!(said.contains(&focus::spell(period)), "{said}");
-        // ⚠ **And the reason has to match which bound was missed**, or a caller
+        // And the reason has to match which bound was missed, or a caller
         // who asked for five minutes is told about handovers.
         let handover = said.contains("handover");
         assert_eq!(

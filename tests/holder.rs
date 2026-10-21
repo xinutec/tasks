@@ -187,7 +187,7 @@ mod who_it_lands_on {
 
     #[test]
     fn dropping_counts_as_closing() {
-        // ⚠ Not cosmetic: a drop is a decision somebody made, and a list that
+        // Not cosmetic: a drop is a decision somebody made, and a list that
         // credits it to nobody cannot say who decided.
         let before = task(Status::Open, held_by(AssigneeKind::Nobody, None));
         let got = inferred_holder(
@@ -226,7 +226,7 @@ mod who_it_lands_on {
 
     #[test]
     fn starting_a_task_another_session_holds_takes_nothing() {
-        // ⚠ Taking somebody else's task is a handover, and `move` is the word.
+        // Taking somebody else's task is a handover, and `move` is the word.
         let before = task(
             Status::Open,
             held_by(AssigneeKind::Session, Some(SOMEBODY_ELSE)),
@@ -241,7 +241,7 @@ mod who_it_lands_on {
 
     #[test]
     fn starting_a_task_already_doing_in_the_pile_still_claims_it() {
-        // ⚠ A session that puts work down without closing it leaves the task
+        // A session that puts work down without closing it leaves the task
         // `doing` AND unheld; a rule reading the status would make `start`
         // report success and move nobody.
         let before = task(Status::Doing, held_by(AssigneeKind::Nobody, None));

@@ -37,7 +37,7 @@ fn parked(task: &Task) -> bool {
 }
 
 /// Render the index for tasks already filtered to the open ones: one flat list
-/// in id order, no group headers.
+/// in the order given (`repo::list`'s), no group headers.
 ///
 /// ⚠ A focus is applied as given; [`focus::current`] owns the clock. The digest
 /// is cached and read later, so it never compares against its own `now`.

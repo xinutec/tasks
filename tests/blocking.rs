@@ -77,7 +77,7 @@ fn refusal(e: tasks::error::AppError) -> String {
 
 #[tokio::test]
 async fn a_task_can_wait_on_more_than_one_thing() {
-    // ⚠ A LIST: with a single slot, a second blocker would go in the prose and
+    // A LIST: with a single slot, a second blocker would go in the prose and
     // go stale there.
     let pool = common::fresh_db().await;
     let one = file(&pool, "the first thing", None).await;
@@ -223,7 +223,7 @@ async fn if_a_blocks_b_then_b_may_not_block_a() {
     assert!(msg.contains("loop"), "{msg}");
 }
 
-/// ⚠ The case a one-step check misses: `A → B → C → A` arrives as three edits,
+/// The case a one-step check misses: `A → B → C → A` arrives as three edits,
 /// none of which looks wrong alone.
 #[tokio::test]
 async fn a_longer_loop_is_refused_too() {
@@ -305,7 +305,7 @@ async fn re_stating_the_same_blockers_writes_no_history() {
     assert!(again.changed.is_empty(), "{:?}", again.changed);
 }
 
-/// ⚠ A rank and a block legal together must be accepted together: checking
+/// A rank and a block legal together must be accepted together: checking
 /// after the first write against the old value of the second would refuse a
 /// change that is consistent when it commits.
 #[tokio::test]
@@ -330,7 +330,7 @@ async fn ranking_and_blocking_in_one_change_is_judged_on_the_result() {
 
 /// The deadline twin of the rank rule.
 ///
-/// ⚠ **Arithmetic, not judgement**: a task cannot be finished before what it
+/// Arithmetic, not judgement: a task cannot be finished before what it
 /// waits for. Equal is allowed — tight, not impossible.
 mod deadlines {
     use super::*;
@@ -468,7 +468,7 @@ mod deadlines {
             .expect("a closed blocker still held the date back");
     }
 
-    /// ⚠ **A FAR deadline must not reorder anything**: it is evidence for a rank,
+    /// A FAR deadline must not reorder anything: it is evidence for a rank,
     /// not a substitute for one. A near one is `mod escalation`.
     #[tokio::test]
     async fn a_far_deadline_does_not_move_a_task_up_the_list() {
@@ -534,13 +534,13 @@ mod escalation {
 
         let task = one(&pool, id).await;
         assert_eq!(task.escalated_to, Some(Priority::P0));
-        // ⚠ The STORED rank is untouched. Nothing writes P0 into the row: a job
+        // The STORED rank is untouched. Nothing writes P0 into the row: a job
         // that did would edit history nobody asked for and need a scheduler to
         // be right. This is recomputed from the date every time it is read.
         assert_eq!(task.priority, Some(Priority::P4), "the stored rank moved");
     }
 
-    /// ⚠ **The boundary, because "less than a week" has two readings.**
+    /// The boundary, because "less than a week" has two readings.
     #[tokio::test]
     async fn exactly_a_week_out_is_not_yet_inside_it() {
         let pool = common::fresh_db().await;

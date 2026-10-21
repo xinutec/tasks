@@ -238,7 +238,7 @@ async fn a_session_may_not_rename_another() {
 
 /// A blank rename is refused rather than accepted and ignored.
 ///
-/// ⚠ **`sessions::touch` treats an empty name as "no name given"** and keeps the
+/// `sessions::touch` treats an empty name as "no name given" and keeps the
 /// old one, which would answer `204` to a rename that changed nothing.
 #[tokio::test]
 async fn a_blank_rename_is_refused_rather_than_silently_ignored() {
@@ -274,7 +274,7 @@ async fn healthz_answers_without_a_credential() {
     assert_eq!(body, "ok");
 }
 
-/// ⚠ An unknown `/api` path must 404, not get the page: without its own
+/// An unknown `/api` path must 404, not get the page: without its own
 /// fallback it falls through to `spa()` (no dot) and answers `200 text/html`.
 #[tokio::test]
 async fn an_api_path_that_is_not_a_route_is_a_404() {

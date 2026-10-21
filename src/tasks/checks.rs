@@ -22,7 +22,8 @@ pub enum Kind {
     Filing,
     /// After an edit, against the one body that has grown.
     Density,
-    /// An open task with exactly this subject: no model; recorded so its refusal licenses an override.
+    /// An open task with exactly this subject: no model; recorded so its refusal licenses
+    /// an override.
     Collision,
 }
 

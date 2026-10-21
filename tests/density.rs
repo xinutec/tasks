@@ -33,7 +33,7 @@ fn the_standard_reaches_the_model_that_grades_against_it() {
 
 #[test]
 fn the_rubric_asks_for_density_and_never_for_fewer_words() {
-    // ⚠ Told to compress, a model drops the numbers and keeps the prose,
+    // Told to compress, a model drops the numbers and keeps the prose,
     // because prose reads like the argument — and a body is believed for its
     // measurements. The one-sided second rule is what stops that.
     assert!(RUBRIC.contains("No claim without its measurement"));
@@ -72,7 +72,7 @@ fn what_is_wrong_is_printed_as_a_guess_with_a_way_out() {
 
 #[test]
 fn one_finding_per_line_is_asked_for() {
-    // ⚠ Asked only for "at most four lines", a model answers with one very wide
+    // Asked only for "at most four lines", a model answers with one very wide
     // line carrying four findings. So the shape is asked for rather than
     // imposed: truncating mid-sentence cuts the specific half of a finding.
     assert!(density::prompt(1, 4000, "body").contains("ONE FINDING PER LINE"));

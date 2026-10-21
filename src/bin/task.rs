@@ -96,7 +96,8 @@ way — the rank stops carrying information."
     )
 }
 
-/// What `task edit --help` adds, from [`density::RUBRIC`], so writers and the judge share one standard.
+/// What `task edit --help` adds, from [`density::RUBRIC`], so writers and the judge share
+/// one standard.
 fn edit_about() -> String {
     format!(
         "Change a task's words.
@@ -197,7 +198,8 @@ enum Command {
     Focus {
         /// What you are working on; repeat for several. Replaces the set.
         ids: Vec<TaskRef>,
-        /// How long: `4h`, `90m`, `2h30m`; a bare number is minutes. Required: expiry is what makes hiding safe.
+        /// How long: `4h`, `90m`, `2h30m`; a bare number is minutes. Required: expiry is
+        /// what makes hiding safe.
         #[arg(long = "for")]
         period: Option<String>,
         /// End it now, before its hour.
@@ -211,7 +213,8 @@ enum Command {
         /// Print the body alone, exactly as stored, for diffing or editing a faithful copy.
         #[arg(long, conflicts_with = "json")]
         body: bool,
-        /// The task before its latest edit. With `--body`: `task show 25 --previous --body > was.md`.
+        /// The task before its latest edit. With `--body`: `task show 25 --previous --body
+        /// > was.md`.
         #[arg(long)]
         previous: bool,
     },
@@ -238,7 +241,8 @@ enum Command {
         /// Who it is for: `me` (default: whoever is filing), `human`, `nobody`, or a session.
         #[arg(long)]
         to: Option<To>,
-        /// Why this is nobody's; required by `--to nobody` and only by it. Pile filings were usually corrected later, so the pile is argued for.
+        /// Why this is nobody's; required by `--to nobody` and only by it. Pile filings
+        /// were usually corrected later, so the pile is argued for.
         #[arg(long, value_name = "WHY")]
         spare: Option<String>,
         /// How urgent: P0 to P4, or say `--unassessed`. The levels, under
@@ -270,7 +274,8 @@ enum Command {
         /// The same.
         #[arg(long, hide = true)]
         project: Option<String>,
-        /// Refused by name: the subject is the first argument, and `unexpected argument` reads as a quoting mistake.
+        /// Refused by name: the subject is the first argument, and `unexpected argument`
+        /// reads as a quoting mistake.
         #[arg(long = "subject", hide = true)]
         subject_flag: Option<String>,
         /// File past a duplicate refusal you have just seen, naming each task
@@ -298,7 +303,8 @@ enum Command {
         /// Who holds it after (otherwise the finisher, so lists say who did it).
         #[arg(long)]
         to: Option<To>,
-        /// What came of it, written above the body before it closes, so no task closes without a word. `--reason` and `--message` work too; `-` reads stdin.
+        /// What came of it, written above the body before it closes, so no task closes
+        /// without a word. `--reason` and `--message` work too; `-` reads stdin.
         #[arg(long, aliases = ["reason", "message"])]
         note: Option<String>,
     },
@@ -359,10 +365,12 @@ enum Command {
         /// Usually the one you want: where it stands first, history below.
         #[arg(long)]
         prepend: Option<String>,
-        /// Put text below the body, keeping all of it: for what happened next rather than the conclusion. Combines with `--prepend`.
+        /// Put text below the body, keeping all of it: for what happened next rather than
+        /// the conclusion. Combines with `--prepend`.
         #[arg(long)]
         append: Option<String>,
-        /// Skip the model's read of a grown body. It never refuses, so this is for scripts, not for getting past it.
+        /// Skip the model's read of a grown body. It never refuses, so this is for
+        /// scripts, not for getting past it.
         #[arg(long = "no-density-check")]
         no_density_check: bool,
         /// Mean it, when `--body` would leave almost nothing of a long body: refused by
@@ -450,7 +458,7 @@ fn called_now(session: &str) -> Option<String> {
     tasks::agent_name::from_projects(&projects, session)
 }
 
-/// ⚠ `Clone` so `main` can report the timing after the command; cheap, and
+/// `Clone` so `main` can report the timing after the command; cheap, and
 /// `reqwest::Client` shares its connection pool.
 #[derive(Clone)]
 struct Client {
@@ -458,7 +466,7 @@ struct Client {
     base: String,
     token: Option<String>,
     session: Option<String>,
-    /// Read once per command: a bounded local file read.
+    /// What Claude Code calls this conversation, read once per command.
     called: Option<String>,
 }
 
@@ -510,7 +518,8 @@ impl Client {
         if body.trim().is_empty() {
             return Ok(None);
         }
-        // An unreadable success means CLI and service disagree about the API: an error, never "nothing came back".
+        // An unreadable success means CLI and service disagree about the API: an error,
+        // never "nothing came back".
         Ok(Some(serde_json::from_str(&body).with_context(|| {
             format!("the service answered {status} with something this CLI could not read")
         })?))
@@ -527,7 +536,8 @@ impl Client {
         Ok(body)
     }
 
-    /// A typed holder as a session id ([`holder::resolve`]), refused with the known names when unresolved.
+    /// A typed holder as a session id ([`holder::resolve`]), refused with the known names
+    /// when unresolved.
     async fn resolve(&self, to: To) -> Result<Target> {
         let typed = match to {
             To::Nobody => return Ok(Target::Nobody),
@@ -841,7 +851,7 @@ async fn already_filed(
             outcome: checks::outcome(&said, !found.is_empty()),
             subject_key: refused,
             matched: found.iter().map(|one| one.id).collect(),
-            // Nothing to keep: there is no task yet.
+            // A filing check keeps no words: there is no task yet.
             said: None,
         },
     )
@@ -1029,7 +1039,8 @@ fn emit(json: bool, value: &Value, human: impl FnOnce()) {
 }
 
 impl Command {
-    /// The name a command is recorded under. ⚠ Exhaustive: a catch-all would merge two commands' histories.
+    /// The name a command is recorded under. ⚠ Exhaustive: a catch-all would merge two
+    /// commands' histories.
     fn verb(&self) -> &'static str {
         match self {
             Command::List { .. } => "list",
@@ -1231,7 +1242,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
         Command::Undo { id, anyway } => {
             client.writing()?;
             let was = fetch_previous(&client, id).await?;
-            // Read first, so a refusal costs nothing; `mine` is the service's answer on stored identity.
+            // Read first, so a refusal costs nothing; `mine` is the service's answer on
+            // stored identity.
             if !anyway {
                 let was: tasks::tasks::types::Revision = serde_json::from_value(was.clone())
                     .context("the service's previous version did not parse")?;
@@ -1364,7 +1376,7 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             }
             client.writing()?;
             // Skipped only for an override the service will accept: a recent refusal of
-            // this subject, every task it named named here. Otherwise the check runs, so
+            // this subject, and naming every task it named. Otherwise the check runs, so
             // asking to skip first time gains nothing.
             let skip = match (
                 not_duplicate_of.is_empty() && !no_duplicate_check,
@@ -1496,7 +1508,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                     .map(|closed| lifecycle::reopen_hint(closed, created.task.id, now));
                 println!("{}", lifecycle::on_the_line(line(&created.task), hints));
             });
-            // After the POST, which gives the id. Recorded on the other task: `blocked_on` belongs to the waiter.
+            // After the POST, which gives the id. Recorded on the other task: `blocked_on`
+            // belongs to the waiter.
             if let Some(filed) = task["id"].as_u64() {
                 for blocked in &blocks {
                     if let Err(why) = unblocking(&client, *blocked, filed).await {
@@ -1660,7 +1673,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
                 let focus = client.send(req).await?.unwrap_or(Value::Null);
                 emit(cli.json, &focus, || match parse_focus(&focus) {
                     Some(focus) => println!("{}", describe(&focus)),
-                    // A 2xx this can't read is an API disagreement; never report "focused" unconfirmed.
+                    // A 2xx this can't read is an API disagreement; never report "focused"
+                    // unconfirmed.
                     None => println!("the service accepted the focus but did not describe it"),
                 });
             }
@@ -1762,7 +1776,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
         Command::Rename { name } => {
             client.writing()?;
             let session = client.session.clone().expect("writing() checked it");
-            // Refused: every request sends Claude Code's name, which would undo this rename. Say where to rename.
+            // Refused: every request sends Claude Code's name, which would undo this
+            // rename. Say where to rename.
             if let Some(called) = &client.called
                 && called != &name
             {
@@ -1799,7 +1814,8 @@ async fn statuses(client: &Client, ids: &[TaskRef]) -> Result<Vec<(u64, Status)>
     Ok(said)
 }
 
-/// The task before its last edit. The service's 404 covers no task and nothing overwritten; the message names both.
+/// The task before its last edit. The service's 404 covers no task and nothing
+/// overwritten; the message names both.
 async fn fetch_previous(client: &Client, id: TaskRef) -> Result<Value> {
     let req = client.request(reqwest::Method::GET, &format!("{}/previous", id.path()));
     client

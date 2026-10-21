@@ -1,4 +1,4 @@
-//! Reading what a model said about a filing. ⚠ Every `said` is a real answer,
+//! Reading what a model said about a filing. Every `said` is a real answer,
 //! from the checker model replaying tasks whose truth was known: the bullets,
 //! bold and preambles are what models really add. Whether answers are right is
 //! measured by replay; this pins that they are read correctly.
@@ -12,7 +12,7 @@ use tasks::tasks::duplicates::{
 /// number the model was never shown cannot come back as a match.
 const NOT_ON_THE_LIST: u64 = 812;
 
-/// The open list the replays were given. ⚠ Every id a test expects to survive
+/// The open list the replays were given. Every id a test expects to survive
 /// must be here: `parse` drops ids not on its list.
 fn corpus() -> Vec<(u64, String)> {
     [1, 2, 3, 4, 5, 70, 255, 671, 726]
@@ -56,7 +56,7 @@ fn several_matches_keep_their_order() {
 
 #[test]
 fn a_model_that_explains_itself_is_not_quoted() {
-    // ⚠ The whole reason lines are dropped rather than passed through: this is
+    // The whole reason lines are dropped rather than passed through: this is
     // printed into a conversation that has just filed a task, and a paragraph
     // about the model's reasoning is bytes every session pays for.
     let said = "Looking at the list, I found one likely match:\n\n\
@@ -91,7 +91,7 @@ fn bullets_and_bold_are_wrappers_rather_than_answers() {
 
 #[test]
 fn an_id_that_was_never_on_the_list_is_not_a_match() {
-    // ⚠ **Load-bearing, since the answer refuses filings.** A number the model
+    // Load-bearing, since the answer refuses filings. A number the model
     // invented — or echoed from the prose it was given — must not be able to
     // block work. The corpus is the only thing that says which ids were real.
     let said = format!("#{NOT_ON_THE_LIST} -- this is the same task");
@@ -106,7 +106,7 @@ fn one_task_is_named_once() {
 
 #[test]
 fn an_id_with_nothing_to_say_is_not_a_finding() {
-    // ⚠ **A bare number costs a `task show` to learn it was not worth one.**
+    // A bare number costs a `task show` to learn it was not worth one.
     // The clause is what makes a match cheap to dismiss, so a line without one
     // is not an answer to the question that was asked.
     assert_eq!(parse("#255", &corpus()), Vec::new());
@@ -150,7 +150,7 @@ fn the_prompt_carries_the_filing_and_the_list() {
 
 #[test]
 fn the_prompt_says_what_is_not_a_duplicate() {
-    // ⚠ **The sentence the measurement turned on.** Without the negative half,
+    // The sentence the measurement turned on. Without the negative half,
     // a model matches on same area, repo or technology, and most of what it
     // returns is not a duplicate.
     let text = prompt("anything", &[(1, "something".to_string())], false);
@@ -160,7 +160,7 @@ fn the_prompt_says_what_is_not_a_duplicate() {
 
 #[test]
 fn a_refusal_admits_it_is_a_model_reading_titles() {
-    // ⚠ Not decoration. Every other refusal this CLI prints is a rule — a
+    // Not decoration. Every other refusal this CLI prints is a rule — a
     // missing priority, a subject that is really a body. This one is a small
     // model's opinion, and a caller told "this is a duplicate" checks nothing
     // where a caller told what was matched opens the task.
@@ -179,7 +179,7 @@ fn a_refusal_admits_it_is_a_model_reading_titles() {
 
 #[test]
 fn a_refusal_says_nothing_was_filed_and_how_to_file_it_anyway() {
-    // ⚠ **Both halves, or the refusal is worse than the duplicate.** A caller
+    // Both halves, or the refusal is worse than the duplicate. A caller
     // that cannot tell whether the task landed re-runs and makes a real one. And
     // a refusal with no way past it turns a false positive into lost work, when
     // the body is still sitting in the command the caller just ran.
@@ -191,7 +191,7 @@ fn a_refusal_says_nothing_was_filed_and_how_to_file_it_anyway() {
         &corpus(),
         &[],
     );
-    // ⚠ The verdict lives in the LAST line — see `what_survives_the_tail`. This
+    // The verdict lives in the LAST line — see `what_survives_the_tail`. This
     // asserts both halves are present at all.
     assert!(text.contains("NOT FILED"), "{text}");
     assert!(text.contains("--not-duplicate-of"), "{text}");
@@ -220,7 +220,7 @@ fn case_and_surrounding_space_do_not_make_a_second_task() {
 
 #[test]
 fn a_subject_that_merely_starts_the_same_is_not_a_collision() {
-    // ⚠ **Only equality refuses here.** Anything looser is the model's
+    // Only equality refuses here. Anything looser is the model's
     // question: two tasks that open with the same words are the ordinary case.
     let corpus = [(859, "MEMORY.md is 21.7KB".to_string())];
     assert_eq!(
@@ -305,7 +305,7 @@ fn a_closed_match_refuses_and_names_reopen() {
     );
 }
 
-/// ⚠ **A dropped task is not reported as a decision.** The status carries no
+/// A dropped task is not reported as a decision. The status carries no
 /// reason, and a model asked will invent one — so this line points at the task
 /// rather than asserting what its status means.
 #[test]
@@ -345,7 +345,7 @@ fn a_dropped_match_sends_the_reader_to_the_task_not_to_its_status() {
     assert!(!done.contains("reason is in the task"), "{done}");
 }
 
-/// ⚠ **A filing with no body was never a description of work** — typically this
+/// A filing with no body was never a description of work — typically this
 /// check's own paraphrase fixtures, which would otherwise match real filings.
 #[test]
 fn a_closed_row_with_no_body_is_not_read() {
@@ -353,7 +353,7 @@ fn a_closed_row_with_no_body_is_not_read() {
     assert!(worth_reading(true));
 }
 
-/// ⚠ **Closing quickly is NOT the signal**: a row dropped within a minute can
+/// Closing quickly is NOT the signal: a row dropped within a minute can
 /// carry a complete plan. The filter takes only whether it says anything.
 #[test]
 fn the_filter_cannot_see_how_fast_a_task_closed() {
@@ -404,7 +404,7 @@ fn matches_are_split_by_which_list_they_came_off() {
     assert!(over[0].1.dropped);
 }
 
-/// ⚠ **Nothing that varies per filing may reach this string** — see
+/// Nothing that varies per filing may reach this string — see
 /// `duplicates::settled_block`: varying text in the prefix means every call
 /// rewrites the cache and reads none of it back.
 #[test]
@@ -449,7 +449,7 @@ fn the_question_mentions_closed_tasks_only_when_there_are_some() {
 
 /// The mirror of [`what_a_filing_waits_for_is_not_shown_to_the_reader`].
 ///
-/// ⚠ **A filing resembles the task it unblocks, correctly** — and a blocker is
+/// A filing resembles the task it unblocks, correctly — and a blocker is
 /// not a copy. `--blocks` lets the filer declare that direction too.
 #[test]
 fn what_a_filing_unblocks_is_not_shown_to_the_reader_either() {
@@ -475,7 +475,7 @@ fn a_filing_may_declare_an_edge_in_each_direction() {
     );
 }
 
-/// ⚠ **The exact-subject guard is NOT narrowed by either edge.** An identical
+/// The exact-subject guard is NOT narrowed by either edge. An identical
 /// title is one task however it was ordered, and that half has no error rate.
 #[test]
 fn an_identical_subject_still_collides_with_what_a_filing_unblocks() {
@@ -517,7 +517,7 @@ mod what_survives_the_tail {
 
     #[test]
     fn a_collision_is_one_line() {
-        // ⚠ Not tidiness. A second line pushes the verdict out of a `tail -1`
+        // Not tidiness. A second line pushes the verdict out of a `tail -1`
         // and starts the same erosion this module exists to stop.
         assert_eq!(collision(1206).lines().count(), 1, "{}", collision(1206));
     }
@@ -543,7 +543,7 @@ mod what_survives_the_tail {
             last.contains("NOT FILED"),
             "the verdict is not in it: {last}"
         );
-        // ⚠ It must still admit whose opinion it is.
+        // It must still admit whose opinion it is.
         assert!(
             last.contains("model"),
             "it no longer says who is talking: {last}"
@@ -554,7 +554,7 @@ mod what_survives_the_tail {
         );
     }
 
-    /// ⚠ **The closed arm's counts ride on its verdict line**: on a line of
+    /// The closed arm's counts ride on its verdict line: on a line of
     /// their own below it, a `tail -1` would get provenance and no verdict.
     #[test]
     fn a_closed_refusal_says_everything_in_its_last_line() {
@@ -598,7 +598,7 @@ mod what_survives_the_tail {
         );
     }
 
-    /// ⚠ **The remedy names its id.** On the lines above alone, a `tail -1`
+    /// The remedy names its id. On the lines above alone, a `tail -1`
     /// keeps "`task reopen <id>`" with no id, and the filer overrides blind.
     #[test]
     fn a_closed_refusal_names_what_it_matched_in_its_last_line() {

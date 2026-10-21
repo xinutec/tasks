@@ -148,7 +148,8 @@ pub struct CallbackQuery {
     state: Option<String>,
 }
 
-/// GET /auth/callback: exchange the code, read the identity, enforce the allow-list, set the session cookie.
+/// GET /auth/callback: exchange the code, read the identity, enforce the allow-list, set
+/// the session cookie.
 pub async fn callback(
     State(app): State<AppState>,
     jar: CookieJar,

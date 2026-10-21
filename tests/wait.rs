@@ -7,7 +7,7 @@ use std::time::Duration;
 use tasks::tasks::types::Status;
 use tasks::tasks::wait::{self, Verdict};
 
-/// ⚠ **The bug this exists to prevent**, and it is one line of shell away from
+/// The bug this exists to prevent, and it is one line of shell away from
 /// being written by every session that rolls its own loop: `status != "open"`
 /// reads a blocker somebody has PICKED UP as a blocker that is gone.
 #[test]
@@ -34,7 +34,7 @@ fn every_blocker_finished_ends_the_wait() {
     );
 }
 
-/// ⚠ **`drop` means the problem was NOT fixed**; a waiter treating it as `done`
+/// `drop` means the problem was NOT fixed; a waiter treating it as `done`
 /// tells the woken session the opposite of what happened.
 #[test]
 fn a_dropped_blocker_ends_the_wait_but_not_as_done() {
@@ -70,7 +70,7 @@ fn waiting_names_all_the_outstanding_ones() {
     );
 }
 
-/// ⚠ **Nothing to wait for is not a successful wait**: it would fall through to
+/// Nothing to wait for is not a successful wait: it would fall through to
 /// "every blocker finished", so the CLI refuses it at the argument.
 #[test]
 fn naming_no_task_is_refused_at_the_argument() {

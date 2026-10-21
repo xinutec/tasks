@@ -1,6 +1,8 @@
 //! What a refused body says back, through the real router (why: `crate::wire`).
 //! The audience is the bare API: scripts, or an old app bundle. A lazy pool,
-//! since extractors answer before the handler; two tests say why they differ.
+//! since extractors answer before the handler;
+//! `a_change_may_still_leave_priority_out` and `filing_a_whole_task_still_works`
+//! say why they differ.
 
 mod common;
 
@@ -95,7 +97,7 @@ async fn a_refused_body_answers_in_the_services_own_error_shape() {
     );
 }
 
-/// ⚠ The ablation: a version answering the same 400 to everything would pass the
+/// The ablation: a version answering the same 400 to everything would pass the
 /// test above, so a present but wrong key must be refused for what it is.
 #[tokio::test]
 async fn a_priority_that_is_present_and_wrong_is_refused_for_that() {
@@ -147,7 +149,7 @@ async fn a_change_may_still_leave_priority_out() {
     );
 }
 
-/// ⚠ Everything above is about refusals, which an extractor refusing everything
+/// Everything above is about refusals, which an extractor refusing everything
 /// would pass; this one accepts a filing, so it needs the database.
 #[tokio::test]
 async fn filing_a_whole_task_still_works() {

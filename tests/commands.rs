@@ -22,7 +22,7 @@ fn ran_waiting(verb: &str, ms: u32, waited: bool) -> Ran {
     }
 }
 
-/// ⚠ **The error path is usually the FAST one**, so folding it into the
+/// The error path is usually the FAST one, so folding it into the
 /// percentiles would report the tool fastest on the day it refuses everything.
 #[test]
 fn a_failed_run_is_counted_but_never_timed() {
@@ -45,7 +45,7 @@ fn a_failed_run_is_counted_but_never_timed() {
     assert_eq!(line.worst_ms, 11_000);
 }
 
-/// ⚠ **Busiest first, because the run count is the weight.**
+/// Busiest first, because the run count is the weight.
 #[test]
 fn the_busiest_command_leads() {
     let mut runs = vec![ran("edit", 60_000, Ended::Ok)];
@@ -95,7 +95,7 @@ fn a_command_that_only_ever_failed_is_still_reported() {
     );
 }
 
-/// ⚠ **Five days is the requirement** — the user: five days of nothing is a
+/// Five days is the requirement — the user: five days of nothing is a
 /// problem, anything short of it is not. fleetwatch grades `Silent` beyond 3×
 /// the declared interval, so 3× must land exactly on five days, and a quiet
 /// weekend must stay inside `Fresh` (1.5×).
@@ -144,7 +144,7 @@ mod waited {
 
     #[test]
     fn a_run_that_never_said_is_counted_as_unknown_and_not_as_fast() {
-        // ⚠ Rows that do not say know nothing. Folding them into the unchecked
+        // Rows that do not say know nothing. Folding them into the unchecked
         // population would file slow edits as fast ones.
         let runs = vec![
             ran("edit", 39_000, Ended::Ok),
@@ -240,7 +240,7 @@ mod declined {
 
     #[test]
     fn an_older_clients_rows_stay_faults_and_are_not_reattributed() {
-        // ⚠ An older client said `error` for both, and guessing would invent
+        // An older client said `error` for both, and guessing would invent
         // the very split this exists to measure.
         let runs = vec![
             ran("add", 3, Ended::Error),
@@ -292,7 +292,7 @@ mod classifying {
 
     #[test]
     fn wording_is_not_what_decides_it() {
-        // ⚠ The whole reason this is a type. A plain error whose text reads like
+        // The whole reason this is a type. A plain error whose text reads like
         // a refusal must NOT be classified as one — otherwise rewording a line,
         // or a formatter rewriting it, reclassifies a month of runs.
         let sounds_like_one: anyhow::Result<()> =
@@ -303,7 +303,7 @@ mod classifying {
 
 /// What a caller reads when a command ends badly.
 ///
-/// ⚠ **The chain is noise on a refusal, and it is what a `tail -3` keeps** —
+/// The chain is noise on a refusal, and it is what a `tail -3` keeps —
 /// see `commands::said`.
 mod what_a_bad_ending_prints {
     use tasks::tasks::commands::{declined, said};
@@ -322,7 +322,7 @@ mod what_a_bad_ending_prints {
         );
     }
 
-    /// ⚠ **The commonest refusal must carry the marker**: the duplicate check's,
+    /// The commonest refusal must carry the marker: the duplicate check's,
     /// counted as a failed command, would corrupt the measurement from its
     /// busiest source.
     #[test]

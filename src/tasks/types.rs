@@ -152,7 +152,7 @@ varchar_enum!(Status);
 /// How urgent a task is, when somebody said. Absence is not a level: most tasks
 /// never get one, so the column is nullable rather than defaulting to `P2`.
 /// Unranked still sorts as `P2` ([`Priority::rank`], `COALESCE(priority, 'P2')`),
-/// so `P3`/`P4` sort below the unread pile. Within a rank, id order.
+/// so `P3`/`P4` sort below the unranked tasks. Within a rank, id order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Priority {
     P0,

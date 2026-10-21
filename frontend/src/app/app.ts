@@ -43,7 +43,7 @@ export class App {
   private readonly swUpdates = inject(SwUpdates);
 
   readonly me = signal<Me | null>(null);
-  /** On the filing screen, where `+` would reopen itself. */
+  /** Whether this is the filing screen, where `+` is hidden: it would only reopen itself. */
   readonly filing = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),

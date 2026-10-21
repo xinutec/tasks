@@ -69,7 +69,7 @@ fn without_an_id_there_is_no_own_to_narrow_to() {
 
 /// The fourth question: what is going spare.
 ///
-/// ⚠ **A view that does not exist is answered anyway** — by hand-filtering
+/// A view that does not exist is answered anyway — by hand-filtering
 /// `--all --json` on a guessed field that matches every row.
 #[test]
 fn the_pile_can_be_asked_for_on_its_own() {
@@ -113,7 +113,7 @@ fn the_pile_is_not_the_widening_that_comes_with_a_bare_list() {
     );
 }
 
-/// ⚠ **A person and a session are different COLUMNS**, and getting that wrong
+/// A person and a session are different COLUMNS, and getting that wrong
 /// answers with silence rather than an error: `person=hardware` matches nothing
 /// because `hardware` is a session.
 #[test]
@@ -143,7 +143,8 @@ fn asking_for_one_holder_asks_the_right_column() {
     assert_eq!(joined(session), "session=abc-123");
 }
 
-/// ⚠ No pile: `--to` is what one holder carries. Bare `task list` includes it, hence a separate flag.
+/// No pile: `--to` is what one holder carries. Bare `task list` includes it, hence a
+/// separate flag.
 #[test]
 fn one_holders_list_does_not_carry_the_pile() {
     use tasks::tasks::selection::Holder;

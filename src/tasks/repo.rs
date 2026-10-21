@@ -121,7 +121,8 @@ impl Row {
     }
 }
 
-/// The task projection plus a literal tail: a macro, so every query stays a compile-time literal for sqlx.
+/// The task projection plus a literal tail: a macro, so every query stays a compile-time
+/// literal for sqlx.
 macro_rules! select {
     ($tail:literal) => {
         concat!(
@@ -628,7 +629,8 @@ async fn blocking_is_consistent(
     }
 
     let Some(stated) = priority else {
-        // This task claims nothing; its dependents are checked below only where they claim something.
+        // This task claims nothing; its dependents are checked below only where they claim
+        // something.
         return unblocked_end(tx, id, None).await;
     };
     let mine = Priority::rank(Some(stated));
@@ -657,7 +659,8 @@ async fn blocking_is_consistent(
     unblocked_end(tx, id, Some(stated)).await
 }
 
-/// What waits for this task, and whether demoting it breaks them. Apart, so an unranked task still checks its dependents.
+/// What waits for this task, and whether demoting it breaks them. Apart, so an unranked
+/// task still checks its dependents.
 async fn unblocked_end(
     tx: &mut Transaction<'_, MySql>,
     id: u64,

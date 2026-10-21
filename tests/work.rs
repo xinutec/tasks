@@ -1,4 +1,4 @@
-//! The backlog counts, against a real database. ⚠ Each aggregate can be wrong
+//! The backlog counts, against a real database. Each aggregate can be wrong
 //! and look right: a never-matching `SUM` reads 0 like an empty tracker, a join to
 //! `task_blocks` counts edges, and `<= 'P1'` works only lexically. So each column
 //! gets a fixture that sets it apart. The shared macros are tested as used, not
@@ -97,7 +97,7 @@ async fn the_pile_is_counted_apart_from_the_held() {
     // work arriving and reaching nobody, and neither figure says that alone.
     let pool = common::fresh_db().await;
     seen(&pool).await;
-    // ⚠ `None` here is NOT the pile: `repo::create` falls back to the FILING
+    // `None` here is NOT the pile: `repo::create` falls back to the FILING
     // actor, so an omitted holder means "mine". The pile has to be asked for.
     file(&pool, "mine", Some(held())).await;
     file(&pool, "spare", Some(Assignee::nobody())).await;
@@ -110,7 +110,7 @@ async fn the_pile_is_counted_apart_from_the_held() {
 
 #[tokio::test]
 async fn urgent_is_the_rank_the_list_sorts_by_not_the_one_somebody_typed() {
-    // ⚠ The half a `priority IN ('P0','P1')` count would miss. A deadline inside
+    // The half a `priority IN ('P0','P1')` count would miss. A deadline inside
     // the week RAISES a task to P0 at read time and nothing is written, so a
     // count against the stored column disagrees with every list in the service.
     let pool = common::fresh_db().await;
@@ -152,7 +152,7 @@ async fn urgent_is_the_rank_the_list_sorts_by_not_the_one_somebody_typed() {
 
 #[tokio::test]
 async fn a_task_is_counted_once_however_many_things_block_it() {
-    // ⚠ **The join that would report edges as tasks.** `task_blocks` has a row
+    // The join that would report edges as tasks. `task_blocks` has a row
     // per edge, so counting over a join multiplies a task by its blockers — one
     // task waiting on two things would read as two blocked tasks.
     let pool = common::fresh_db().await;

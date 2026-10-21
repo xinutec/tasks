@@ -1,5 +1,6 @@
 /**
- * Uncaught errors and failed requests, into the trace that reaches the server log: a phone's console is unread.
+ * Uncaught errors and failed requests, into the trace that reaches the server log: a
+ * phone's console is unread.
  */
 import { ErrorHandler, inject, Injectable, Injector } from '@angular/core';
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';

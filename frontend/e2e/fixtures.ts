@@ -157,7 +157,8 @@ export const PREVIOUS = {
 } satisfies Revision;
 
 /**
- * A task page with everything that crowds the column: long subject, fenced block, table, raw-id actor.
+ * A task page with everything that crowds the column: long subject, fenced block, table,
+ * raw-id actor.
  */
 export const DETAIL = {
   ...TASKS[1],

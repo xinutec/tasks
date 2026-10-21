@@ -19,7 +19,8 @@ export class SwUpdates {
   private readonly sw = inject(SwUpdate);
 
   private readonly serviceWorker: ServiceWorkerPort = ((sw: SwUpdate) => ({
-    // A local, not `this`: a getter in an object literal doesn't capture `this`, and a copy would freeze.
+    // A local, not `this`: a getter in an object literal doesn't capture `this`, and a
+    // copy would freeze.
     get isEnabled(): boolean {
       return sw.isEnabled;
     },
