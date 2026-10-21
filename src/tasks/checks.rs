@@ -360,6 +360,35 @@ pub async fn licence(pool: &MySqlPool, session: &str, subject: &str) -> Result<O
     Ok(found.map(|(_, named)| parse_ids(named.as_deref())))
 }
 
+/// What a filing that may have asked to skip the duplicate check does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Overrule {
+    /// Nothing asked to skip, or no refusal licenses it: run the check.
+    Check,
+    /// The override names every task the refusal named.
+    Skip,
+    /// The refusal also named these.
+    Unnamed(Vec<u64>),
+}
+
+/// Decide [`Overrule`] from whether a skip was asked, the ids it names, and the
+/// tasks this session's latest refusal of the subject named ([`licence`]). The
+/// service applies the same rule on the POST.
+pub fn overrule(asked: bool, named: &[u64], licence: Option<&[u64]>) -> Overrule {
+    let Some(refused) = licence.filter(|_| asked) else {
+        return Overrule::Check;
+    };
+    let missing: Vec<u64> = refused
+        .iter()
+        .copied()
+        .filter(|id| !named.contains(id))
+        .collect();
+    match missing.is_empty() {
+        true => Overrule::Skip,
+        false => Overrule::Unnamed(missing),
+    }
+}
+
 /// `GET /api/checks/licence`: `None` when nothing refused this subject, so the check runs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Licence {

@@ -241,15 +241,13 @@ pub async fn create(
                     .into(),
             ));
         };
-        let Some(named) = checks::licence(&app.db, id, &new.subject).await? else {
-            return Err(AppError::BadRequest(checks::unlicensed()));
-        };
-        let missing: Vec<u64> = named
-            .into_iter()
-            .filter(|id| !new.not_duplicate_of.contains(id))
-            .collect();
-        if !missing.is_empty() {
-            return Err(AppError::BadRequest(checks::unnamed(&missing)));
+        let licence = checks::licence(&app.db, id, &new.subject).await?;
+        match checks::overrule(true, &new.not_duplicate_of, licence.as_deref()) {
+            checks::Overrule::Skip => {}
+            checks::Overrule::Check => return Err(AppError::BadRequest(checks::unlicensed())),
+            checks::Overrule::Unnamed(missing) => {
+                return Err(AppError::BadRequest(checks::unnamed(&missing)));
+            }
         }
     }
     if let Viewer::Session(id) = &viewer {

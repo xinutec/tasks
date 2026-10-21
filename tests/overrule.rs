@@ -170,3 +170,54 @@ async fn an_exact_subject_refusal_licenses_its_overrule() {
 fn urlencode(text: &str) -> String {
     url::form_urlencoded::byte_serialize(text.as_bytes()).collect()
 }
+
+/// The CLI's half: whether a filing may skip the check, before anything is
+/// sent. The service enforces the same rule; this is what keeps the CLI from
+/// skipping a check the service would then refuse, or running one it needn't.
+mod deciding {
+    use tasks::tasks::checks::{Overrule, overrule};
+
+    #[test]
+    fn no_flag_always_checks_even_with_a_licence() {
+        assert_eq!(overrule(false, &[], Some(&[2037])), Overrule::Check);
+    }
+
+    /// Asking to skip first time is harmless: the check runs.
+    #[test]
+    fn a_flag_with_nothing_refused_checks() {
+        assert_eq!(overrule(true, &[2037], None), Overrule::Check);
+    }
+
+    #[test]
+    fn naming_every_refused_task_skips() {
+        assert_eq!(
+            overrule(true, &[12, 2037], Some(&[2037, 12])),
+            Overrule::Skip
+        );
+    }
+
+    #[test]
+    fn leaving_one_out_names_what_is_missing() {
+        assert_eq!(
+            overrule(true, &[2037], Some(&[2037, 12])),
+            Overrule::Unnamed(vec![12])
+        );
+    }
+
+    /// The bare `--no-duplicate-check` names nothing, so it can't skip a
+    /// refusal that named something.
+    #[test]
+    fn a_bare_flag_cannot_skip_a_refusal_that_named_tasks() {
+        assert_eq!(
+            overrule(true, &[], Some(&[2037])),
+            Overrule::Unnamed(vec![2037])
+        );
+    }
+
+    /// A refusal recorded before matches were kept names nothing, so any
+    /// override of it is complete.
+    #[test]
+    fn a_refusal_that_named_nothing_is_skipped_by_any_override() {
+        assert_eq!(overrule(true, &[], Some(&[])), Overrule::Skip);
+    }
+}

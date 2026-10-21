@@ -1378,27 +1378,23 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
             // Skipped only for an override the service will accept: a recent refusal of
             // this subject, and naming every task it named. Otherwise the check runs, so
             // asking to skip first time gains nothing.
-            let skip = match (
-                not_duplicate_of.is_empty() && !no_duplicate_check,
-                check_only,
-            ) {
-                (true, _) | (_, true) => false,
-                (false, false) => match licence(&client, &subject).await {
-                    Ok(Some(named)) => {
-                        let missing: Vec<u64> = named
-                            .into_iter()
-                            .filter(|id| !not_duplicate_of.contains(id))
-                            .collect();
-                        if !missing.is_empty() {
-                            return Err(commands::declined(checks::unnamed(&missing)));
+            let asked = !not_duplicate_of.is_empty() || no_duplicate_check;
+            let skip = match (asked, check_only) {
+                (false, _) | (_, true) => false,
+                (true, false) => match licence(&client, &subject).await {
+                    Ok(refused) => {
+                        match checks::overrule(true, &not_duplicate_of, refused.as_deref()) {
+                            checks::Overrule::Skip => true,
+                            checks::Overrule::Unnamed(missing) => {
+                                return Err(commands::declined(checks::unnamed(&missing)));
+                            }
+                            checks::Overrule::Check => {
+                                eprintln!(
+                                    "(nothing has refused this subject yet, so the duplicate check runs)"
+                                );
+                                false
+                            }
                         }
-                        true
-                    }
-                    Ok(None) => {
-                        eprintln!(
-                            "(nothing has refused this subject yet, so the duplicate check runs)"
-                        );
-                        false
                     }
                     Err(why) => {
                         eprintln!(
