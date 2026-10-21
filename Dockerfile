@@ -40,9 +40,9 @@ COPY Cargo.toml Cargo.lock ./
 # A stub source is enough to prime the dependency cache. Both targets, because
 # the manifest names a `default-run` and a manifest whose default target does
 # not exist fails to parse before any of this compiles.
-RUN mkdir -p src/bin \
+RUN mkdir -p src/bin/task \
     && echo 'fn main() {}' > src/main.rs && echo '' > src/lib.rs \
-    && echo 'fn main() {}' > src/bin/task.rs \
+    && echo 'fn main() {}' > src/bin/task/main.rs \
     && cargo build --release && rm -rf src
 COPY src/ src/
 # `migrations/` is compiled IN, not read at runtime: `sqlx::migrate!()` embeds
@@ -51,7 +51,7 @@ COPY src/ src/
 COPY migrations/ migrations/
 # `touch` so the real sources are newer than the primed artefacts and actually
 # rebuild.
-RUN touch src/main.rs src/lib.rs src/bin/task.rs && cargo build --release
+RUN touch src/main.rs src/lib.rs src/bin/task/main.rs && cargo build --release
 
 # --- runtime ---
 FROM debian:bookworm-slim
