@@ -4,12 +4,8 @@ import type { Created, Task, Updated } from '../src/app/models';
 import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
- * Write one picture out, with the animations finished.
- *
- * ⚠ **`animations: 'disabled'` is not a nicety**: Playwright shoots as soon as
- * the element is visible, and Material fades a menu in, so without it a menu is
- * captured part-transparent — legible enough to look deliberate — or not at
- * all.
+ * Write one picture, animations finished: Material fades menus in, and
+ * Playwright would shoot them half-transparent.
  */
 async function shot(page: Page, name: string, whole = false): Promise<void> {
   const path = `ui-snapshots/${name}.png`;
@@ -18,31 +14,22 @@ async function shot(page: Page, name: string, whole = false): Promise<void> {
     await page.screenshot({ path, animations: 'disabled' });
     return;
   }
-  // ⚠ **Not `fullPage: true`**, which grows the capture to the *document's*
-  // height: this layout scrolls `main` inside a fixed shell, so a full-page
-  // shot silently cuts the scrolled part off. The viewport is grown to the
-  // content instead.
+  // ⚠ Not `fullPage: true`: `main` scrolls inside a fixed shell, so a full-page
+  // shot cuts the scrolled part. The viewport grows to the content instead.
   const height = await page.evaluate(() => {
     const main = document.querySelector('main');
     if (!main) return document.documentElement.scrollHeight;
     return main.scrollHeight + (window.innerHeight - main.clientHeight);
   });
-  // Capped: a list of every open task would otherwise produce an image nobody
-  // can look at, which is the same failure as one that is cut off.
+  // Capped, or the image is too tall to look at.
   await page.setViewportSize({ width: viewport.width, height: Math.min(height, 4000) });
   await page.screenshot({ path, animations: 'disabled' });
   await page.setViewportSize(viewport);
 }
 
 /**
- * Render every screen and write the picture out, so it can be **looked at**.
- *
- * Not a gate — it asserts nothing and is not in `gate.dhall`. Geometry checks
- * are not sight: a truncated chip label, or a hint drawn over a field's border
- * rather than over text, passes every measurement.
- *
- * `pnpm run shots`, then open `ui-snapshots/`. Same fixtures as the assertions,
- * so the picture is of exactly what was measured.
+ * Render every screen to `ui-snapshots/` to be looked at (`pnpm run shots`).
+ * Not a gate: geometry checks pass a truncated chip or a hint over a border.
  */
 test('every screen, at phone width', async ({ page }) => {
   await mockApi(page);
@@ -57,45 +44,34 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('heading', { name: 'History' }).waitFor();
   await shot(page, 'task', true);
 
-  // The undo panel, which is the one place the app shows a whole stored body as
-  // plain text. It is the tallest thing on the site and its two buttons sit
-  // UNDER it, so phone height is exactly where it can go wrong: a confirmation
-  // you have to scroll past is one nobody reads.
+  // The undo panel: a whole body as text with its buttons below, so phone height
+  // is where it breaks.
   await page.getByRole('button', { name: /what the last edit replaced/ }).click();
   await page.getByText('Before the last edit').waitFor();
   await shot(page, 'undo', true);
-  // And the viewport alone, scrolled where the tap left it. ⚠ Scrolled
-  // deliberately: the panel opens below a whole task body, so a capture at the
-  // top of the page shows none of it and says nothing about whether the two
-  // buttons are reachable — which is the only question this shot is for.
+  // ⚠ The viewport, scrolled where the tap left it: the top of the page shows none of the panel.
   await page.locator('.previous').scrollIntoViewIfNeeded();
   await shot(page, 'undo-viewport');
 
-  // The app bar's own menu, beside the task screen's differently-glyphed one.
+  // The app bar's menu.
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('menuitem', { name: 'Who has what' }).waitFor();
   await shot(page, 'nav');
 
   await page.goto(`/t/${TASKS[1].id}`);
-  // The move is what this app is for, and its menu is where the longest thing
-  // on the site — a 36-character session id — has the least room.
+  // The move menu, where a 36-character id has least room.
   await page.locator('.move').click();
   await page.getByRole('menuitem', { name: SESSIONS[1].id }).waitFor();
   await shot(page, 'move');
 
-  // The rank menu, for the same reason as the move above: every item carries a
-  // one-line gloss, and those lines are the longest prose the app renders. If
-  // they are going to overflow or wrap badly it is at phone width, in a menu.
+  // The rank menu: its glosses are the longest prose in the app.
   await page.goto(`/t/${TASKS[1].id}`);
   await page.getByRole('button', { name: /P4|unranked/ }).click();
   await page.getByRole('menuitem', { name: /P0/ }).waitFor();
   await shot(page, 'rank');
 
-  // Both ways out of a task: the overflow menu that offers the second one, and
-  // what a task looks like once it has been taken. ⚠ Reloaded rather than
-  // pressing Escape: the move menu's backdrop stays up through the close
-  // animation and takes the next click.
+  // Both ways out of a task. ⚠ Reloaded, not Escape: the menu backdrop swallows the next click.
   await page.goto(`/t/${TASKS[1].id}`);
   await page.getByRole('button', { name: 'More actions' }).click();
   await page.locator('.mat-mdc-menu-panel').waitFor();
@@ -154,23 +130,17 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('heading', { name: 'Who has what' }).waitFor();
   await shot(page, 'who', true);
 
-  // The row is the link, and the list it reaches has to SAY which holder it is
-  // showing, or an empty result reads as no work existing. Captured by clicking
-  // rather than visiting the URL, so the picture shows the link works.
+  // Clicking a row: the list must say which holder it shows, or empty reads as no work.
   await page.getByRole('link', { name: /memview/ }).click();
   await page.getByLabel('Showing one holder').getByText('memview').waitFor();
   await shot(page, 'who-focused', true);
 
-  // The same screen for a session that never named itself: 36 characters of
-  // uuid in a chip that also has to keep its close icon reachable.
+  // The same for an unnamed session: a uuid chip that must keep its close icon.
   await page.goto('/who');
   await page.getByRole('link', { name: new RegExp(SESSIONS[1].id.slice(0, 8)) }).click();
   await shot(page, 'who-focused-unnamed', true);
 
-  // Naming a conversation, on the row that most needs it: the unnamed session,
-  // whose label is 36 characters of uuid. The row BECOMES the form, so this is
-  // the picture that says whether a field, a cancel and a save fit across a
-  // phone beside nothing else.
+  // Renaming the unnamed session: does the row-turned-form fit a phone?
   await page.goto('/who');
   await page.getByRole('heading', { name: 'Who has what' }).waitFor();
   await page
@@ -183,16 +153,13 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('heading', { name: 'File a task' }).waitFor();
   await shot(page, 'new', true);
 
-  // The pile's reason field only exists once the pile is chosen, and a control
-  // that appears on a choice is the one that gets left broken — nothing renders
-  // it in the default state above.
+  // The pile's reason field, which only appears once the pile is chosen.
   await page.getByRole('combobox', { name: 'For' }).click();
   await page.getByRole('option', { name: 'the pile' }).click();
   await page.getByLabel("Why is this nobody's?").waitFor();
   await shot(page, 'new-pile', true);
 
-  // Empty is a state somebody sees on the first day and after the last task is
-  // finished, and an empty screen is the easiest one to leave looking broken.
+  // Empty: easy to leave looking broken.
   await page.route('**/api/tasks**', (r) => r.fulfill({ json: [] satisfies Task[] }));
   await page.goto('/');
   await page.getByText('Nothing here').waitFor();

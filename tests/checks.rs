@@ -1,11 +1,7 @@
-//! What a model check did, recorded.
-//!
-//! ⚠ **`Quiet` and `Timeout` are the pair worth a test.** Both leave the caller
-//! with no advice and the write already done, so from outside they look
-//! identical; counted together they would report a tool that runs and finds
-//! nothing, when what happened is a tool that never ran. The classification is
-//! the whole of that distinction, and it turns on an error's chain rather than
-//! on its message.
+//! What a model check did, recorded. ⚠ `Quiet` and `Timeout` both leave the
+//! caller with no advice, so they look alike; counted together they report a
+//! tool that ran and found nothing when it never ran. The classification turns
+//! on the error chain, not its message.
 
 mod common;
 
@@ -251,11 +247,8 @@ async fn what_is_read_back_is_the_window_asked_for() {
     );
 }
 
-// The wiring, through the real router.
-//
-// ⚠ **The route table can be wrong while every test above passes**, and the
-// CLI deliberately swallows a failed report, so a path that 404s would record
-// nothing, silently.
+// The wiring, through the real router: the route can be wrong while every test
+// above passes, and the CLI swallows a failed report.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};

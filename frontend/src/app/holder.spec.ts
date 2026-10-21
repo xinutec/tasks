@@ -50,9 +50,7 @@ describe('inBucket', () => {
   });
 
   it('does not count another person as mine', () => {
-    expect(inBucket({ kind: 'person', id: 'someone-else' }, parseWho('mine'), 'user')).toBe(
-      false,
-    );
+    expect(inBucket({ kind: 'person', id: 'someone-else' }, parseWho('mine'), 'user')).toBe(false);
   });
 });
 

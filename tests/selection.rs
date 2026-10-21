@@ -1,10 +1,5 @@
-//! What `task list` asks for, and for whom.
-//!
-//! ⚠ **These pin what the CLI SENDS, and that is only half the property.** A
-//! route that accepted `pile=true` and ignored it would keep every one of these
-//! green while the pile silently vanished from every session's list. The other
-//! half is `tests/digest_route.rs`, which drives `/api/tasks` through the real
-//! router.
+//! What `task list` asks for. These pin what the CLI sends; the other half,
+//! `tests/digest_route.rs`, checks the route uses it.
 
 use tasks::tasks::selection::list_query;
 
@@ -40,10 +35,7 @@ fn a_bare_list_is_about_the_caller() {
 
 #[test]
 fn the_pile_comes_with_it() {
-    // Not a detail: the pile is how a task reaches whichever conversation is
-    // around rather than a named one. A default of strictly-mine would be
-    // smaller and would make handover invisible to everybody at once, which is
-    // the argument `digest.rs` makes at length for the same rule.
+    // The pile is included: strictly-mine would hide every handover from everyone.
     let bare = query(false, false, false, Some("sess-1"));
     assert!(bare.contains("pile=true"), "{bare}");
     assert!(!query(false, true, false, Some("sess-1")).contains("pile"));
@@ -151,10 +143,7 @@ fn asking_for_one_holder_asks_the_right_column() {
     assert_eq!(joined(session), "session=abc-123");
 }
 
-/// ⚠ **No pile.** `--to` answers what one holder is CARRYING, and the unheld
-/// tasks belong to nobody — folding them in would answer a different question.
-/// The bare `task list` deliberately does fold them in, which is why this is a
-/// separate flag rather than a filter on that.
+/// ⚠ No pile: `--to` is what one holder carries. Bare `task list` includes it, hence a separate flag.
 #[test]
 fn one_holders_list_does_not_carry_the_pile() {
     use tasks::tasks::selection::Holder;
@@ -197,11 +186,8 @@ fn handed_out_query(done: bool, session: Option<&str>) -> String {
     joined(list_query(false, false, false, true, done, session, None).expect("a query"))
 }
 
-/// The fifth question, and the only one that is not about the holder.
-///
-/// ⚠ **A routing session cannot otherwise see the work it routes**: the digest
-/// never shows another conversation's tasks, and `--to <holder>` answers what
-/// it carries from ALL filers.
+/// The one question not about the holder: the digest never shows another
+/// conversation's tasks, so a routing session can't otherwise see its work.
 #[test]
 fn what_i_handed_out_is_asked_for_by_filer_not_by_holder() {
     assert_eq!(handed_out_query(false, Some("sess-1")), "handed_out=sess-1");

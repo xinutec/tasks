@@ -1,9 +1,5 @@
-//! What is served for a path that is not the API.
-//!
-//! ⚠ **The wrong answer here is a `200`.** A SPA fallback that hands
-//! `index.html` to a request for `main-ABC123.js` or a `.woff2` is not an error
-//! anywhere: the browser gets HTML where it asked for a font, renders broken
-//! icons, and reports nothing.
+//! What is served for a non-API path. ⚠ The wrong answer is a `200`: HTML for a
+//! font renders broken icons and reports nothing.
 
 use tasks::routes::spa;
 

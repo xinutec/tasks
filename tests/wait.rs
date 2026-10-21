@@ -1,12 +1,6 @@
-//! Waking a session that is not speaking.
-//!
-//! The user: *"I just need that blocked session to have a way to be notified of a
-//! task being closed so they can continue working."* See `tasks::wait` for why
-//! that is a background command returning rather than anything delivered.
-//!
-//! What is tested here is the decision, not the sleeping: given what the service
-//! says about each blocker, does the wait end, and what is the session told when
-//! it comes back.
+//! Waking a blocked session (the user: *"a way to be notified of a task being
+//! closed so they can continue working"*; see `tasks::wait`). Tested: whether the
+//! wait ends, and what the session is told.
 
 use std::time::Duration;
 

@@ -1,12 +1,6 @@
-// Writes each app's build-info.ts with the current git sha + build time, so the
-// running bundle can show which build it is. Embedded at build time rather than
-// fetched at runtime on purpose: a stale cached page then shows its OWN old
-// stamp, which is the whole point — it lets you spot a stale cache instead of
-// being reassured by the server's current version. The generated files are
-// gitignored.
-//
-// A Docker build has no .git in context, so CI passes the commit as GIT_SHA
-// (see Dockerfile + .github/workflows/build.yml); local dev falls back to `git`.
+// Writes build-info.ts with the git sha and build time, embedded at build time
+// so a stale cached page shows its own old stamp. Gitignored. Docker has no
+// .git, so CI passes GIT_SHA (Dockerfile, build.yml); locally it reads git.
 import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -25,11 +19,9 @@ function git(cmd) {
   }
 }
 
-// Prefer the CI-provided commit (Docker has no .git); else read it locally.
 const envSha = (process.env.GIT_SHA ?? '').slice(0, 7);
 const sha = envSha || git('rev-parse --short HEAD') || 'nogit';
-// A gitignored build-info.ts won't dirty the tree; any real uncommitted change
-// marks the build. (Only meaningful for local builds — Docker has no git.)
+// Any real uncommitted change marks the build dirty (local builds only).
 const dirty = git('status --porcelain') ? '+' : '';
 const builtAt = new Date().toISOString();
 

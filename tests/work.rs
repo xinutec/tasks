@@ -1,16 +1,8 @@
-//! What is standing in the tracker, counted against a real database.
-//!
-//! ⚠ **Conditional aggregates in one statement, and every one of them can be
-//! wrong in a way that looks right.** A `SUM(condition)` that never matches
-//! reports 0, which is exactly what an empty tracker reports; a `COUNT(*)` over
-//! a join to `task_blocks` reports edges as tasks; `<= 'P1'` on a string column
-//! is doing lexicographic comparison and works only because `P0` and `P1` sort
-//! before `P2`. None of those fail loudly. So each column gets a fixture that
-//! makes it differ from the others.
-//!
-//! ⚠ **The macros are the point of half of this.** `still_open!` and `due_soon!`
-//! are shared with the lists so a graph and a digest cannot disagree; a test that
-//! spelled the conditions out again would pass while they drifted apart.
+//! The backlog counts, against a real database. ⚠ Each aggregate can be wrong
+//! and look right: a never-matching `SUM` reads 0 like an empty tracker, a join to
+//! `task_blocks` counts edges, and `<= 'P1'` works only lexically. So each column
+//! gets a fixture that sets it apart. The shared macros are tested as used, not
+//! re-spelled.
 
 mod common;
 

@@ -32,7 +32,6 @@ fn to_session(id: &str) -> Assignee {
 fn filed(subject: &str) -> NewTask {
     NewTask {
         subject: subject.into(),
-        // The check ran: these file through the service the way a session does.
         checked: true,
         not_duplicate_of: Vec::new(),
         body: String::new(),
@@ -303,14 +302,8 @@ async fn history_names_the_session_that_acted_rather_than_its_id() {
         .expect("a task");
     assert_eq!(detail.events[0].actor, "memview");
 
-    // A session nobody has named still says something, and the something is its
-    // id rather than a blank.
-    //
-    // Touched first, and that is load-bearing since filing takes the task on:
-    // the default holder is a foreign key into `sessions`, so a write by a
-    // session the table has never heard of fails rather than quietly landing in
-    // the pile. Both write routes touch before they reach the repo; a caller
-    // coming in underneath them has to do the same.
+    // An unnamed session shows its id, never a blank. Touched first: the default
+    // holder is a foreign key, so a write by an unknown session fails.
     sessions::touch(&pool, "sess-9", None)
         .await
         .expect("recording a session");
@@ -356,10 +349,9 @@ async fn a_change_that_changes_nothing_writes_no_history() {
         .await
         .expect("reading")
         .expect("a task");
-    // The filing's own two rows and nothing after them: `created`, and the
-    // `assigned` that says this went to the pile and why. Three no-op updates
-    // added none. Stated as kinds rather than a count so that a future event at
-    // filing time reads as a changed expectation instead of an off-by-one.
+    // Only the filing's two rows (`created`, and the `assigned` to the pile): three
+    // no-op updates added none. Kinds, not a count, so a new filing event reads as a
+    // changed expectation.
     assert_eq!(
         detail
             .events
@@ -388,7 +380,6 @@ async fn a_subject_is_one_line_and_a_body_is_not_in_the_list() {
         NewTask {
             spare: None,
             subject: "Has prose".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: "# Why\n\nA paragraph of reasoning.".into(),
@@ -430,7 +421,6 @@ async fn a_session_rename_moves_no_task() {
         NewTask {
             spare: None,
             subject: "Assigned to a session that will be renamed".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: String::new(),
@@ -489,7 +479,6 @@ async fn a_session_row_carries_how_much_it_is_holding() {
             NewTask {
                 spare: None,
                 subject: format!("Task {n}"),
-                // The check ran: these file through the service the way a session does.
                 checked: true,
                 not_duplicate_of: Vec::new(),
                 body: String::new(),
@@ -508,7 +497,6 @@ async fn a_session_row_carries_how_much_it_is_holding() {
         NewTask {
             spare: None,
             subject: "Already done".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: String::new(),
@@ -640,10 +628,7 @@ async fn reopening_a_task_leaves_its_holder_alone() {
 
 #[tokio::test]
 async fn who_holds_what_counts_the_finished_work_too() {
-    // `open` alone says who is busy and nothing about who has done anything: a
-    // task leaves every open list the moment it is finished, so `0/1` is a
-    // session that has cleared its plate and reads quite differently from one
-    // that never had one.
+    // `0/1` is a cleared plate, which a bare `0` can't distinguish from an idle one.
     let pool = common::fresh_db().await;
     sessions::touch(&pool, "sess-1", Some("recall"))
         .await
@@ -856,14 +841,8 @@ async fn a_dropped_task_is_not_open_anywhere() {
     let listed = sessions::list(&pool).await.expect("listing sessions");
     assert_eq!(listed[0].open, 0, "a session that holds nothing");
 
-    // `open` is what is in hand; `total` is that plus what was done. The
-    // dropped one is in neither, because it is not work and was not done.
-    //
-    // Of the four filed into the pile the person took three — one by starting
-    // it and two by closing them — and left the one nobody has touched. So
-    // `total` is **2**, and that is the whole assertion: they are holding three
-    // tasks and only two of them count, because the third was dropped.
-    // Counting it would read as half again as much work done.
+    // `total` is open plus done; dropped is in neither. The person took three of the
+    // four and dropped one, so `total` is 2: counting the drop would inflate the work.
     let holders = sessions::holders(&pool, "user").await.expect("counting");
     let person = holders
         .iter()
@@ -1032,17 +1011,10 @@ async fn starting_a_task_claims_it_the_way_finishing_one_does() {
     assert_eq!(busy.open, 1, "a session in the middle of a task reads idle");
 }
 
-/// A task put back in the pile mid-flight is still `doing`, and `start` is how
-/// the next session takes it on.
-///
-/// ⚠ **The state where the status says nothing about the holder**: a session
-/// that stops work hands the task back with its findings, leaving it `doing`
-/// and held by nobody. A claim rule that read the status would make `start`
-/// report success and move nothing.
-///
-/// What stops a second session poaching held work is the HOLDER check beside
-/// this one, not the status; and what keeps a redundant `start` from writing
-/// history is the `moved` comparison, which sees the holder is already right.
+/// A task handed back to the pile stays `doing`, and `start` takes it on. A claim
+/// rule reading the status would report success and move nothing. Poaching is
+/// stopped by the holder check; a redundant `start` writes nothing because the
+/// holder is already right.
 #[tokio::test]
 async fn starting_a_task_already_doing_in_the_pile_claims_it() {
     let pool = common::fresh_db().await;
@@ -1121,13 +1093,8 @@ async fn starting_a_task_already_doing_in_the_pile_claims_it() {
     );
 }
 
-/// A write says what it moved, and a write that moved nothing says that.
-///
-/// ⚠ **A no-op must not answer exactly like a write that worked**, or its
-/// defects are only findable by reproducing them.
-///
-/// **Reported, not refused**: the second `start` here is a legitimate no-op and
-/// must keep succeeding.
+/// A write says what it moved, and a no-op says so, rather than answering like
+/// a write that worked. Reported, not refused.
 #[tokio::test]
 async fn a_write_that_moves_nothing_says_so() {
     let pool = common::fresh_db().await;
@@ -1236,12 +1203,7 @@ async fn a_write_that_moves_nothing_says_so() {
     );
 }
 
-/// A task in the pile says which session filed it, so a session can rule it out
-/// without opening it.
-///
-/// ⚠ **The cost this removes is paid by every session that LOOKS**: without it,
-/// ruling out one pile line means reading the whole task. It gates nothing —
-/// see `Task::filed_by`.
+/// A pile task says who filed it, so a session can rule it out unopened ([`Task::filed_by`]).
 #[tokio::test]
 async fn a_pile_task_says_which_session_filed_it() {
     let pool = common::fresh_db().await;
@@ -1325,11 +1287,7 @@ async fn a_pile_task_says_which_session_filed_it() {
     );
 }
 
-/// What a session is shown, and what it is not.
-///
-/// ⚠ **The digest is the only thing that costs anything per turn**, so who it
-/// selects for is a cost question: a session must not pay, every turn, for
-/// tasks another conversation is carrying.
+/// What a session's digest selects: the only per-turn cost, so never another conversation's tasks.
 #[tokio::test]
 async fn a_session_digest_carries_its_own_work_and_the_pile() {
     let pool = common::fresh_db().await;
@@ -1618,14 +1576,8 @@ mod unknown_holder {
         );
     }
 
-    /// ⚠ **The one that keeps the mapping honest.**
-    ///
-    /// Every write in `update` runs in one transaction, so widening the mapping
-    /// to *any* foreign key failure on the way through — or to any database
-    /// error at all — would start answering 400 for faults that are genuinely
-    /// the service's. This pins that a move that fails for no reason at all
-    /// still succeeds, and `a_task_may_not_be_closed_into_the_pile` above pins
-    /// that the OTHER refusals kept their own answers.
+    /// ⚠ Keeps the mapping honest: a move failing for no reason still succeeds, and
+    /// `a_task_may_not_be_closed_into_the_pile` keeps the other refusals their own.
     #[tokio::test]
     async fn a_holder_the_service_has_seen_is_untouched_by_any_of_this() {
         let pool = common::fresh_db().await;
@@ -1653,19 +1605,10 @@ mod unknown_holder {
         assert_eq!(moved.task.assignee.id.as_deref(), Some("sess-2"));
     }
 
-    /// ⚠ **The test that keeps the mapping from becoming a masking fallback.**
-    ///
-    /// Ablating the `ForeignKeyViolation` check to `true` leaves every other test
-    /// green — so without this one a lost connection mid-move would answer
-    /// `400 no session …` about a session that exists.
-    ///
-    /// An id past `VARCHAR(64)` is the lever: same statement, same column, and
-    /// MariaDB answers `1406 (22001)` rather than a constraint violation.
-    ///
-    /// ⚠ **So an over-long id stays a 500, deliberately**: nothing sends one, the
-    /// fix would be a length bound in `check_assignee` rather than a wider
-    /// reading of the constraint, and it would delete the only non-FK error this
-    /// statement can produce.
+    /// ⚠ Keeps the mapping from masking: with the `ForeignKeyViolation` check forced
+    /// true, everything else stays green and a lost connection would answer 400. An
+    /// id past `VARCHAR(64)` gives a non-FK error on the same statement; it stays a
+    /// 500 deliberately (the fix would be a length bound in `check_assignee`).
     #[tokio::test]
     async fn a_failure_that_is_not_the_constraint_stays_an_internal_error() {
         let pool = common::fresh_db().await;
@@ -1687,12 +1630,8 @@ mod unknown_holder {
         );
     }
 
-    /// ⚠ **A PERSON is not checked, and that is not an oversight.**
-    ///
-    /// `assignee_person` carries a Nextcloud user id and has no foreign key —
-    /// there is no table of people here to point one at. So this refusal is
-    /// about conversations only, and a test that expected symmetry would be
-    /// asserting a validation this service cannot perform.
+    /// ⚠ A person isn't checked: `assignee_person` has no foreign key (there is no
+    /// table of people), so only conversations can be refused.
     #[tokio::test]
     async fn a_person_nobody_has_heard_of_is_still_accepted() {
         let pool = common::fresh_db().await;
@@ -1713,15 +1652,9 @@ mod unknown_holder {
     }
 }
 
-/// How much prose is behind a task, which `detailed` only ever answered as a
-/// boolean.
-///
-/// ⚠ **The oracle is the STORED body, not a number written here.** Every case
-/// reads the body back and counts it with Rust's own `lines()` over
-/// `trim()` — exactly the two operations `task show` performs before printing —
-/// and asserts SQL agrees. A hand-written expectation would encode my reading of
-/// the projection, which is the thing under test; and `create` is free to
-/// normalise what it stores without this becoming a lie.
+/// How many lines a body has. ⚠ The oracle is the stored body, counted with
+/// Rust's `trim().lines()` as `task show` prints it; a hand-written number would
+/// encode my reading of the projection under test.
 mod how_much_prose {
     use super::*;
 
@@ -1755,14 +1688,8 @@ mod how_much_prose {
     async fn the_count_is_the_one_show_would_print() {
         let pool = common::fresh_db().await;
 
-        // ⚠ Each of these breaks a different part of the projection. The
-        // trailing-newline pair is `+ 1` — count newlines alone and a body with
-        // no final newline is short by one, which is every trimmed body. The
-        // blank-line cases are the trim:
-        // stored padding the reader never sees must not be charged to it. The
-        // last is `LENGTH` being bytes — a body of multibyte characters has far
-        // more bytes than characters, and only a difference over a one-byte
-        // needle survives that.
+        // Each case breaks a different part: trailing newlines test the `+ 1`, blank
+        // lines the trim, and multibyte text that `LENGTH` is bytes.
         for body in [
             "one line, no newline at the end",
             "one line, newline at the end\n",
@@ -1782,10 +1709,7 @@ mod how_much_prose {
         }
     }
 
-    /// ⚠ The two must agree, because they are two expressions over the same
-    /// column: `detailed` tests the length of `body_shown!`, and the count is
-    /// its own `IF`. `detailed: true` beside `body_lines: 0` would leave a
-    /// reader nothing to believe.
+    /// ⚠ `detailed` and the count are two expressions over one column, so they must agree.
     #[tokio::test]
     async fn nothing_to_read_is_zero_and_detailed_agrees() {
         let pool = common::fresh_db().await;
@@ -1812,10 +1736,7 @@ mod how_much_prose {
         assert_eq!(counted, 1, "one line of prose counted as {counted}");
     }
 
-    /// ⚠ **The list carries it too, and from the same projection.** `show` and
-    /// `list` are two reads of one `select!`, and the whole reason the count
-    /// sits on the shared row is that a session cannot be shown two different
-    /// accounts of one body.
+    /// ⚠ The list carries it too, from the same `select!`, so one body has one count.
     #[tokio::test]
     async fn a_list_row_carries_the_same_count_as_the_task_itself() {
         let pool = common::fresh_db().await;

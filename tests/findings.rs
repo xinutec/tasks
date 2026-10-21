@@ -1,13 +1,7 @@
-//! Falsifying a review finding, with the two ways the instrument itself failed.
-//!
-//! The requirement that does the work is making a supersession claim quote the
-//! LATER text, which rejects most stale-layer claims a review makes — many
-//! because the "resolving" text sits BEFORE the text it supersedes.
-//!
-//! ⚠ **Two tests pin the instrument's own mistakes**: searching only the body
-//! rejects every correct `subject-stale` finding, and counting occurrences of
-//! a whole quote calls every repetition false. Both were caught by reading, not
-//! by the check.
+//! Falsifying review findings. Requiring a supersession claim to quote the
+//! later text rejects most stale-layer claims. Two tests pin the instrument's own
+//! past mistakes: searching only the body, and counting whole quotes for
+//! repetition.
 
 use tasks::tasks::findings::{Finding, Kind, Reason, falsify};
 

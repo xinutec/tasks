@@ -1,13 +1,8 @@
-//! Reading a conversation's name out of the transcript Claude Code writes.
+//! Reading a conversation's name from Claude Code's transcript.
 //!
-//! ⚠ **The spelling of these lines is a contract with a binary nobody here
-//! controls.** `{"type":"agent-name",…}` is emitted by the CLI, and if it ever
-//! changes shape this silently stops naming anybody — so the failure has to be
-//! *no name* rather than a wrong one, and every assertion below is about which
-//! of several candidate names wins rather than about parsing succeeding.
-//!
-//! The labeller's precedence is `agentName || customTitle || …`, and that order
-//! is what [`in_tail`] follows.
+//! ⚠ The line shape belongs to a binary nobody here controls; if it changes,
+//! the failure must be no name, never a wrong one, so the assertions are about
+//! which candidate wins. Precedence: `agentName`, then `customTitle` ([`in_tail`]).
 
 use std::path::Path;
 

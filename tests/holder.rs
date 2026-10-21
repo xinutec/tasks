@@ -1,10 +1,6 @@
-//! Who `task move <id> <to>` decides you meant.
-//!
-//! ⚠ **These pin the DECISION, not the round trip.** What the CLI fetches to
-//! answer with — holders first, then every row — is plumbing; which conversation
-//! a word picks out is the property, and getting it wrong hands somebody's work
-//! to a conversation that is not there. So the resolution is a pure function,
-//! exercised here as public API.
+//! Who `task move <id> <to>` decides you meant: the decision, not the fetching.
+//! Getting it wrong hands work to a conversation that isn't there, so it's a pure
+//! function tested as public API.
 
 use tasks::tasks::holder::{Holder, resolve};
 
@@ -130,12 +126,9 @@ fn nothing_known_at_all_is_still_a_refusal() {
     assert_eq!(resolve(vec![], "health"), Holder::Unknown(vec![]));
 }
 
-/// The rules that infer a holder when the caller did not name one.
-///
-/// ⚠ **Both have regressed before**: `start` taking a task off another session
-/// that had not got to it yet, and `start` on a task left `doing` in the pile
-/// reporting success and moving nobody. `inferred_holder` is the decision, and
-/// this asserts it without a database.
+/// The rules inferring a holder when none was named. Both regressed before:
+/// `start` taking another session's task, and `start` on a `doing` pile task
+/// moving nobody.
 mod who_it_lands_on {
     use chrono::Utc;
     use tasks::tasks::repo::{Change, inferred_holder};

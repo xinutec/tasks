@@ -1,12 +1,8 @@
-//! What the DB integration tests share: the database they need, or a failure.
+//! What the DB tests share: the database, or a failure. The queries are runtime
+//! strings, so running them is the only check on the SQL.
 //!
-//! These tests are the only check on this repository's SQL. The queries are
-//! runtime strings — `sqlx::query_as` rather than the compile-time macros —
-//! so running them **is** the check on them.
-//!
-//! ⚠ **Unset means failure, not skip.** Returning early after an `eprintln!`
-//! nobody sees reports `ok` with none of the SQL exercised — coverage that is
-//! not being provided.
+//! ⚠ Unset means failure, not skip: an early return reports `ok` with none of
+//! the SQL exercised.
 
 use sqlx::MySqlPool;
 
@@ -28,13 +24,9 @@ pub(crate) fn test_db_url() -> String {
     })
 }
 
-/// A migrated pool, emptied first.
-///
-/// ⚠ **Truncated rather than dropped and recreated**, and children before
-/// parents: `task_events` has a foreign key into `tasks`, and `tasks` one into
-/// `sessions`. The suite runs single-threaded against one database, so leaving
-/// a previous test's rows behind would make every count assertion depend on the
-/// order the files happened to run in.
+/// A migrated pool, emptied first: truncated, children before parents, since the
+/// suite shares one database and leftover rows would make counts depend on file
+/// order.
 pub(crate) async fn fresh_db() -> MySqlPool {
     let pool = tasks::db::connect(&test_db_url())
         .await
@@ -44,14 +36,8 @@ pub(crate) async fn fresh_db() -> MySqlPool {
     // `&'static str`, and asserting a formatted string safe to save three lines
     // is exactly the audit that bound exists to force.
     for statement in [
-        // Before `task_events`, which it hangs off. The FK cascades, so this is
-        // belt and braces — but the order this list is written in is the
-        // documentation of the shape, and a reader should not have to check a
-        // migration to know which way the arrows point.
-        // Nothing hangs off it and it hangs off nothing — see
-        // `migrations/0010_check_run.sql` — so it can go first or last. It is
-        // here because a suite that left rows behind would make every count in
-        // `tests/checks.rs` depend on file order.
+        // Children before parents, so the list shows the shape. `check_run` has no keys
+        // either way; emptied so counts in `tests/checks.rs` don't depend on file order.
         "DELETE FROM check_run",
         "DELETE FROM command_run",
         "DELETE FROM reported",
@@ -68,11 +54,7 @@ pub(crate) async fn fresh_db() -> MySqlPool {
             .await
             .unwrap_or_else(|e| panic!("running {statement}: {e}"));
     }
-    // ⚠ **The id sequence is deliberately NOT reset.** An `ALTER TABLE …
-    // AUTO_INCREMENT` here would let a test assert on `#1`, and a test that
-    // depends on the id it is about to be given is one that breaks the day
-    // another test is added above it. Every assertion below names the id it was
-    // handed. (It is also DDL dev-lint's schema reader cannot parse, which
-    // silently disables its absence checks for the whole repository.)
+    // ⚠ The id sequence is not reset, so no test can depend on the id it will get.
+    // (The DDL would also break dev-lint's schema reader.)
     pool
 }

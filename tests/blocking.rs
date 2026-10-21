@@ -1,12 +1,6 @@
-//! What blocks what, and the rule that carries.
-//!
-//! The user: *"If something is blocked, it should get a ticket number
-//! that it's blocked on. It can be the same, but not higher priority than the
-//! thing it's blocked on."* And, separately: *"If A blocks B then B can't block
-//! A."*
-//!
-//! ⚠ **The rule is what makes the link worth storing**: a dependency you can
-//! only read is a note; one that constrains the rank is a check.
+//! What blocks what, and the rule it carries. The user: *"It can be the same,
+//! but not higher priority than the thing it's blocked on"* and *"If A blocks B
+//! then B can't block A."* The rule is what makes the link worth storing.
 
 mod common;
 
@@ -20,7 +14,6 @@ fn human() -> Actor {
 fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
     NewTask {
         subject: subject.into(),
-        // The check ran: these file through the service the way a session does.
         checked: true,
         not_duplicate_of: Vec::new(),
         body: String::new(),
@@ -121,11 +114,8 @@ async fn a_blocked_task_may_not_outrank_what_blocks_it() {
         .expect("equal ranks are allowed");
 }
 
-/// The end that would otherwise slip through.
-///
-/// Ranking the blocked task up is the obvious violation. Ranking the BLOCKER
-/// down leaves the same inconsistency by the other door, and nothing about the
-/// edit looks wrong at the time.
+/// The end that would slip through: lowering the blocker below what waits on it
+/// leaves the same inconsistency, and the edit looks innocent.
 #[tokio::test]
 async fn a_blocker_may_not_be_demoted_below_what_waits_for_it() {
     let pool = common::fresh_db().await;
@@ -233,11 +223,8 @@ async fn if_a_blocks_b_then_b_may_not_block_a() {
     assert!(msg.contains("loop"), "{msg}");
 }
 
-/// ⚠ **The case a one-step check misses.**
-///
-/// `A → B → C → A` arrives as three separate edits, each of which looks fine on
-/// its own: nothing in the third edit mentions A. Only a walk over the whole
-/// graph refuses it.
+/// ⚠ The case a one-step check misses: `A → B → C → A` arrives as three edits,
+/// none of which looks wrong alone.
 #[tokio::test]
 async fn a_longer_loop_is_refused_too() {
     let pool = common::fresh_db().await;
@@ -318,13 +305,9 @@ async fn re_stating_the_same_blockers_writes_no_history() {
     assert!(again.changed.is_empty(), "{:?}", again.changed);
 }
 
-/// ⚠ **A rank and a block that are legal together must be accepted together.**
-///
-/// Checking as each field is written would refuse this: at the moment the rank
-/// lands, the task has no blockers and the check passes; at the moment the block
-/// lands, the rank is already `P1` and the blocker is `P1` — also fine. But an
-/// implementation that checked after the FIRST write against the OLD value of
-/// the second would reject a change that is consistent when it commits.
+/// ⚠ A rank and a block legal together must be accepted together: checking
+/// after the first write against the old value of the second would refuse a
+/// change that is consistent when it commits.
 #[tokio::test]
 async fn ranking_and_blocking_in_one_change_is_judged_on_the_result() {
     let pool = common::fresh_db().await;
@@ -508,11 +491,9 @@ mod deadlines {
     }
 }
 
-/// A deadline inside the week raises the rank — the user's rule.
-///
-/// ⚠ **The one thing a deadline reorders**, which does not contradict
-/// `a_deadline_does_not_move_a_task_up_the_list`: that pins that a FAR date
-/// changes nothing.
+/// A deadline inside the week raises the rank (the user's rule), the one thing a
+/// deadline reorders; `a_deadline_does_not_move_a_task_up_the_list` pins that a
+/// far date doesn't.
 mod escalation {
     use super::*;
     use chrono::{Duration, Utc};
@@ -599,11 +580,8 @@ mod escalation {
         assert_eq!(one(&pool, id).await.escalated_to, None);
     }
 
-    /// The raise has to reach the ORDER BY, not only the projection.
-    ///
-    /// A version that reported `escalated_to` and sorted on the stored rank
-    /// would draw a `P0!` marker at the bottom of the list, which is worse than
-    /// not marking it at all: the reader would believe the order.
+    /// The raise must reach the ORDER BY, not just the projection: a `P0!` marker
+    /// at the bottom of the list would make the reader believe a wrong order.
     #[tokio::test]
     async fn the_raise_is_what_the_list_is_sorted_by() {
         let pool = common::fresh_db().await;

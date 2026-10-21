@@ -1,14 +1,7 @@
-//! Reading what a model said about a filing.
-//!
-//! ⚠ **The strings here are real answers, not invented ones.** Every `said` was
-//! produced by the checker model against a live list, replaying tasks whose
-//! truth was known — which is where the wrappers come from. A model asked for
-//! `#<id> -- <clause>` and nothing else supplies a bullet, a bold marker or a
-//! preamble often enough that tolerating them is the feature.
-//!
-//! Whether the *answer* is right is a property of the prompt and the model,
-//! measured by replay rather than asserted here. This file pins that whatever
-//! comes back is read correctly.
+//! Reading what a model said about a filing. ⚠ Every `said` is a real answer,
+//! from the checker model replaying tasks whose truth was known: the bullets,
+//! bold and preambles are what models really add. Whether answers are right is
+//! measured by replay; this pins that they are read correctly.
 
 use tasks::tasks::duplicates::{
     Match, Settled, collision, edged, parse, prompt, refusal, reopen_instead, same_subject,
@@ -19,12 +12,8 @@ use tasks::tasks::duplicates::{
 /// number the model was never shown cannot come back as a match.
 const NOT_ON_THE_LIST: u64 = 812;
 
-/// The open list the replayed answers were given, reduced to what `parse` uses.
-///
-/// ⚠ **Every id a test expects to survive has to be in here.** `parse` discards
-/// an id that is not on the list it was given, which is what stops an invented
-/// number refusing somebody's filing — so a corpus missing an id makes a test
-/// fail for a reason that has nothing to do with what it is checking.
+/// The open list the replays were given. ⚠ Every id a test expects to survive
+/// must be here: `parse` drops ids not on its list.
 fn corpus() -> Vec<(u64, String)> {
     [1, 2, 3, 4, 5, 70, 255, 671, 726]
         .into_iter()
@@ -240,11 +229,8 @@ fn a_subject_that_merely_starts_the_same_is_not_a_collision() {
     );
 }
 
-/// A task cannot be a duplicate of the task it has just declared it waits for.
-///
-/// ⚠ **The edge is the filer's own statement that these are two different
-/// pieces of work.** A check that refuses for a reason the filer has already
-/// answered teaches sessions to reach for `--no-duplicate-check` by reflex.
+/// A task can't duplicate the task it declares it waits for: the edge says they
+/// differ, and refusing anyway teaches sessions to override by reflex.
 #[test]
 fn what_a_filing_waits_for_is_not_shown_to_the_reader() {
     let corpus = vec![
@@ -272,25 +258,16 @@ fn a_filing_that_waits_for_nothing_sees_the_whole_list() {
     );
 }
 
-/// The other half of the guard, deliberately left alone.
-///
-/// ⚠ **An identical title is one task whatever edge was declared.** Filing
-/// `--blocked-on 42` a subject character-identical to #42's is a mistake being
-/// made twice, not an ordering, so string equality still refuses it — and it
-/// runs against the WHOLE list, before this filter narrows anything.
+/// The other half, left alone: an identical title is one task whatever edge was
+/// declared, so string equality runs on the whole list first.
 #[test]
 fn an_identical_subject_is_still_a_collision_with_what_it_waits_for() {
     let corpus = vec![(42, "Fix the parser".to_string())];
     assert_eq!(same_subject("Fix the parser", &corpus), Some(42));
 }
 
-/// A closed task's remedy is not the same sentence as an open one's.
-///
-/// ⚠ **`reopen` is the whole point**: a session told only that a closed task
-/// resembles its filing will file anyway.
-///
-/// ⚠ **And it must say NOTHING LANDED.** A session told its task exists when it
-/// does not has lost the filing and will not come back for it.
+/// A closed match's remedy differs: it must say `reopen` (or the session files
+/// anyway) and that nothing landed (or the filing is lost).
 #[test]
 fn a_closed_match_refuses_and_names_reopen() {
     let text = reopen_instead(
@@ -506,13 +483,8 @@ fn an_identical_subject_still_collides_with_what_a_filing_unblocks() {
     assert_eq!(same_subject("Fix the parser", &corpus), Some(42));
 }
 
-/// What a session actually reads of a refusal.
-///
-/// ⚠ **Sessions pipe this to `tail -3`**, so anything above the last three lines
-/// is written for nobody.
-///
-/// These pin the shape that survives the cut: **one line per finding, and a
-/// LAST line that alone says it did not file, why, and what to do.**
+/// What a session actually reads: sessions pipe this to `tail -3`. One line per
+/// finding, and a last line that alone says it didn't file, why, and what to do.
 mod what_survives_the_tail {
     use super::*;
 

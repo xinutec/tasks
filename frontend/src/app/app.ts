@@ -30,8 +30,9 @@ import { Telemetry } from './telemetry';
   ],
 })
 export class App {
-  /** Which build this page is — stamped into the bundle, so a cached page shows
-   *  its own age rather than the server's. See scripts/stamp-version.mjs. */
+  /**
+   * This page's build, stamped in, so a cached page shows its own age (scripts/stamp-version.mjs).
+   */
   protected readonly build = BUILD_INFO;
   protected readonly builtAt = new Date(BUILD_INFO.builtAt).toLocaleString();
 
@@ -42,7 +43,7 @@ export class App {
   private readonly swUpdates = inject(SwUpdates);
 
   readonly me = signal<Me | null>(null);
-  /** On the filing screen, where `+` would only reopen what is already open. */
+  /** On the filing screen, where `+` would reopen itself. */
   readonly filing = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
@@ -53,12 +54,8 @@ export class App {
   readonly loading = signal(true);
 
   constructor() {
-    // Wired once, in the shell: two central seams (router events and one
-    // capture-phase click listener), so no view knows this exists and no new
-    // control can be missed by forgetting to annotate it.
+    // Wired once in the shell (router events, one capture-phase click), so no view needs to know.
     this.telemetry.init();
-    // Same seam, same argument: wired once here so no view has to know a
-    // service worker exists.
     this.swUpdates.start();
     this.api.me().subscribe({
       next: (me) => {

@@ -1,9 +1,5 @@
-//! One rule, two renderings — the pile's reason, checked in both places.
-//!
-//! `--to nobody` needs `--spare "<why>"`, and both the CLI and the service
-//! refuse without one — see `holder::PileVerdict` for why twice, and why one
-//! verdict. These assert it over all four inputs, and that each caller's
-//! message is addressed to its own audience.
+//! The pile's reason, checked by CLI and service with one verdict
+//! (`holder::PileVerdict`), over all four inputs, each message for its audience.
 
 use tasks::tasks::holder::{PileVerdict, pile_verdict};
 

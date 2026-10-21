@@ -18,7 +18,6 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
         pool,
         NewTask {
             subject: "a task with a body".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: body.into(),

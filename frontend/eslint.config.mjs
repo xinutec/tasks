@@ -1,18 +1,13 @@
-// @ts-check
-// ESLint flat config for the Angular frontend. The app under src/ and the
-// layout harness and Playwright configs are held to the same rules: nothing
-// else type-checks the harness — `ng build` compiles only what `src/main.ts`
-// imports, and Playwright strips types with esbuild. Type-aware: typescript-eslint
-// recommendedTypeChecked + stylisticTypeChecked (parserOptions.projectService)
-// for usage bugs tsc/syntactic-lint miss (floating/misused promises, unsafe
-// `any`, await-thenable), plus the Angular rules (forbid inline template:/styles:
-// — the team's angular-external-template-style rule — and template a11y).
+// ESLint for the app and the harness/Playwright configs, which nothing else
+// type-checks (`ng build` compiles only what `src/main.ts` imports). Type-aware
+// typescript-eslint plus the Angular rules (no inline templates or styles,
+// template a11y).
 
 import angular from 'angular-eslint';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  // An eslint-disable that disables nothing is dead debt; ESLint only warns by default.
+  // An eslint-disable that disables nothing is an error, not a warning.
   { linterOptions: { reportUnusedDisableDirectives: 'error' } },
   {
     files: ['src/**/*.ts', 'e2e/**/*.ts', '*.config.ts'],
@@ -27,19 +22,14 @@ export default tseslint.config(
     processor: angular.processInlineTemplates,
     rules: {
       '@angular-eslint/component-max-inline-declarations': ['error', { template: 0, styles: 0 }],
-      // `x as Shape` is a claim, not a check — and it is the one hole in the
-      // otherwise-total protection against a value reaching the screen in the
-      // wrong shape. dev-lint's DL-ANGULAR-STRINGIFIED-OBJECT types every
-      // template expression honestly, so the only way to fool it is with a type
-      // we manufactured ourselves. Narrow at the boundary instead.
+      // `x as Shape` is a claim, not a check, and the one way past
+      // DL-ANGULAR-STRINGIFIED-OBJECT. Narrow at the boundary.
       '@typescript-eslint/no-unsafe-type-assertion': 'error',
       '@typescript-eslint/no-empty-function': 'off',
     },
   },
   {
-    // A double asserted into the interface it stands in for is the whole point
-    // of a double; getting it wrong fails a test, it never reaches a user. App
-    // code stays strict.
+    // Test doubles may assert their interface; a wrong one fails a test, never a user.
     files: ['src/**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-type-assertion': 'off',

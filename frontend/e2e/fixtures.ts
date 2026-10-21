@@ -3,26 +3,16 @@ import { type Page } from '@playwright/test';
 import type { Holder, Me, Revision, Session, Task, TaskDetail } from '../src/app/models';
 
 /**
- * The data both render checks run against.
- *
- * One set, shared by the assertions (`ui-pages.spec.ts`) and the screenshots
- * (`shots.spec.ts`), so what a person looks at is exactly what the harness
- * measured. Two fixture sets would mean the picture and the check could disagree
- * and neither would say so.
- *
- * It is deliberately BUSY, and every item in it is a hazard carried on purpose.
- * The three that matter are specific to this app:
- *   1. **A session id is 36 unbreakable characters** and is what a session with
- *      no name is shown as — in a chip, in a menu, and in every history line.
- *   2. **A subject may be 200 characters** and is prose, so it wraps beside a
- *      meta column that must not be pushed off the edge.
- *   3. **A holder chip may be a raw session id**, which is the widest thing
- *      the meta column ever has to carry.
+ * The data both render checks use, one set, so the screenshots show exactly
+ * what the harness measured. Deliberately busy; the hazards specific to this app:
+ *   1. An unnamed session is drawn as its 36-character unbreakable id, in chips,
+ *      menus and history.
+ *   2. A subject may be 200 characters of prose wrapping beside the meta column.
+ *   3. A holder chip may be a raw id, the widest thing in the meta column.
  */
 export const ME = { kind: 'person', id: 'user', name: 'User' } satisfies Me;
 
-/** A named session and an unnamed one: the second is the hard case, because it
- *  is drawn as its raw id everywhere a name would go. */
+/** A named and an unnamed session; the second is drawn as its raw id. */
 export const SESSIONS = [
   {
     id: '7c0202eb-080b-40a5-a654-8758b4ca723e',
@@ -39,10 +29,7 @@ export const SESSIONS = [
   },
 ] satisfies Session[];
 
-/** Who holds what. Carries the two hazards this screen has: an unnamed session,
- *  drawn as 36 unbreakable characters beside a count that must not be pushed
- *  off the edge; and a session that has cleared its plate (`0/56`), which is
- *  the row the second number exists for. */
+/** An unnamed session (36 characters beside a count) and a cleared plate (`0/56`). */
 export const HOLDERS = [
   { kind: 'session', id: SESSIONS[0].id, name: 'memview', open: 12, total: 34 },
   { kind: 'session', id: SESSIONS[1].id, open: 3, total: 3 },
@@ -57,23 +44,19 @@ export const HOLDERS = [
   { kind: 'nobody', name: 'nobody', open: 7, total: 61 },
 ] satisfies Holder[];
 
-/** Real subjects from the corpus, plus one at the full 200-character cap. */
 export const TASKS = [
   {
     id: 80,
     subject: 'Stop walking every transcript on the request path',
     status: 'open',
-    // Ranked, and in the pile: the widest a list row's meta gets, since a pile
-    // row also carries a "from" chip. If a rank is going to collide with
-    // anything at phone width it is here.
+    // Ranked, in the pile, with a "from" chip: the widest meta row.
     priority: 'P3',
     escalated_to: 'P0',
-    // A deadline that has passed: the one state worth colouring, and the widest
-    // this row gets — rank, date, id and a "from" chip at phone width.
+    // Overdue: rank, date, id and a "from" chip at phone width.
     due: '2026-08-01',
     overdue: true,
     assignee: { kind: 'nobody' },
-    // In the pile and says where it came from — the row `filed_by` exists for.
+    // In the pile, with its filer.
     filed_by: 'health',
     detailed: true,
     body_lines: 37,
@@ -88,8 +71,7 @@ export const TASKS = [
     priority: 'P4',
     due: '2026-09-01',
     assignee: { kind: 'session', id: SESSIONS[0].id, name: 'memview' },
-    // Held AND filed by somebody else. The holder wins: this row must not draw
-    // two names, and who is carrying it is the more useful one.
+    // Held and filed by others: only the holder is drawn.
     filed_by: 'dev-lint',
     detailed: true,
     body_lines: 4,
@@ -100,16 +82,13 @@ export const TASKS = [
     id: 106,
     subject: 'The console task reader points at a store we deliberately emptied',
     status: 'open',
-    // Blocked, and by TWO tasks — the case a single column could not have
-    // carried. Also the widest this meta row gets: rank, block icon, id and an
-    // unnamed session's uuid on one line at phone width.
+    // Blocked by two tasks: rank, block icon, id and a uuid on one line.
     priority: 'P3',
     blocked_on: [80, 92],
     blocked: true,
-    // Flagged too, so this row carries a rank, a block icon AND the sprawl mark
-    // — the widest this meta row gets is what the harness is here to measure.
+    // And flagged, adding the sprawl mark.
     sprawl_chars: 18162,
-    // No name: drawn as the raw uuid, which is wider than the phone.
+    // No name: the raw uuid, wider than the phone.
     assignee: { kind: 'session', id: SESSIONS[1].id },
     detailed: false,
     body_lines: 0,
@@ -128,9 +107,7 @@ export const TASKS = [
   },
   {
     id: 128,
-    // The other pile row, deliberately beside the one that speaks: the user and
-    // unnamed sessions leave nothing to say, and "not said" has to look like
-    // silence rather than like a missing value.
+    // A pile row with no filer: "not said" must look like silence.
     subject: 'Left for whoever picks it up, by somebody with no name to give',
     status: 'open',
     assignee: { kind: 'nobody' },
@@ -151,17 +128,11 @@ export const TASKS = [
   },
 ] satisfies Task[];
 
-/** The version an edit replaced, as the undo panel shows it.
- *
- *  Long, and deliberately: a real task body runs to thousands of characters, and
- *  the question this fixture answers is whether the panel's two buttons are
- *  still reachable at phone height once a body that size is above them. */
+/** Long, like real bodies: are the panel's two buttons still reachable at phone height? */
 export const PREVIOUS = {
   at: '2026-08-13T09:06:12Z',
   actor: 'dev-lint',
-  // Somebody else's edit, matching `actor` — the case the CLI refuses and this
-  // page shows instead. A fixture saying `mine: true` beside a foreign actor
-  // would be a shape no server can produce.
+  // Somebody else's edit; `mine: true` beside a foreign actor is a shape no server produces.
   mine: false,
   subject: 'Abstractly evaluate a shell command, as far as the text determines and no further',
   body: [
@@ -185,28 +156,21 @@ export const PREVIOUS = {
   ].join('\n'),
 } satisfies Revision;
 
-/** A task page with everything that can crowd the column: a long subject, a
- *  body with a fenced block and a table, and a history whose actor is a raw
- *  session id. */
+/**
+ * A task page with everything that crowds the column: long subject, fenced block, table, raw-id actor.
+ */
 export const DETAIL = {
   ...TASKS[1],
-  // Something has overwritten this task, which is what puts the undo control on
-  // the screen at all. The task page is where a clobbered body is noticed, so
-  // the shot has to include it.
+  // Overwritten, so the undo control is in the shot.
   restorable: true,
-  // Blocked here too, so the TASK screen's chip is drawn in the shot rather
-  // than only the list's icon — they are different markup and only one of them
-  // spells the ids out.
+  // Blocked, so the task screen's chip (different markup from the list icon) is drawn.
   blocked_on: [80, 106],
   blocked: true,
-  // So the task screen draws the critique card under the body, which is a
-  // different piece of markup from the list's icon and the only place the words
-  // are ever shown.
+  // Flagged, so the critique card is drawn, the only place its words appear.
   sprawl_chars: 18162,
   sprawl_said:
     "Move 'Method note' bullets to a single checklist AFTER 'What to do next', not scattered through dated entries.\n'Still unmapped' is loose inventory not tied to the three actionable items; delete unless it earns its place.",
-  // Raised by its deadline, so the task screen draws BOTH the level it sorts
-  // as and the one somebody set — the pair only this screen shows.
+  // Raised by its deadline, so both ranks are drawn.
   escalated_to: 'P0',
   body: '…',
   body_html: `<p>Read as a language problem, the reader is an <strong>abstract
@@ -231,17 +195,12 @@ interpreter</strong>: it evaluates as far as the text determines and stops.</p>
       at: '2026-08-08T10:00:00Z',
       kind: 'status',
       detail: 'open → doing',
-      // The raw id, which is what an unnamed session's history line carries.
       actor: SESSIONS[1].id,
     },
   ],
 } satisfies TaskDetail;
 
-/** The same task, closed without being done.
- *
- *  A separate fixture because a dropped task is only ever *read*: it is gone
- *  from every list the API answers, so the one screen that can show one is this
- *  one, and the strike-through on the chip has nowhere else to be looked at. */
+/** Dropped: only this screen ever shows one, so its strike-through is checked here. */
 export const DROPPED = {
   ...DETAIL,
   status: 'dropped',
@@ -257,8 +216,7 @@ export const DROPPED = {
   ],
 } satisfies TaskDetail;
 
-/** Mock every backend call. Catch-all FIRST — Playwright runs handlers
- *  last-registered-first. */
+/** Mock every backend call; catch-all first, since Playwright runs the newest handler first. */
 export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
@@ -266,7 +224,6 @@ export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DETAIL }));
   await page.route('**/api/sessions', (r) => r.fulfill({ json: SESSIONS }));
   await page.route('**/api/holders', (r) => r.fulfill({ json: HOLDERS }));
-  // Registered after the task route: Playwright matches handlers newest-first,
-  // and this path is the one with an extra segment.
+  // After the task route: newest-first, and this path is longer.
   await page.route('**/api/tasks/*/previous', (r) => r.fulfill({ json: PREVIOUS }));
 }

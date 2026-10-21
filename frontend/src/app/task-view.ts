@@ -25,12 +25,8 @@ import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
 /**
- * One task: what it is, who has it, and everything that has happened to it.
- *
- * **The move control is the reason this screen exists.** Everything else here
- * could be a row in a list; handing a task to a particular session, or taking
- * one back, is the act the whole service was built around, so it is one tap from
- * the top of the page and not behind an edit mode.
+ * One task: what it is, who has it, and its history. The move control is why
+ * the screen exists, so it is one tap from the top, not behind an edit mode.
  */
 @Component({
   selector: 'app-task-view',
@@ -49,8 +45,7 @@ import { TasksApi } from './tasks-api';
   ],
 })
 export class TaskView {
-  /** Bound from the route (`withComponentInputBinding`), so the URL is what
-   *  says which task is open. */
+  /** From the route (`withComponentInputBinding`), so the URL says which task is open. */
   readonly id = input.required<string>();
 
   private api = inject(TasksApi);
@@ -60,63 +55,48 @@ export class TaskView {
 
   readonly statusIcon = STATUS_ICON;
   readonly statusLabel = STATUS_LABEL;
-  /** The progression, as buttons. `dropped` is deliberately not in it — it is
-   *  the other way out rather than the next step along, and it lives in the
-   *  overflow menu. */
+  /** The progression as buttons; `dropped` is the other way out, in the overflow menu. */
   readonly statuses: Status[] = ['open', 'doing', 'done'];
   readonly priorities = PRIORITIES;
   readonly priorityGloss = PRIORITY_GLOSS;
 
   readonly task = signal<TaskDetail | null>(null);
-  /** The move menu's destinations, labelled here rather than in the template:
-   *  a method call in a template runs on every change-detection pass, and
-   *  `DL-ANGULAR-TEMPLATE-METHOD-CALL` exists because that is invisible. */
+  /** Labelled here, not by a template method call, which runs every change-detection pass. */
   readonly sessionOptions = computed(() =>
     this.store.sessions().map((session) => ({ id: session.id, label: sessionLabel(session) })),
   );
   readonly loading = signal(true);
   readonly failed = signal<string | null>(null);
-  /** A write in flight. The controls stay visible and go inert: hiding them
-   *  would make the page jump under the thumb that just tapped one. */
+  /** A write in flight: controls go inert rather than hiding, so the page doesn't jump. */
   readonly saving = signal(false);
-  /** The signed-in person's own id, so "give it to me" names them rather than
-   *  a username written into a template. */
+  /** The signed-in person's id, so "give it to me" names them. */
   readonly me = computed(() => this.store.personId());
 
   /**
-   * The version this task's last edit replaced, once it has been asked for.
-   *
-   * ⚠ **Fetched on a tap, never on load.** It is a whole second body, and the
-   * reader who wants it is rare; `TaskDetail.restorable` is the cheap boolean
-   * that decides whether to offer the tap at all.
+   * The version the last edit replaced, fetched on a tap, never on load: it is a
+   * whole second body, and `TaskDetail.restorable` decides whether to offer it.
    */
   readonly previous = signal<Revision | null>(null);
   readonly peeking = signal(false);
 
   /**
-   * Closed tasks the filing that just made this one names, which its filer
-   * closed recently — see `tasks::lifecycle`. Handed over by the filing page in
-   * the navigation's state, since only that response carries them. Keyed by
-   * task, so following a link away does not carry them along.
+   * Closed tasks the filing names that its filer just closed (`tasks::lifecycle`),
+   * passed in navigation state, keyed by task so they don't follow a link away.
    */
   readonly continues = signal<{ task: number; closed: Closed[] } | null>(null);
 
-  /** When a close from this page found the text last written, if it rewrote
-   *  nothing. Keyed like `continues`. */
+  /** When a close here found the text unrewritten, keyed like `continues`. */
   readonly unwritten = signal<{ task: number; at: string } | null>(null);
 
   constructor() {
-    // The bar names the screen by the task's number: the subject is the page's
-    // headline and too long for a bar.
+    // The bar shows the number; the subject is the headline.
     scaffoldTitle(() => `#${this.id()}`);
     const handed = this.router.currentNavigation()?.extras.state as
       { filed?: number; closed?: Closed[] } | undefined;
     if (handed?.filed !== undefined && handed.closed?.length) {
       this.continues.set({ task: handed.filed, closed: handed.closed });
     }
-    // An effect rather than `ngOnInit`, because the router reuses this
-    // component when only the parameter changes: going from #4 to #7 through a
-    // link would otherwise leave #4 on the screen with #7 in the address bar.
+    // An effect, not `ngOnInit`: the router reuses this component across `#4` → `#7`.
     effect(() => {
       // Cleared with the task, or #7 would open showing #4's previous version.
       this.previous.set(null);
@@ -126,12 +106,9 @@ export class TaskView {
   }
 
   /**
-   * Show what putting it back would put back.
-   *
-   * ⚠ **Two taps, and the first one only reads**: undo overwrites the text on
-   * the page, and a one-tap control brushed by a thumb would be the accident it
-   * exists to repair. Showing the content rather than "are you sure?" answers
-   * what a reader actually asks: *what would come back*.
+   * Show what putting it back would restore. Two taps, the first only reading:
+   * undo overwrites the page, and the content answers what a reader asks better
+   * than "are you sure?".
    */
   peek(): void {
     const task = this.task();
@@ -149,8 +126,7 @@ export class TaskView {
     });
   }
 
-  /** Put both columns back. Itself an ordinary edit, so it is undoable in turn
-   *  and the history records that it happened. */
+  /** Put both columns back, as an ordinary, undoable edit. */
   restore(): void {
     const was = this.previous();
     if (!was) return;
@@ -163,8 +139,7 @@ export class TaskView {
     this.previous.set(null);
   }
 
-  /** Hand it to the person. Hidden when a session is driving the page, which
-   *  has no "me" to hand it to — it uses the CLI. */
+  /** Hand it to the person; hidden when a session drives the page. */
   moveToMe(): void {
     const me = this.me();
     if (me) this.moveTo({ kind: 'person', id: me });
@@ -194,25 +169,19 @@ export class TaskView {
     this.change({ status });
   }
 
-  /** ⚠ **No "unranked" item, matching the CLI**: nothing on this endpoint
-   *  clears a rank; a wrong one is corrected by ranking again. */
+  /** No "unranked" item, as in the CLI: rank again to correct. */
   setPriority(priority: Priority): void {
     this.change({ priority });
   }
 
-  /** Close it without doing it. Undone by tapping `open`, like any other status
-   *  — there is no separate "undrop", because there is no separate state to
-   *  come back from. */
+  /** Close it without doing it; tapping `open` undoes it. */
   drop(): void {
     this.change({ status: 'dropped' });
   }
 
   /**
-   * The whole remedy for a filing that continues a closed task, in one tap:
-   * reopen that one, drop this one, and go there.
-   *
-   * ⚠ **Reopen first.** If it fails nothing has been dropped, and the filing
-   * is still where it was.
+   * The remedy for a filing that continues a closed task, in one tap: reopen that,
+   * drop this, go there. Reopen first, so a failure drops nothing.
    */
   continueIn(closed: number): void {
     const task = this.task();
@@ -247,12 +216,10 @@ export class TaskView {
       next: (updated) => {
         this.saving.set(false);
         this.unwritten.set(updated.unwritten ? { task: task.id, at: updated.unwritten } : null);
-        // Re-read rather than patching the held object: the write also appends
-        // to the history, and a page that showed the new status beside a
-        // history that had not moved would be telling two stories. `load`
-        // clears the failure on the way through.
+        // Re-read rather than patched: the write also appended to the history, which
+        // must not disagree with the status. `load` clears the failure.
         this.load();
-        // The list this task came from is now out of date in the same way.
+        // The list is stale too.
         this.store.refresh();
       },
       error: (err: unknown) => {

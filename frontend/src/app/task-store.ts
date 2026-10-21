@@ -5,17 +5,9 @@ import { Holder, Me, Session, Task } from './models';
 import { TasksApi } from './tasks-api';
 
 /**
- * What the whole app knows, held above the views that draw it: the tasks, the
- * sessions work can be handed to, and who holds what.
- *
- * **Root-provided rather than fetched per component**
- * (`DL-ANGULAR-COMPONENT-FETCHED-LIST`): a component's own list blanks and
- * refills every time you tap a task and press back. Here a return is instant,
- * and screens sharing the sessions fetch them once.
- *
- * ⚠ **A failure is withdrawn when the next attempt succeeds**, or one dropped
- * request — ordinary on a phone on a VPN — stays on screen forever
- * (`DL-ANGULAR-ERROR-SIGNAL-STICKY`).
+ * What the whole app knows, held above the views: root-provided, so going back
+ * is instant rather than blank-and-refill (`DL-ANGULAR-COMPONENT-FETCHED-LIST`).
+ * A failure is withdrawn by the next success (`DL-ANGULAR-ERROR-SIGNAL-STICKY`).
  */
 @Injectable({ providedIn: 'root' })
 export class TaskStore {
@@ -26,11 +18,10 @@ export class TaskStore {
   readonly holders = signal<Holder[]>([]);
   readonly me = signal<Me | null>(null);
 
-  /** True until the first answer, of either kind. Only the first: a refresh
-   *  behind an already-drawn list must not blank it. */
+  /** True until the first answer only: a refresh must not blank a drawn list. */
   readonly loading = signal(true);
   readonly failed = signal<string | null>(null);
-  /** Holders or sessions could not be read: their lists are not empty, unknown. */
+  /** Holders or sessions unreadable: unknown, not empty. */
   readonly extrasFailed = signal<string | null>(null);
 
   /** The signed-in person's id, or null when a session is driving the page. */
@@ -39,14 +30,12 @@ export class TaskStore {
     return me?.kind === 'person' ? me.id : null;
   }
 
-  /** Load everything. Safe to call again — that is what a write does after it
-   *  lands, so the list, the counts and the history agree. */
+  /** Load everything; writes call it again so list, counts and history agree. */
   refresh(): void {
     this.extrasFailed.set(null);
     this.api.me().subscribe({
       next: (me) => this.me.set(me),
-      // Not recorded as a failure: the interceptor raises the sign-in wall on
-      // 401, and a second message beside it would explain nothing.
+      // Not a failure: the interceptor shows the sign-in wall on 401.
       error: () => this.me.set(null),
     });
     this.api.list().subscribe({
@@ -72,12 +61,10 @@ export class TaskStore {
 
   private loaded = false;
 
-  /** Load once. A screen calls this on the way in; the second screen to do so
-   *  gets what is already here rather than a second round trip.
-   *
-   *  A plain flag rather than "is the list empty": an empty list is a real
-   *  answer — nothing is open — and treating it as *not loaded* would refetch on
-   *  every navigation exactly when there is least to show for it. */
+  /**
+   * Load once per app: a flag, not "is it empty", since an empty list is a real
+   * answer.
+   */
   ensure(): void {
     if (this.loaded) return;
     this.loaded = true;

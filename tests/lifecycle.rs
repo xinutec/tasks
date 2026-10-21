@@ -1,12 +1,6 @@
-//! Which closed tasks a filing names that its filer recently closed.
-//!
-//! The case this exists for: a session closes a task, finds more of the same
-//! work, and files it new instead of reopening. The duplicate check compares
-//! wording and misses it when the two subjects share none; an id reference is
-//! exact.
-//!
-//! The last test goes through the router: the query being right is not the same
-//! as `create` calling it.
+//! Which closed tasks a filing names that its filer recently closed: the
+//! continuation the duplicate check misses when the wording differs. The last
+//! test goes through the router, since a right query isn't `create` calling it.
 
 mod common;
 

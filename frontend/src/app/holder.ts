@@ -1,14 +1,9 @@
 import { Assignee, Priority, Status } from './models';
 
 /**
- * How a holder and a status are drawn — one table each, keyed by the closed
- * vocabulary.
- *
- * ⚠ **`Record<Status, …>` is the point.** The unions are restated from Rust by
- * hand (see `models.ts`), so nothing links the two at compile time — but a new
- * member added here without a label, an icon and a colour is a *build* error,
- * which is the nearest thing to a link there is. Do not loosen these to
- * `Partial<>` or index them with a fallback.
+ * How holders and statuses are drawn, one table each. `Record<Status, …>` makes
+ * a new Rust member without a label, icon and colour a build error, the only
+ * link there is: never loosen to `Partial<>` or a fallback.
  */
 export const STATUS_LABEL: Record<Status, string> = {
   open: 'open',
@@ -18,16 +13,9 @@ export const STATUS_LABEL: Record<Status, string> = {
 };
 
 /**
- * What each rank means, in one line: a TEST that can fail, applied as a cascade
- * — see `Priority::gloss` in Rust.
- *
- * ⚠ **A second copy of `Priority::gloss`, and it has to say the same thing**,
- * or the user and the sessions read the levels differently. Nothing checks this
- * at build time, so change both or neither. (P4's session-only clause about
- * the prompt is left out here.)
- *
- * ⚠ **No entry for "unranked", deliberately**: absence sorts where `P2` does,
- * and is drawn as nothing at all.
+ * What each rank means: a second copy of `Priority::gloss` in Rust, which
+ * nothing checks, so change both or neither (P4's prompt clause is left out).
+ * No entry for unranked, which is drawn as nothing.
  */
 export const PRIORITY_GLOSS: Record<Priority, string> = {
   P0: 'damage is accruing — every hour it stays open costs more',
@@ -37,22 +25,18 @@ export const PRIORITY_GLOSS: Record<Priority, string> = {
   P4: 'nothing is being paid for it today',
 };
 
-/** Most urgent first, which is the order they are offered in. */
+/** Most urgent first, as offered. */
 export const PRIORITIES: Priority[] = ['P0', 'P1', 'P2', 'P3', 'P4'];
 
 export const STATUS_ICON: Record<Status, string> = {
   open: 'radio_button_unchecked',
   doing: 'pending',
   done: 'check_circle',
-  // Not a second tick in another colour: a glance has to say which closing it
-  // was, and a cross reads as "did not happen" without reading as "failed".
+  // A cross, not a second tick: it reads "didn't happen" without reading "failed".
   dropped: 'cancel',
 };
 
-/**
- * A field that is present but blank is absent: `??` alone would draw a blank
- * chip, which reads as unassigned.
- */
+/** Blank counts as absent: `??` alone would draw a blank chip, read as unassigned. */
 export function said(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed === '' || trimmed === null ? undefined : trimmed;
@@ -64,8 +48,7 @@ export function holderLabel(assignee: Assignee): string {
   return said(assignee.name) ?? said(assignee.id) ?? 'nobody';
 }
 
-/** The same rule for a session row, which has the fields loose rather than in
- *  an `Assignee`. */
+/** The same rule for a session row, whose fields are loose. */
 export function sessionLabel(session: { id: string; name?: string }): string {
   return holderLabel({ kind: 'session', id: session.id, name: session.name });
 }
@@ -83,20 +66,10 @@ export const WHO_LABEL: Record<Bucket, string> = {
 };
 
 /**
- * What the list is filtered to: one of the buckets, or ONE named holder — so
- * `/who`'s `hardware 6/31` can open onto those six.
- *
- * **Prefixed, rather than bare ids.** `session:<id>` and `person:<id>` cannot
- * collide with a bucket word, and a bare id could: `user` is a person today,
- * and nothing stops a session from being named or identified as `mine` or
- * `all`. The prefix also makes the URL say what it means when read aloud.
- *
- * There is no `nobody:` — the pile is a bucket already, and two spellings for
- * one selection is how they drift apart.
- *
- * ⚠ **Parsed, not asserted.** Casting the query parameter into a union would
- * type `?who=garbage` as a valid selection that filters nothing; one parse at
- * the edge makes "anything unrecognised is everything" a tested behaviour.
+ * What the list is filtered to: a bucket, or one holder (so `/who` can open on
+ * one). Prefixed `session:`/`person:` so an id can never collide with a bucket
+ * word; the pile is the `pile` bucket only. Parsed at the edge, so an unknown
+ * `?who=` is tested as "everything".
  */
 export type Who =
   | { kind: 'bucket'; bucket: Bucket }
@@ -111,25 +84,20 @@ function asBucket(raw: string): Bucket | undefined {
   return BUCKETS.find((bucket) => bucket === raw);
 }
 
-/**
- * Read `?who=`. Total by construction: every string is a selection, and one
- * nobody meant is everything rather than nothing.
- */
+/** Read `?who=`: every string is a selection, and an unknown one is everything. */
 export function parseWho(raw: string | null | undefined): Who {
   if (!raw) return EVERYTHING;
   const bucket = asBucket(raw);
   if (bucket) return { kind: 'bucket', bucket };
   for (const kind of ['session', 'person'] as const) {
     const id = raw.startsWith(`${kind}:`) ? raw.slice(kind.length + 1) : '';
-    // An empty id would match no holder, so the screen would show an empty list
-    // under a chip with no name in it — worse than ignoring the parameter.
+    // An empty id would show an empty list under a nameless chip: ignore it instead.
     if (id) return { kind, id };
   }
   return EVERYTHING;
 }
 
-/** The `?who=` value for a selection. `null` for the default, to keep it out
- *  of the URL entirely. */
+/** The `?who=` value; `null` for the default, keeping it out of the URL. */
 export function whoParam(who: Who): string | null {
   switch (who.kind) {
     case 'bucket':
@@ -165,8 +133,7 @@ export function inBucket(assignee: Assignee, who: Who, me: string | null): boole
         case 'all':
           return true;
         case 'mine':
-          // The signed-in id, not a hard-coded account: the allow-list is
-          // configuration.
+          // The signed-in id: the allow-list is configuration.
           return assignee.kind === 'person' && (me === null || assignee.id === me);
         case 'sessions':
           return assignee.kind === 'session';

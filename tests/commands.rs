@@ -1,8 +1,4 @@
-//! What the CLI recorded about itself.
-//!
-//! ⚠ **Every row this models is a command somebody actually ran** — the user's
-//! rule: measure what is actually going on, and do not poll. See
-//! `tasks::commands`.
+//! What the CLI recorded about itself: only commands somebody ran (see `tasks::commands`).
 
 use tasks::tasks::commands::{Ended, Ran, Tally, tally};
 
@@ -30,11 +26,9 @@ fn ran_waiting(verb: &str, ms: u32, waited: bool) -> Ran {
 /// percentiles would report the tool fastest on the day it refuses everything.
 #[test]
 fn a_failed_run_is_counted_but_never_timed() {
-    // ⚠ TWO refusals, not one, and that is what makes this test discriminate.
-    // With a single 40 ms error among two successes the median lands on 9,000
-    // either way, so the assertion passed with the guard deleted — a check that
-    // can pass for the wrong reason silences the question it was asked. Two
-    // errors move the unfiltered median to 50 ms, which is the failure to catch.
+    // ⚠ Two refusals, not one: with a single 40 ms error among two successes the
+    // median is 9,000 either way, so the test passed with the guard deleted. Two
+    // move the unfiltered median to 50 ms.
     let runs = vec![
         ran("add", 9_000, Ended::Ok),
         ran("add", 11_000, Ended::Ok),
@@ -120,11 +114,8 @@ fn the_declared_interval_puts_the_failure_at_five_days() {
     );
 }
 
-/// Splitting the latency by the variable that actually explains it.
-///
-/// ⚠ **Over both populations, `edit p90` reports the CHECK RATE**: slow edits
-/// and density reads match one for one, and the service's share of a checked
-/// edit is the same flat cost as an unchecked one.
+/// Latency split by what explains it: over both populations, `edit p90` reports
+/// the check rate, while the service's share is flat.
 mod waited {
     use super::*;
 
@@ -261,10 +252,7 @@ mod declined {
     }
 }
 
-/// Reading the outcome off the error, and never off its wording.
-///
-/// ⚠ **In the library so `tests/` can reach it**: a private function in a
-/// binary has no seam.
+/// Reading the outcome off the error, never its wording.
 mod classifying {
     use tasks::tasks::commands::{Ended, declined, ended};
 
@@ -348,10 +336,7 @@ mod what_a_bad_ending_prints {
 
     #[test]
     fn something_that_actually_went_wrong_keeps_its_chain() {
-        // ⚠ The opposite case, and it is why this is a branch rather than a
-        // blanket `{}`. A transport failure is diagnosed from its causes, and
-        // dropping them to tidy the refusal would cost the one output where the
-        // chain is the whole value.
+        // The opposite case: a transport failure keeps its chain, which is how it is diagnosed.
         let text = said(&anyhow::anyhow!("the socket went away").context("reading the open list"));
         assert!(text.contains("reading the open list"), "{text}");
         assert!(

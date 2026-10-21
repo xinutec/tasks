@@ -1,14 +1,6 @@
-//! What an edit replaced, and getting it back.
-//!
-//! ⚠ **The loss this prevents**: a session rewrites a body from a stale
-//! snapshot, and `task_events` — one rendered line — can say the body changed
-//! but not from what.
-//!
-//! The property under test is that a task has a *previous version*: a complete
-//! subject and body as they stood, restorable as a unit. Half of these pin the
-//! shape of what is stored, and half pin what is NOT stored — a change that
-//! moves no text must leave no revision, or `task undo` would put back a
-//! version nobody replaced.
+//! What an edit replaced, and getting it back: `task_events` says a body changed
+//! but not from what. A task has one complete previous version, restored whole;
+//! a change moving no text leaves none, or `undo` would restore nothing replaced.
 
 mod common;
 
@@ -28,7 +20,6 @@ async fn file(pool: &sqlx::MySqlPool, subject: &str, body: &str) -> u64 {
         pool,
         NewTask {
             subject: subject.into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: body.into(),
@@ -91,10 +82,8 @@ async fn an_edited_body_leaves_the_one_it_replaced_behind() {
 
 #[tokio::test]
 async fn a_subject_edit_snapshots_the_body_it_did_not_touch() {
-    // ⚠ **The property that makes a revision restorable as a unit.** Storing
-    // only the column that moved would leave `task undo` after a subject-only
-    // edit with no body to put back — and putting back the body from some
-    // earlier revision would restore a subject and a body that never coexisted.
+    // ⚠ Both columns always: after a subject-only edit, `undo` still needs the body,
+    // and mixing revisions would restore a pair that never coexisted.
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "the first body").await;
     edit(
@@ -186,11 +175,8 @@ async fn a_change_that_moves_no_text_leaves_no_revision() {
 
 #[tokio::test]
 async fn the_newest_revision_is_the_one_that_comes_back() {
-    // ⚠ **Pinned against `at`, not just against insertion order.** `task_events.at`
-    // is a DATETIME at one-second resolution and a subject sweep writes several
-    // edits inside one second, so ordering by time picks an arbitrary one of
-    // them. Both events are forced to the same timestamp here to make that the
-    // case under test rather than something the clock decides.
+    // ⚠ Ordered by id, not `at`, which has one-second resolution: both events are
+    // forced to one timestamp to make that the case under test.
     let pool = common::fresh_db().await;
     let id = file(&pool, "as filed", "first").await;
     edit(&pool, id, body("second")).await;

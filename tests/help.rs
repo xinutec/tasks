@@ -1,22 +1,11 @@
-//! What `--help` states about the model, which is the only place most sessions
-//! will ever read it.
-//!
-//! ⚠ **Text as a feature, not decoration.** Two facts govern how this tool is
-//! used and neither is guessable from the commands: a session never ends, and
-//! a holder's open tasks are its future work. Without them a session infers the
-//! opposite and prefers whoever is online over whoever owns the work.
-//!
-//! So these assert the remedy is present, and `--help` is where it has to be:
-//! `docs/for-sessions.md` is read once, if at all, and this is free on every
-//! `task --help` a confused session runs.
+//! What `--help` says about the model, the only place most sessions read it.
+//! Two facts aren't guessable from the commands: a session never ends, and a
+//! holder's open tasks are its future work. Without them, sessions route to
+//! whoever is online rather than whoever owns the work.
 
 use std::process::Command;
 
-/// The help text with its whitespace collapsed.
-///
-/// ⚠ **Not cosmetic: clap re-wraps to the terminal width**, so a phrase this
-/// file asserts on can be split across a newline by nothing more than where the
-/// window edge fell.
+/// The help text with whitespace collapsed: clap re-wraps to the terminal width.
 fn help(args: &[&str]) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_task"))
         .args(args)
@@ -79,10 +68,7 @@ fn the_pile_is_not_offered_as_the_cautious_choice() {
 
 #[test]
 fn editing_states_the_standard_a_body_is_held_to() {
-    // ⚠ **The rules are graded against, so they have to be READABLE BEFORE
-    // WRITING.** The same three reach a model that reads a body which has grown
-    // without being consolidated; stated only there, they arrive after the
-    // writing, which is the one moment they cannot prevent anything.
+    // The rules a body is judged against must be readable before writing, not only after.
     let help = help(&["edit", "--help"]);
     let collapsed: String = tasks::tasks::density::RUBRIC
         .split_whitespace()
@@ -98,11 +84,7 @@ fn editing_states_the_standard_a_body_is_held_to() {
     );
 }
 
-/// The words sessions typed that the tool had no answer for.
-///
-/// Taken from what sessions actually typed: each answered `unrecognized
-/// subcommand`, often without clap's "a similar subcommand exists" line, since
-/// edit distance finds no neighbour.
+/// Words sessions actually typed that got `unrecognized subcommand`.
 #[test]
 fn the_verbs_sessions_reach_for_are_the_verbs_that_work() {
     for (typed, real) in [
@@ -138,12 +120,8 @@ fn the_subject_is_not_a_flag_and_the_refusal_says_where_it_goes() {
     assert!(said.contains("first argument"), "{said}");
 }
 
-/// The CLI run by something that is not a conversation.
-///
-/// ⚠ **Clearing the two variables is the whole point.** A scheduler sets
-/// neither, and a refusal that needs no identity must not wait on one — see
-/// `Client::identified`. Supply a `--session` here and the test stops testing
-/// anything.
+/// The CLI run by something that isn't a conversation. Clearing both variables is
+/// the point (see `Client::identified`): with `--session` this tests nothing.
 fn nameless(args: &[&str]) -> std::process::Output {
     std::process::Command::new(env!("CARGO_BIN_EXE_task"))
         .args(args)

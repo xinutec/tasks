@@ -1,17 +1,10 @@
-//! Adding to a body instead of replacing it.
+//! Adding to a body instead of replacing it, which otherwise means `--body`:
+//! read, concatenate, resend, and a skipped read loses the body.
 //!
-//! ⚠ **Without this, adding prose means `--body`**, which replaces: read the old
-//! text out, concatenate by hand, send it all back — and a skipped read loses
-//! the body, often by less than the collapse guard catches.
-//!
-//! Two properties are under test, and the second is the one that could not be
-//! got by fixing this in the client:
-//!
-//! 1. **The old body survives, whole**, with exactly one blank line at the
-//!    seam — a note butted straight onto prose becomes its first sentence.
-//! 2. **The addition is resolved against the body inside the transaction that
-//!    reads it.** A client-side read-concatenate-PATCH would lose one of two
-//!    concurrent additions, and sessions do edit one task seconds apart.
+//! 1. The old body survives whole, with one blank line at the seam.
+//! 2. The addition is resolved inside the transaction that reads the body, which
+//!    a client-side read-concatenate-PATCH can't do: concurrent additions would
+//!    lose one.
 
 mod common;
 
@@ -31,7 +24,6 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
         pool,
         NewTask {
             subject: "a task with a filing worth keeping".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: body.into(),
@@ -212,26 +204,14 @@ async fn additions_compose_one_after_another() {
 
 #[tokio::test]
 async fn adding_waits_for_whoever_is_already_writing_the_body() {
-    // ⚠ **The property that made this server-side, and it needs a LOCK rather
-    // than merely a transaction.** Both updates read the body and write a
-    // version built from it. Under InnoDB's REPEATABLE READ a plain `SELECT` is
-    // a non-locking snapshot, so being inside a transaction is NOT enough: two
-    // would both read `the filing`, and whichever committed second would store
-    // a body that had never contained the other's text. `SELECT … FOR UPDATE`
-    // is what makes the second wait and then read what the first wrote.
+    // ⚠ This needs a lock, not just a transaction: under REPEATABLE READ a plain
+    // `SELECT` doesn't lock, so both updates would read the old body and the second
+    // commit would drop the first's text. `FOR UPDATE` makes the second wait.
     //
-    // ⚠ **Gentler shapes of this test pass against the BROKEN code**, which is
-    // why it is shaped so awkwardly:
-    //
-    // * A `tokio::join!` of two updates — `join!` polls the first until it
-    //   yields, and a local MariaDB is fast enough that the two rarely overlap
-    //   where it matters.
-    // * Asserting that the addition merely BLOCKS. It does block —
-    //   on the `UPDATE`, not the read — and then writes the body it built from
-    //   text that had already been replaced. Blocking is not the property; not
-    //   losing the other write is.
-    //
-    // So this drives the interleaving by hand and asserts on the TEXT.
+    // Gentler versions pass against the broken code: `tokio::join!` rarely
+    // overlaps the critical part, and asserting the update merely blocks is wrong
+    // too (it blocks on the `UPDATE`, then writes stale text). So this drives the
+    // interleaving by hand and asserts on the text.
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 
@@ -278,10 +258,7 @@ async fn adding_waits_for_whoever_is_already_writing_the_body() {
 
 #[tokio::test]
 async fn the_collapse_guard_cannot_fire_on_something_that_only_grows() {
-    // The guard refuses a body that keeps under a quarter of itself. Adding to
-    // one can never do that, so `--replace-body` is never needed here — and if
-    // it ever were, the guard would be refusing the operation that exists to
-    // stop bodies being lost.
+    // An addition can never trip the collapse guard, so `--replace-body` is never needed here.
     let pool = common::fresh_db().await;
     let long = "word ".repeat(600); // 3,000 characters: well over the threshold
     let id = file(&pool, &long).await;
@@ -336,10 +313,8 @@ async fn the_history_counts_an_addition_as_what_it_is() {
 
 #[tokio::test]
 async fn the_reply_counts_the_body_that_was_written_not_the_one_that_was_sent() {
-    // ⚠ **`Replaced.now` must come from the resolved body, not `change.body`**,
-    // which an addition leaves at None — the reply would say `10 → 10 chars`
-    // over an addition. That line exists to make a session look twice at what
-    // it replaced, so "nothing moved" is the wrong answer that reassures.
+    // ⚠ `Replaced.now` comes from the resolved body: `change.body` is None for an
+    // addition, and the reply would say "nothing moved", the wrong reassurance.
     let pool = common::fresh_db().await;
     let id = file(&pool, "the filing").await;
 

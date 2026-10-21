@@ -1,16 +1,6 @@
-//! What a refused request body says back, driven through the real router.
-//!
-//! Why the refusal names the legal answers: see `crate::wire`.
-//!
-//! Who reads these: not the CLI (clap refuses first) and not the app (the
-//! button stays disabled), so the bare-API path — a hand-written script, or a
-//! phone running an old bundle that posts without the key.
-//!
-//! A refused body never reaches the database — an extractor answers before the
-//! handler runs — so these take a lazy pool pointed at nothing, the way
-//! `tests/access.rs` does. Two tests are deliberately the other way round and
-//! say so: `a_change_may_still_leave_priority_out` uses the unreachable pool as
-//! its evidence, and `filing_a_whole_task_still_works` takes the real one.
+//! What a refused body says back, through the real router (why: `crate::wire`).
+//! The audience is the bare API: scripts, or an old app bundle. A lazy pool,
+//! since extractors answer before the handler; two tests say why they differ.
 
 mod common;
 
@@ -105,10 +95,8 @@ async fn a_refused_body_answers_in_the_services_own_error_shape() {
     );
 }
 
-/// ⚠ **The ablation.** Delete the missing-key arm and the test above fails —
-/// but so would a version that answered the same 400 to *everything*, which
-/// would be worse than serde: it would name a fault the caller does not have.
-/// A key that is present and wrong must still be refused for what it is.
+/// ⚠ The ablation: a version answering the same 400 to everything would pass the
+/// test above, so a present but wrong key must be refused for what it is.
 #[tokio::test]
 async fn a_priority_that_is_present_and_wrong_is_refused_for_that() {
     let (status, body) = post(
@@ -149,13 +137,8 @@ async fn a_change_may_still_leave_priority_out() {
         )
         .await
         .expect("the router answered");
-    // ⚠ **500 is the PASS here, and it is asserted rather than merely allowed.**
-    // The body got through extraction and the handler then went looking for a
-    // database that is not there — which is exactly the evidence wanted, since
-    // nothing downstream of the extractor can run until the extractor lets go.
-    // `assert_ne!(BAD_REQUEST)` would have said the same thing about a 401,
-    // i.e. it would still pass on the day this stopped reaching the handler at
-    // all.
+    // ⚠ 500 is the pass: the body got past extraction and the handler found no
+    // database. `assert_ne!(BAD_REQUEST)` would also pass on a 401.
     assert_eq!(
         res.status(),
         StatusCode::INTERNAL_SERVER_ERROR,
@@ -164,10 +147,8 @@ async fn a_change_may_still_leave_priority_out() {
     );
 }
 
-/// ⚠ **A gate on the extractor itself.** Everything above is about REFUSALS,
-/// and an extractor that refused every body would pass all of it. This is the
-/// one test here that needs the database, because accepting a filing means
-/// writing it.
+/// ⚠ Everything above is about refusals, which an extractor refusing everything
+/// would pass; this one accepts a filing, so it needs the database.
 #[tokio::test]
 async fn filing_a_whole_task_still_works() {
     let pool = common::fresh_db().await;
@@ -190,11 +171,8 @@ async fn filing_a_whole_task_still_works() {
     assert_eq!(task["subject"], "A filing that says how urgent it is");
 }
 
-/// The response types survive a round trip, with the absent fields absent.
-///
-/// ⚠ **This is what lets the CLI read typed responses** instead of re-deriving
-/// the library's rules on raw JSON. It pins the ordinary case — every optional
-/// field absent — which a missing `#[serde(default)]` would break.
+/// The response types round-trip with absent fields absent, so the CLI can read
+/// typed responses; a missing `#[serde(default)]` breaks this.
 mod a_response_comes_back_as_itself {
     use chrono::Utc;
     use tasks::tasks::types::{Assignee, AssigneeKind, Status, Task};

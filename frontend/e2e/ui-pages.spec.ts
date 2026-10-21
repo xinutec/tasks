@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
-// The fleet-shared harness, published as @xinutec/ui-harness (source repo
-// ~/Code/ui-harness). Ships compiled JS, so it loads straight from node_modules.
+// The fleet's harness (`@xinutec/ui-harness`, ~/Code/ui-harness), shipped as compiled JS.
 import {
   expectIconFontLoaded,
   expectNoHorizontalOverflow,
@@ -14,27 +13,20 @@ import type { Created, Updated } from '../src/app/models';
 import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
- * L2 phone-width layout harness. Render the real screens at a Pixel viewport
- * with the backend mocked and BUSY data, and assert the failure classes that
- * read fine in source and only show on a real phone: text that collides, and
- * anything spilling past the right edge.
- *
- * ⚠ **These checks are geometry, and geometry is not the whole of it**: a
- * truncated label or text drawn over a border passes them. `shots.spec.ts` is
- * the other half.
+ * Phone-width layout checks: real screens at a Pixel viewport, mocked backend,
+ * busy data, asserting collisions and right-edge overflow. Geometry isn't
+ * everything; `shots.spec.ts` is the other half.
  */
 
-// The checker-checker: fail loudly here if the device preset is ever lost and
-// the "phone width" suite silently runs at desktop width.
+// Fail if the device preset is lost and the suite runs at desktop width.
 test('the suite really runs at phone geometry', async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
   await expectViewportIsPhone(page);
 });
 
-// A service worker can serve an index naming a bundle a later deploy removed, and
-// the app's own recovery is inside that bundle (dev-lint #1803). The recovery is
-// inline in `src/index.html`; this is the check that it is there and works.
+// A service worker can serve an index naming a removed bundle; the recovery is
+// inline in `src/index.html`, and this checks it works.
 test('a bundle a deploy removed reloads into the app, not a blank screen', async ({ page }) => {
   await mockApi(page);
   await expectRecoversFromMissingBundle(page, '/', 'text=Stop walking every transcript');
@@ -46,14 +38,10 @@ test('the list — long subjects beside a holder chip @ phone width', async ({ p
   await page.getByText('Stop walking every transcript').waitFor();
   await expectIconFontLoaded(page);
   await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
-  // A holder chip is capped and told to ellipsise; clipped TEXT elsewhere is a
-  // cap somebody added without meaning to.
+  // Holder chips ellipsise by design; clipped text elsewhere is a mistake.
 });
 
-/**
- * The filter row scrolls sideways BY DESIGN. Wrapping it would push the list
- * itself below the fold on a phone — the one thing the screen is for.
- */
+/** The filter row scrolls sideways by design: wrapping it pushes the list below the fold. */
 const FILTER_SCROLLERS = ['.filters .row'];
 
 test('the list — filtered to one holder @ phone width', async ({ page }, testInfo) => {
@@ -64,11 +52,7 @@ test('the list — filtered to one holder @ phone width', async ({ page }, testI
   await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
 });
 
-/**
- * Fenced code and wide tables in a task body scroll horizontally BY DESIGN — a
- * shell command must not be reflowed to be readable. They are named explicitly,
- * since the harness refuses to infer that from `overflow-x`.
- */
+/** Code blocks and tables scroll sideways by design, named since the harness won't infer it. */
 const MD_SCROLLERS = ['.md-content pre', '.md-content table'];
 
 test('a task — a 200-character subject, prose, and a raw session id in the history @ phone width', async ({
@@ -91,14 +75,10 @@ test('a task — the move menu, with an unnamed session in it @ phone width', as
   await mockApi(page);
   await page.goto('/t/92');
   await page.locator('.move').click();
-  // The unnamed session is drawn as its 36-character id; the menu is where that
-  // has the least room.
+  // The unnamed session's id has least room in this menu.
   await page.getByRole('menuitem', { name: SESSIONS[1].id }).waitFor();
-  // ⚠ **Scoped to the overlay, not the page.** An open menu is *supposed* to
-  // cover what is under it, so a whole-page overlap check reports every line of
-  // the task body against every menu item — four "collisions" that are the
-  // feature working. What is worth asserting is that the menu does not collide
-  // with itself, and that a 36-character id does not push it off the screen.
+  // ⚠ Scoped to the overlay: an open menu covers the page by design. Asserted: it
+  // doesn't collide with itself, and a long id doesn't push it off screen.
   await expectCleanLayout(page, testInfo, { root: '.mat-mdc-menu-panel' });
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
 });
@@ -109,8 +89,7 @@ test('a task — the overflow menu, whose one item is a sentence @ phone width',
   await mockApi(page);
   await page.goto('/t/92');
   await page.getByRole('button', { name: 'More actions' }).click();
-  // The label is a phrase rather than a verb, because "drop" alone reads as
-  // "delete" — and a phrase in a menu on a phone is where width runs out.
+  // A phrase, since "drop" alone reads as "delete"; phrases are where width runs out.
   await page.getByRole('menuitem', { name: 'Drop it' }).waitFor();
   await expectCleanLayout(page, testInfo, { root: '.mat-mdc-menu-panel' });
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);
@@ -185,7 +164,7 @@ test('filing a task that names one you just closed @ phone width', async ({ page
   await page.getByRole('link', { name: '#89' }).waitFor();
   await expectCleanLayout(page, testInfo, { allow: MD_SCROLLERS });
 
-  // The one tap: reopen #89 FIRST, then drop the filing, then go to #89.
+  // One tap: reopen the closed task first, then drop the filing, then go there.
   const patches: string[] = [];
   page.on('request', (req) => {
     if (req.method() === 'PATCH') patches.push(`${new URL(req.url()).pathname} ${req.postData()}`);

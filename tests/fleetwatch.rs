@@ -147,13 +147,9 @@ mod what_reaches_the_wire {
     }
 }
 
-/// The fixtures above are hand-written JSON, and that is a gap of its own.
-///
-/// ⚠ **A field renamed on `Tally` would zero every line here and fail nothing.**
-/// `checks()` reads `line["spoke"]` out of a `Value` and falls back to 0, so the
-/// only thing tying its keys to the service's wire format is that somebody typed
-/// them the same way twice. This drives the REAL structs through `serde` and
-/// asserts the numbers survive.
+/// The fixtures above are hand-written JSON. ⚠ `checks()` reads keys out of a
+/// `Value` and falls back to 0, so a renamed `Tally` field would zero every line
+/// and fail nothing. This drives the real structs through serde.
 #[test]
 fn the_keys_are_the_ones_the_service_actually_sends() {
     use tasks::tasks::checks::{Kind, Tally as CheckTally};
@@ -203,12 +199,8 @@ fn the_keys_are_the_ones_the_service_actually_sends() {
     assert_eq!(value("edit latency"), 27_000.0);
 }
 
-/// The lines about the WORK, driven from the real tally.
-///
-/// ⚠ **Same gap, same guard as `the_keys_are_the_ones_the_service_actually_sends`.**
-/// `checks()` reads `work["sprawling"]` out of a `Value` and falls back to
-/// skipping the line, so a field renamed on `work::Tally` would silently drop
-/// the series and fail nothing. This drives the struct through serde.
+/// The work lines from the real tally, for the same reason: a renamed
+/// `work::Tally` field would silently drop its series.
 mod the_work {
     use super::*;
     use tasks::tasks::work::Tally;
@@ -260,10 +252,7 @@ mod the_work {
 
     #[test]
     fn a_count_that_could_not_be_taken_sends_nothing() {
-        // ⚠ **Zero is a legitimate reading** — it is what an empty tracker looks
-        // like — so a failed query must not answer with one. `standing()` is
-        // called with `.ok()` in the route for exactly this, and the section is
-        // skipped rather than zeroed.
+        // Zero is a real reading, so a failed query skips the section rather than reporting zeros.
         let built = from(None);
         assert!(
             !built.iter().any(|c| c["label"] == "open tasks"),
@@ -273,10 +262,8 @@ mod the_work {
 
     #[test]
     fn a_missed_deadline_is_the_one_thing_here_that_claims_a_bound() {
-        // Zero is defensible: a deadline is the only thing in this tracker that
-        // somebody outside it set, the digest already shouts OVERDUE, and the
-        // rank escalates a week out. The rest have no derived bound, so a
-        // verdict on them would publish a guess as a measurement.
+        // A bound only for overdue: deadlines are set from outside and already shouted.
+        // The rest have no derived bound.
         let clear = from(Some(standing()));
         assert_eq!(line(&clear, "tasks past their deadline")["verdict"], "pass");
         assert_eq!(line(&clear, "open tasks")["verdict"], "pass");

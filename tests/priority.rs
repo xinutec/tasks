@@ -1,15 +1,8 @@
 //! What `P0`–`P4` do to an order, against a real MariaDB.
 //!
-//! ⚠ **The whole feature is one `COALESCE`, and it is written twice.** The SQL
-//! sorts on `COALESCE(t.priority, 'P2')` and Rust answers the same question in
-//! [`Priority::rank`]; only a test keeps them level. A drift is silent — every list still
-//! returns every task, in an order nobody notices is wrong until the thing they
-//! ranked `P0` is not at the top.
-//!
-//! ⚠ **The second property is the one that is easy to get backwards**, and it is
-//! why unranked is not simply sorted last: ranking a task `P4` must push it
-//! DOWN, past the tasks nobody has read. "Ranked first, unranked after" would
-//! lift *when there is room* above every untriaged ticket.
+//! ⚠ The feature is one `COALESCE`, written twice (SQL and [`Priority::rank`]);
+//! only a test keeps them level. And unranked is not simply last: `P4` must sink
+//! below the unread tasks.
 
 mod common;
 
@@ -23,7 +16,6 @@ fn human() -> Actor {
 fn filed(subject: &str, priority: Option<Priority>) -> NewTask {
     NewTask {
         subject: subject.into(),
-        // The check ran: these file through the service the way a session does.
         checked: true,
         not_duplicate_of: Vec::new(),
         body: String::new(),
@@ -76,11 +68,8 @@ async fn nothing_is_ranked_unless_somebody_ranks_it() {
     assert_eq!(task.priority, None, "an unasked-for rank appeared");
 }
 
-/// The ordering, end to end, with the two directions in one fixture.
-///
-/// Filed in an order that is neither the id order nor the answer, so a `list`
-/// that forgot to sort at all, or sorted only by id, fails rather than passing
-/// by luck.
+/// The ordering end to end, filed in an order that is neither id order nor the
+/// answer, so a missing sort can't pass by luck.
 #[tokio::test]
 async fn ranks_rise_and_sink_around_the_untriaged() {
     let pool = common::fresh_db().await;
@@ -110,12 +99,7 @@ async fn ranks_rise_and_sink_around_the_untriaged() {
     );
 }
 
-/// The two spellings of the same rule, compared rather than assumed.
-///
-/// `Priority::rank` is the Rust one and `COALESCE(priority, 'P2')` is the SQL
-/// one. This sorts one fixture with each and asserts they agree, so a change to
-/// either that is not made to the other fails here instead of in a list nobody
-/// is checking.
+/// The Rust and SQL spellings of the rule, compared on one fixture.
 #[tokio::test]
 async fn the_sql_order_is_the_one_rust_describes() {
     let pool = common::fresh_db().await;
@@ -206,11 +190,7 @@ async fn re_ranking_a_task_to_what_it_already_is_writes_no_history() {
     assert!(again.changed.is_empty(), "{:?}", again.changed);
 }
 
-/// ⚠ **A rank must not leak into what counts as open.**
-///
-/// `still_open!` is the only place the open/closed vocabulary is spelled in SQL,
-/// and the ordering clause sits beside it in the same builder. A `P4` task is
-/// still work; a closed one is still closed whatever it is ranked.
+/// ⚠ A rank must not change what counts as open; the clauses sit side by side in one builder.
 #[tokio::test]
 async fn ranking_changes_the_order_and_nothing_else() {
     let pool = common::fresh_db().await;
@@ -236,12 +216,9 @@ async fn ranking_changes_the_order_and_nothing_else() {
     );
 }
 
-/// The wire contract: a filer must SAY, and `null` is a legal thing to say.
-///
-/// ⚠ **These are serde tests on purpose.** The rule lives in the shape of
-/// `NewTask`, not in a runtime check inside `create`, so the thing to pin is
-/// what the deserialiser accepts — every client reaches the service through it,
-/// and a rule enforced in one client is not a rule.
+/// The wire contract: a filer must say, and `null` is a legal answer. Serde
+/// tests, because the rule is the shape of `NewTask`, which every client goes
+/// through.
 mod filing {
     use tasks::tasks::repo::NewTask;
     use tasks::tasks::types::{Priority, Ranking};
@@ -278,10 +255,7 @@ mod filing {
         assert_eq!(new.priority, Ranking::At(Priority::P1));
     }
 
-    /// Absence still means *leave it alone* everywhere else, and that contrast
-    /// is the reason the rule is legible: `body`, `due`, `blocked_on` and
-    /// `assignee` all stay optional, so the one required field reads as a
-    /// deliberate exception rather than an inconsistency.
+    /// Everything else stays optional, so the one required field reads as deliberate.
     #[test]
     fn every_other_field_is_still_optional() {
         let new: NewTask = serde_json::from_str(r#"{"subject":"Something","priority":null}"#)
@@ -293,11 +267,7 @@ mod filing {
     }
 }
 
-/// What a session types when it means P3.
-///
-/// A bare digit has no other meaning at this flag and the stored spelling stays
-/// `P3`, so it is accepted. Anything that is not a level is still an error: a
-/// silent default would file work at a rank nobody chose.
+/// A bare digit means its level; anything else is still an error, never a default.
 #[test]
 fn a_bare_digit_is_the_level_a_session_meant() {
     use std::str::FromStr;

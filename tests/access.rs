@@ -1,10 +1,6 @@
-//! Who gets in, and as whom.
-//!
-//! Driven through the real router in-process, because the person/session split
-//! is a security property and should not rest on reading the code. None of
-//! these requests reaches the database — the pool is lazy and the handlers here
-//! answer before touching it — which is deliberate: an access rule that can only
-//! be tested with a server running is one that stops being tested.
+//! Who gets in, and as whom, through the real router: a security property
+//! shouldn't rest on reading the code. No request here reaches the database (the
+//! pool is lazy), so these run without a server.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -278,12 +274,8 @@ async fn healthz_answers_without_a_credential() {
     assert_eq!(body, "ok");
 }
 
-/// ⚠ **An unknown `/api` path must be a 404, not the page.**
-///
-/// The API is nested under `/api` and the SPA fallback sits on the outer app, so
-/// without a fallback of its own an unknown path comes back `200 text/html`.
-/// `spa()` passes `/api/nonsense`, which has no dot, and the CLI's symptom
-/// names itself rather than the URL.
+/// ⚠ An unknown `/api` path must 404, not get the page: without its own
+/// fallback it falls through to `spa()` (no dot) and answers `200 text/html`.
 #[tokio::test]
 async fn an_api_path_that_is_not_a_route_is_a_404() {
     let app = app(Some(TOKEN));

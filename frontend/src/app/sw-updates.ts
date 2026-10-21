@@ -7,27 +7,19 @@ import {
 } from '@xinutec/ui-harness/sw-updates';
 import { filter } from 'rxjs';
 
-/** Marks that we have already auto-reloaded out of an unrecoverable service worker
- *  state. Session-scoped so it survives that very reload. Keep the key stable, so a
- *  tab mid-recovery across an upgrade still sees its mark. */
+/** Marks that we already reloaded out of a broken service worker; session-scoped, a stable key. */
 const RECOVERY_KEY = 'tasks.sw-recovery-attempted';
 
 /**
- * Self-update — the Angular wiring. The rules live in
- * `@xinutec/ui-harness/sw-updates`, unit-tested there; this is the adapter.
- *
- * The shell is cached so the app opens without the network. ⚠ **ngsw alone
- * would then cache a build that never learns a newer one exists** — yesterday's
- * list, indefinitely, looking fine.
+ * Self-update, the Angular adapter for `@xinutec/ui-harness/sw-updates`. The
+ * cached shell would otherwise never learn a newer build exists.
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdates {
   private readonly sw = inject(SwUpdate);
 
   private readonly serviceWorker: ServiceWorkerPort = ((sw: SwUpdate) => ({
-    // Bound to a local, not `this`: an object-literal getter does not capture the
-    // enclosing `this` lexically, and a copied boolean would freeze `isEnabled` at
-    // construction when start() must read the live value.
+    // A local, not `this`: a getter in an object literal doesn't capture `this`, and a copy would freeze.
     get isEnabled(): boolean {
       return sw.isEnabled;
     },
@@ -37,9 +29,8 @@ export class SwUpdates {
         .subscribe(() => handler());
     },
     onUnrecoverable: (handler: () => void): void => {
-      // The cached build is broken and the server no longer holds the files to repair
-      // it — what a roll-forward deploy of :latest leaves a client whose cache was
-      // evicted meanwhile. Nothing recovers from here except a fresh load.
+      // The cache is broken and the server no longer has the files (a roll-forward
+      // after eviction): only a fresh load recovers.
       sw.unrecoverable.subscribe(() => handler());
     },
     checkForUpdate: () => sw.checkForUpdate(),
@@ -55,8 +46,6 @@ export class SwUpdates {
     },
     recoveryAttempted: () => sessionStorage.getItem(RECOVERY_KEY) !== null,
     markRecoveryAttempted: () => sessionStorage.setItem(RECOVERY_KEY, '1'),
-    // Routed through the method below rather than called directly, so a test can
-    // assert "this would have reloaded" without navigating the test runner.
     reload: () => this.reload(),
     now: () => Date.now(),
   };
@@ -67,8 +56,7 @@ export class SwUpdates {
     this.policy.start();
   }
 
-  /** The one place the page is thrown away. Its own method so tests can assert
-   *  "this would have reloaded" without navigating the test runner. */
+  /** The one place the page is thrown away, a method so tests can assert it. */
   reload(): void {
     document.location.reload();
   }

@@ -1,16 +1,10 @@
-//! Refusing the write that is not an edit.
+//! Refusing the write that is not an edit: a session takes `--json`'s
+//! `detailed` boolean for the prose and writes `True` over the body.
 //!
-//! ⚠ **The write this stops**: a session reads `--json`, takes `detailed` — the
-//! BOOLEAN that says whether prose exists — for the prose, and writes `True`
-//! over the body.
-//!
-//! The property under test is that a body which keeps almost nothing of the one
-//! it replaces is refused unless somebody says they mean it. Half of these pin
-//! what is refused; the other half pin what is NOT, because a guard that fires
-//! on ordinary rewrites is one everybody learns to switch off. The most
-//! important of those is [`putting_back_a_body_an_edit_had_grown`]: undo sends
-//! a shorter body than the one it replaces, so a guard that cannot tell it
-//! apart would block the only recovery there is.
+//! Half of these pin what is refused, half what is not: a guard that fires on
+//! ordinary rewrites gets switched off. The key one is
+//! [`putting_back_a_body_an_edit_had_grown`]: undo sends a shorter body, and
+//! blocking it would block the only recovery.
 
 mod common;
 
@@ -26,7 +20,6 @@ async fn file(pool: &sqlx::MySqlPool, body: &str) -> u64 {
         pool,
         NewTask {
             subject: "a task with prose behind it".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: body.into(),
@@ -115,10 +108,9 @@ async fn a_refused_edit_leaves_no_trace() {
         .await
         .expect_err("a 3,000-character body was emptied");
 
-    // ⚠ The refusal happens inside the transaction, after the row has been read
-    // and possibly after a subject has been written. If that did not roll back,
-    // a rejected edit would still move half the task and leave a history row
-    // saying so — and `restorable` would offer to undo a change nobody made.
+    // ⚠ Refused inside the transaction, possibly after the subject was written: it
+    // must roll back, or a rejected edit moves half the task and `restorable` offers
+    // to undo a change nobody made.
     let after = repo::get(&pool, id).await.expect("reading").expect("there");
     assert_eq!(after.events.len(), before.events.len(), "history moved");
     assert!(!after.restorable, "a refused edit left a revision behind");
@@ -178,10 +170,8 @@ async fn putting_back_a_body_an_edit_had_grown() {
         .await
         .expect("growing a body");
 
-    // ⚠ **The undo now looks exactly like the mistake**: 600 characters
-    // replacing 4,000, well under the share the guard wants kept. It is let
-    // through because whoever restores has just read what they are restoring,
-    // which is the one thing the collapsing write never did.
+    // ⚠ This undo looks exactly like the mistake (600 characters replacing 4,000);
+    // it passes because whoever restores has just read what they restore.
     let was = repo::previous(&pool, id, &human())
         .await
         .expect("a revision")

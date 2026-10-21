@@ -1,13 +1,6 @@
-//! Whose edit an undo would revert.
-//!
-//! ⚠ **`task undo` reverts *the* last edit, not *your* last edit.** A session
-//! that undoes its own mistake seconds after another session edited the same
-//! task takes back the other session's write.
-//!
-//! Under test is the fact the CLI needs in order to refuse: [`Revision::mine`],
-//! answered against the STORED identity rather than the rendered label. A
-//! guard that answers "is this mine" wrongly is worse than none: it blocks a
-//! caller from its own work or waves through somebody else's.
+//! Whose edit an undo would revert. ⚠ `task undo` reverts the last edit, maybe
+//! another session's. Under test is [`Revision::mine`], judged on stored identity,
+//! not the label: wrong either way, it blocks your own undo or allows theirs.
 
 mod common;
 
@@ -36,7 +29,6 @@ async fn file(pool: &sqlx::MySqlPool, who: &Actor) -> u64 {
         pool,
         NewTask {
             subject: "a task two conversations both touch".into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: "as first written".into(),

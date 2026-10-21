@@ -14,13 +14,7 @@ import { Assignee, Priority } from './models';
 import { TaskStore } from './task-store';
 import { TasksApi } from './tasks-api';
 
-/**
- * File a task.
- *
- * ⚠ **The subject field is capped at the column's length, and says so**: the
- * subject is the only part of a task that reaches a prompt, every turn, and the
- * field is where that is cheapest to explain.
- */
+/** File a task. The subject is capped at the column and says so: it reaches every prompt. */
 @Component({
   selector: 'app-new-view',
   templateUrl: './new-view.html',
@@ -47,12 +41,9 @@ export class NewView {
   readonly body = signal('');
   readonly to = signal<string>('nobody');
   /**
-   * Three states, and `undefined` is the one that matters: NOT YET ANSWERED.
-   *
-   * ⚠ **It does not start on a value**, because a control that starts on one
-   * answers for the filer. `null` here is `unassessed` — a real answer meaning
-   * *nobody has judged this* — and it has to be chosen, the same way a level
-   * does. Filing is blocked until one of the six is picked.
+   * Three states: `undefined` is not yet answered, `null` is a chosen
+   * `unassessed`. No starting value, which would answer for the filer; filing is
+   * blocked until one of the six is picked.
    */
   readonly priority = signal<Priority | null | undefined>(undefined);
   readonly priorities = PRIORITIES;
@@ -73,15 +64,9 @@ export class NewView {
   }
 
   /**
-   * Where the new task goes — always stated, never left out.
-   *
-   * ⚠ **Absence is not the pile**: the service files a task to whoever is
-   * filing it unless told otherwise, so `undefined` for "nobody" would put the
-   * task on the user. The pile is a choice, and travels as one.
-   *
-   * The one case that still returns nothing is "me" before `/api/me` has
-   * answered: there is no id to send, and letting the service infer the person
-   * it already knows is asking is right rather than a fallback.
+   * Where the new task goes, always stated: absent means the filer, not the pile.
+   * Only "me" before `/api/me` answers sends nothing, and then the service
+   * rightly infers the person.
    */
   private assignee(): Assignee | undefined {
     const to = this.to();
@@ -96,10 +81,8 @@ export class NewView {
   file(): void {
     const subject = this.subject().trim();
     const priority = this.priority();
-    // `undefined` is unanswered; `null` is a chosen `unassessed`. The button
-    // is disabled in the same state, so this is the second of two guards.
-    // The pile needs its reason, and the service refuses without one. Guarded
-    // here so the form says so instead of round-tripping to a 400.
+    // Unanswered: the button is disabled too, so this is the second guard. The
+    // pile needs its reason; checked here rather than via a 400.
     const spare = this.spare().trim();
     if (this.to() === 'nobody' && !spare) return;
     if (!subject || priority === undefined || this.saving()) return;
@@ -109,15 +92,12 @@ export class NewView {
       .create({
         subject,
         body: this.body(),
-        // SENT, always — null for unassessed. The service refuses an omitted
-        // key: it cannot be skipped.
+        // Always sent, null for unassessed: the service refuses an omitted key.
         priority,
         assignee: this.assignee(),
-        // Sent only with the pile: the service refuses a reason that arrives
-        // beside a real holder, because it would say nothing true about it.
+        // Only with the pile; refused beside a real holder.
         ...(this.to() === 'nobody' ? { spare } : {}),
-        // The UI has no way to skip the duplicate check, so this is always
-        // true — and it says so rather than relying on the service's default.
+        // The UI can't skip the check, and says so explicitly.
         checked: true,
       })
       .subscribe({
@@ -125,15 +105,13 @@ export class NewView {
           this.saving.set(false);
           // The list does not know about this one yet.
           this.store.refresh();
-          // Straight to the task rather than back to the list: the next thing
-          // wanted after filing one is usually to add to it.
+          // Straight to the task: the next thing is usually to add to it.
           void this.router.navigate(['/t', task.id], {
             // `task-view` shows these; only this response carries them.
             state: { filed: task.id, closed: task.closed ?? [] },
           });
         },
-        // The service's own message, which says which field was wrong — a
-        // generic "could not save" here would send somebody guessing.
+        // The service's message, which names the field.
         error: (err: unknown) => {
           this.saving.set(false);
           this.failed.set(reason(err));

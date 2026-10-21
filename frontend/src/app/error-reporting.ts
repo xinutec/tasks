@@ -1,7 +1,5 @@
 /**
- * What the user met and nobody else saw — an uncaught error, a failed request —
- * into the activity trace, which already reaches the server's log: a phone has
- * no console anyone reads.
+ * Uncaught errors and failed requests, into the trace that reaches the server log: a phone's console is unread.
  */
 import { ErrorHandler, inject, Injectable, Injector } from '@angular/core';
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
@@ -9,8 +7,7 @@ import { catchError, throwError } from 'rxjs';
 
 import { Telemetry } from './telemetry';
 
-/** The message of anything thrown, unwrapping a rejected promise: `String()` of
- *  a plain object says nothing. */
+/** The message of anything thrown, unwrapping rejections; `String()` of an object says nothing. */
 export function messageOf(error: unknown): string {
   const inner =
     typeof error === 'object' && error !== null && 'rejection' in error ? error.rejection : error;
@@ -21,8 +18,7 @@ export function messageOf(error: unknown): string {
 
 @Injectable()
 export class TelemetryErrorHandler implements ErrorHandler {
-  // Resolved on first use: the trace needs the Router, which cannot be built
-  // before the ErrorHandler it would report to.
+  // On first use: the trace needs the Router, which can't exist before the ErrorHandler.
   private readonly injector = inject(Injector);
 
   handleError(error: unknown): void {

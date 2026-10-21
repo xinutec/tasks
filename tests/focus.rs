@@ -1,16 +1,9 @@
-//! What a focused session's prompt says, and what it must never stop saying.
+//! What a focused prompt says, and must never stop saying. ⚠ Focus is the only
+//! thing hiding an open task, so the tests that pin what breaks through matter
+//! most: a buried P0 would fail silently.
 //!
-//! ⚠ **Focus is the only thing in the service that hides an OPEN task**, so
-//! these are not tests about a convenience. Half of them pin what goes quiet;
-//! the other half pin what refuses to, and the second half is the important
-//! one — a focus that could bury a P0 filed while it ran would make the whole
-//! feature unsafe to use, and the failure would be silence, which nothing
-//! reports.
-//!
-//! The render tests are pure and take a [`Focus`] directly: expiry is decided
-//! in [`focus::current`] and nowhere else, so `render` is given a period that
-//! holds and never consults a clock. The database tests below cover the other
-//! half — entering, replacing, lapsing, and the two things `enter` refuses.
+//! Render tests take a [`Focus`] directly: expiry lives in [`focus::current`]
+//! alone. The database tests cover entering, replacing, lapsing and refusals.
 
 mod common;
 
@@ -123,10 +116,7 @@ fn a_focus_that_hides_nothing_still_says_it_is_on() {
 
 #[test]
 fn a_p0_arrives_whatever_the_focus_is() {
-    // ⚠ **The reason this is safe to use at all.** The user filing a P0 is the
-    // drop-everything signal; a four-hour focus that could swallow one filed
-    // five minutes into it would make the feature a way to miss the only task
-    // that was meant to interrupt.
+    // ⚠ A P0 filed mid-focus must break through: it is the drop-everything signal.
     let mut urgent = mine(9, "the roof is off");
     urgent.priority = Some(Priority::P0);
     let out = render(&[mine(1, "what I am on"), urgent], Some(&on(&[1])));
@@ -138,11 +128,7 @@ fn a_p0_arrives_whatever_the_focus_is() {
 
 #[test]
 fn a_raised_rank_arrives_the_same_way_a_chosen_one_does() {
-    // ⚠ **`escalated_to`, not `priority`.** A deadline inside the week raises a
-    // task to P0 without anything being written, and reading the chosen rank
-    // here would let a focus bury precisely the task the escalation exists to
-    // raise — the one case where the two columns disagree is the one that
-    // matters.
+    // ⚠ By `escalated_to`, not `priority`: a near deadline raises a task to P0 without a write.
     let mut soon = mine(9, "due on Tuesday");
     soon.priority = Some(Priority::P3);
     soon.escalated_to = Some(Priority::P0);
@@ -252,7 +238,6 @@ async fn a_task(pool: &sqlx::MySqlPool, subject: &str) -> u64 {
         pool,
         NewTask {
             subject: subject.into(),
-            // The check ran: these file through the service the way a session does.
             checked: true,
             not_duplicate_of: Vec::new(),
             body: String::new(),

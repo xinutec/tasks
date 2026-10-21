@@ -1,9 +1,6 @@
-//! The index a prompt receives.
-//!
-//! The one file whose assertions are about *cost*. Every other test asks
-//! whether the app is correct; these ask whether it is still cheap — a correct
-//! answer that costs many times its size on every turn is the failure this
-//! project exists to prevent.
+//! The index a prompt receives. These assertions are about cost: a correct
+//! digest that costs many times its size every turn is the failure this project
+//! exists to prevent.
 
 use chrono::{TimeZone, Utc};
 use tasks::digest::{FOCUS_HINT_LINES, MAX_BYTES, PILE_LINES};
@@ -147,12 +144,8 @@ fn the_cap_is_what_makes_the_test_above_pass() {
     );
 }
 
-/// The cap is the pile's alone.
-///
-/// A session is accountable for what it holds, and a plate that quietly stops
-/// listing is how a task is forgotten by the one conversation that agreed to do
-/// it. Growth there is a backlog to work off — `task list --mine` says how much
-/// — not a cost to spread over everybody else.
+/// The cap is the pile's alone: a session's own plate must not quietly stop
+/// listing, or the one conversation that agreed to a task forgets it.
 #[test]
 fn what_a_session_holds_is_never_hidden_by_the_pile() {
     let mut tasks: Vec<Task> = (1..=30).map(|id| open(id, "in the pile")).collect();
@@ -248,11 +241,8 @@ fn the_budget_is_what_makes_the_test_above_pass() {
     );
 }
 
-/// The filer never reaches a prompt.
-///
-/// ⚠ **`filed_by` is for a LIST, fetched when somebody has just asked.** In the
-/// digest a word on every pile line is a charge on every session every turn —
-/// and it would arrive wearing a good argument, so the guard is a test.
+/// The filer never reaches a prompt: a word on every pile line is charged to
+/// every session every turn. `filed_by` is for lists.
 #[test]
 fn the_digest_never_says_who_filed_a_task() {
     let mut task = open(1, "Left for whoever picks it up");
@@ -285,12 +275,9 @@ fn the_header_countermands_the_built_in_task_tools() {
     );
 }
 
-/// ⚠ **A rank costs nothing until somebody sets one**, which is the only reason
-/// this is allowed in the file that reaches every prompt on every turn.
-///
-/// An unranked line must carry no rank marker: a default of `P2` — rejected in
-/// `migrations/0005_priority.sql` — would spend bytes on every line, in every
-/// conversation, to say nothing.
+/// ⚠ A rank costs nothing until set: an unranked line carries no marker (a `P2`
+/// default, rejected in `migrations/0005_priority.sql`, would cost bytes on every
+/// line to say nothing).
 #[test]
 fn an_unranked_task_costs_exactly_what_it_did_before() {
     let unranked = open(1, "in the pile");
@@ -305,10 +292,7 @@ fn an_unranked_task_costs_exactly_what_it_did_before() {
     ranked.priority = Some(Priority::P0);
     let out = render(&[ranked]);
     assert!(out.contains("- [ ] **#1** in the pile [P0]"), "{out}");
-    // The same fixture twice, so the difference IS the marker: five bytes — a
-    // space, two brackets, two characters — spent only where somebody ranked
-    // something. Stated as a number because this file's assertions are about
-    // cost.
+    // The same fixture twice, so the difference is the marker: five bytes, only where ranked.
     assert_eq!(out.len() - plain.len(), 5, "{out}");
 }
 
@@ -489,11 +473,8 @@ fn a_session_that_has_already_focused_is_not_told_to() {
     );
 }
 
-/// The marker that makes a critique unignorable, in the one channel that repeats.
-///
-/// ⚠ **A doc cannot win an argument with a per-turn reminder, and that cuts
-/// both ways**: findings said once, to a session busy with something else, are
-/// read past.
+/// The marker that keeps a critique visible, in the channel that repeats:
+/// findings said once, to a busy session, are read past.
 mod sprawl {
     use super::*;
 
@@ -524,11 +505,8 @@ mod sprawl {
 
     #[test]
     fn the_words_never_reach_the_prompt() {
-        // The findings are prose and belong in `task show`. A digest that
-        // carried them would be the accretion it is warning about, one level up
-        // — so what a flag costs a prompt is bounded by the marker, whatever the
-        // model wrote. `Task` has no field for the words, which is what makes
-        // that structural; this pins the size it buys.
+        // The findings stay in `task show`; in the digest they would be the accretion
+        // they warn about. `Task` has no field for the words; this pins the marker's size.
         let plain = render(&[open(1, "a body that got away")]);
         let flagged = render(&[flagged(18_162)]);
         let cost = flagged.len() - plain.len();

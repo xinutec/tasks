@@ -1,11 +1,6 @@
-//! **`index.html` must revalidate; the hashed bundle may be kept forever; a
-//! missing file says nothing about how long to keep it.**
-//!
-//! A test rather than a curl: a header verified by hand once is a header nobody
-//! is watching. Why each value: `routes::cache_control_for`.
-//!
-//! No database: the static service answers before anything reaches the pool, so
-//! these take a lazy pool pointed at nothing, the way `tests/access.rs` does.
+//! `index.html` must revalidate, the hashed bundle may be kept forever, and a
+//! missing file gets no lifetime (`routes::cache_control_for`). A test, because a
+//! header checked by hand once is watched by nobody. No database: a lazy pool.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};

@@ -1,19 +1,10 @@
-//! What the `/api/digest` ROUTE selects, driven through the real router.
+//! What the `/api/digest` route selects, through the real router.
 //!
-//! ⚠ **The filter being right is not the same as the route using it.**
-//! `tests/tasks_db.rs` proves `Filter::digest_for` returns a session's own tasks
-//! and the pile. What decides to *call* it is one `match` in `routes::api`:
-//! change it and every other test still passes while every session silently
-//! carries every open task there is.
-//!
-//! So these go through HTTP. `tests/access.rs` drives the router with a lazy
-//! pool because none of its requests reach the database; these do, so they take
-//! the real one.
-//!
-//! `/api/tasks` is here for the same reason: `task list` reaches the caller's
-//! work plus the pile by sending `pile=true`, and a route that dropped the
-//! parameter would pass every test in `tests/selection.rs`, which only check
-//! what the CLI *sends*.
+//! ⚠ `tests/tasks_db.rs` proves `Filter::digest_for` is right; one `match` in
+//! `routes::api` decides to call it, and changing it would leave every other test
+//! green while sessions carry every open task. Same for `/api/tasks` and
+//! `pile=true`: `tests/selection.rs` only checks what the CLI sends. These use the
+//! real database.
 
 mod common;
 
@@ -140,7 +131,6 @@ async fn seed(pool: &MySqlPool) {
             pool,
             NewTask {
                 subject: subject.into(),
-                // The check ran: these file through the service the way a session does.
                 checked: true,
                 not_duplicate_of: Vec::new(),
                 body: String::new(),
@@ -252,10 +242,8 @@ async fn list_as_session(app: &axum::Router, session: &str, query: &str) -> Vec<
 
 #[tokio::test]
 async fn the_list_route_honours_the_pile_parameter() {
-    // What a bare `task list` sends. If the route ignores `pile`, this returns
-    // one task instead of two and a session stops being able to see work left
-    // for whichever conversation is around — silently, since a shorter list
-    // reads as less work rather than as a broken query.
+    // What a bare `task list` sends. A route ignoring `pile` returns one task, not
+    // two, and the shorter list reads as less work, not a broken query.
     let pool = common::fresh_db().await;
     seed(&pool).await;
     let app = app(pool);
@@ -299,20 +287,14 @@ async fn all_is_still_reachable() {
     assert_eq!(everything.len(), 4, "{everything:?}");
 }
 
-/// What one session FILED and another is carrying.
-///
-/// ⚠ **The half `tests/selection.rs` cannot reach.** Those pin that the CLI
-/// sends `handed_out=<id>`; a route that accepted the parameter and dropped it
-/// would keep every one of them green and answer with the caller's own plate —
-/// short and plausible, like the right answer.
+/// What one session filed and another carries: the half `tests/selection.rs`
+/// can't reach. A route dropping `handed_out` would answer with the caller's own
+/// plate, short and plausible.
 mod handed_out {
     use super::*;
 
-    /// Four tasks, filed by two different sessions, held four different ways.
-    ///
-    /// `seed` above cannot serve this: it files everything as the user, and
-    /// `filed_by` is only recorded for a SESSION actor — so every row there has
-    /// no filer at all and this filter would correctly match none of them.
+    /// Four tasks from two sessions, held four ways. Not `seed`, which files as the
+    /// user, and `filed_by` is only recorded for sessions.
     async fn seed_filings(pool: &MySqlPool) {
         for (id, name) in [("sess-1", "tasks"), ("sess-2", "memview")] {
             sessions::touch(pool, id, Some(name))
@@ -418,10 +400,7 @@ mod handed_out {
 
     #[tokio::test]
     async fn it_is_not_the_callers_own_plate() {
-        // The failure mode worth a test of its own: a route that ignored the
-        // parameter would fall through to `session=`, and a router asking what
-        // it handed out would be shown what it is holding. Both lists are
-        // short and plausible, so nothing about the output would say so.
+        // A route ignoring the parameter would show the router what it holds, not what it handed out.
         let pool = common::fresh_db().await;
         seed_filings(&pool).await;
         let app = app(pool);
@@ -449,11 +428,8 @@ mod handed_out {
     }
 }
 
-/// A request names the session that sent it, without anybody typing it.
-///
-/// ⚠ **One line in each handler uses the header**: pass `None` to
-/// `sessions::touch` instead and it still compiles, every other test passes,
-/// and every session is a uuid again. So it is tested through HTTP.
+/// A request names its session unprompted. ⚠ Passing `None` to `sessions::touch`
+/// still compiles and passes everything else, so this goes through HTTP.
 mod naming {
     use super::*;
 
@@ -569,11 +545,8 @@ mod naming {
     }
 }
 
-/// The pile, asked for on its own, through the route that answers it.
-///
-/// ⚠ **Paired with `tests/selection.rs` deliberately.** Those pin that the CLI
-/// SENDS `unheld=true`; a route that dropped it would leave them green while
-/// `task list --pile` answered with every task there is.
+/// The pile alone, through its route, paired with `tests/selection.rs`: a route
+/// dropping `unheld=true` would answer `--pile` with every task.
 mod pile {
     use super::*;
 
@@ -657,12 +630,8 @@ mod pile {
         );
     }
 
-    /// The pile is open work by construction, and `--done` cannot widen it.
-    ///
-    /// ⚠ **Not a quirk of this query — a consequence of another rule.** Closing
-    /// a task into the pile is refused outright ("a finished task with no holder
-    /// reads as done by nobody"), so `closed AND unheld` is a state the service
-    /// will not store. `--pile --done` therefore answers the same as `--pile`.
+    /// The pile is open by construction: closing into it is refused, so `closed AND
+    /// unheld` never exists and `--pile --done` equals `--pile`.
     #[tokio::test]
     async fn the_pile_never_holds_closed_work_however_it_is_asked() {
         let pool = common::fresh_db().await;
@@ -697,11 +666,8 @@ mod pile {
     }
 }
 
-/// The hourly report, driven through the real router.
-///
-/// ⚠ **The half the builder's tests cannot reach.** `tests/fleetwatch.rs` pins
-/// that `checks()` turns a work tally into lines, and would keep passing if
-/// this route stopped putting one in the payload.
+/// The hourly report through the real router: `tests/fleetwatch.rs` would keep
+/// passing if this route stopped including the work tally.
 mod reporting {
     use super::*;
 

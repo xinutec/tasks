@@ -15,8 +15,7 @@ import {
   Updated,
 } from './models';
 
-/** Thin client over the tasks backend. Same-origin in prod; via the dev proxy
- *  (proxy.conf.json) in `ng serve`. The session cookie rides along. */
+/** Thin client over the backend: same-origin, or the dev proxy in `ng serve`. */
 @Injectable({ providedIn: 'root' })
 export class TasksApi {
   private http = inject(HttpClient);
@@ -48,11 +47,7 @@ export class TasksApi {
   }
 
   /**
-   * The task as it stood before its most recent edit.
-   *
-   * 404 when nothing has overwritten it. Only worth calling where
-   * `TaskDetail.restorable` is true — it carries a whole previous body, which is
-   * exactly what that flag exists to avoid fetching speculatively.
+   * The version before the last edit (404 if none); call only when `restorable`, as it is a whole body.
    */
   previous(id: number): Observable<Revision> {
     return this.http.get<Revision>(`/api/tasks/${id}/previous`);
@@ -62,17 +57,12 @@ export class TasksApi {
     return this.http.get<Session[]>('/api/sessions');
   }
 
-  /** Who holds what: every session, the user, and the pile. */
+  /** Who holds what: sessions, the person, the pile. */
   holders(): Observable<Holder[]> {
     return this.http.get<Holder[]>('/api/holders');
   }
 
-  /**
-   * Give a conversation a name.
-   *
-   * One column, and it moves nothing: the id is the identity. A session may
-   * only rename itself; the user may rename any, which is what this is for.
-   */
+  /** Name a conversation. The id is the identity, so nothing moves. */
   rename(id: string, name: string): Observable<void> {
     return this.http.patch<void>(`/api/sessions/${id}`, { name });
   }

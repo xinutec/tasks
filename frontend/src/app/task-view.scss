@@ -64,10 +64,8 @@
     &.P4 {
       opacity: 0.6;
     }
-    // ⚠ **A raised level must not look like a chosen one.** The `!` says it in
-    // text; the outline says it at a glance, so a reader scanning the top of the
-    // list can tell "somebody decided this" from "a date did". Same treatment in
-    // both views, because the two are read minutes apart.
+    // A level a deadline raised must not look chosen: the `!` says it in text, the
+    // outline at a glance. Same in both views.
     &.raised {
       background: transparent;
       outline: 1px dashed currentColor;
@@ -75,9 +73,7 @@
     }
   }
 
-  // Struck through rather than coloured. A dropped task is not a warning and
-  // not an error — nothing went wrong — it is a line that no longer applies,
-  // and that is what a strike-through means to everybody who reads one.
+  // Struck through, not coloured: nothing went wrong, the line just no longer applies.
   .dropped {
     text-decoration: line-through;
   }
@@ -91,9 +87,7 @@
   margin-bottom: 16px;
 
   .move {
-    // A session name is unbreakable and can be long; the button says who holds
-    // the task, and a name too long for a phone is truncated rather than
-    // allowed to push the row past the edge.
+    // Long unbreakable names are truncated rather than pushing the row off the edge.
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -131,8 +125,7 @@
 
   .actor {
     font-weight: 500;
-    // Session ids are 36 characters of hex and dashes — longer than a phone —
-    // and a session with no name shows its id here.
+    // An unnamed session shows its 36-character id here, wider than a phone.
     max-width: 12ch;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -140,8 +133,7 @@
   }
 
   .what {
-    // The verb — created, assigned, status, edited — set apart from the words
-    // around it, since it is the only part of the line with a closed vocabulary.
+    // The verb (created, assigned, …) set apart: the line's one closed vocabulary.
     font-variant: small-caps;
     letter-spacing: 0.03em;
     color: var(--mat-sys-primary);
@@ -159,12 +151,10 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Things the server tells the reader ABOUT this task rather than parts of it,
-// drawn alike as outlined cards so that says so without a word.
+// Notes about the task, not parts of it, drawn alike as outlined cards.
 .note {
   margin-top: 1.5rem;
-  // A note is about the task, so it must not out-shout the task's own subject:
-  // Material's card title is title-large, and these are one step down each.
+  // One step below Material's card title, so a note doesn't out-shout the subject.
   @include mat.card-overrides(
     (
       title-text-font: var(--mat-sys-title-small-font),
@@ -183,19 +173,13 @@
 }
 
 .sprawl .said {
-  // The model answers one finding per line and they are read as a list, so
-  // the newlines it sent are kept rather than collapsed into a paragraph.
+  // One finding per line, so the newlines are kept.
   white-space: pre-wrap;
 }
 
-// What the last edit replaced, shown before it can be put back.
-//
-// ⚠ **The body is `pre`, and it is bounded.** This is the text as stored —
-// markdown, not rendered — because the question it answers is *what would come
-// back*, and rendering it would show something other than what the restore
-// writes. A stored body runs to thousands of characters, so it scrolls inside
-// its own box rather than pushing the two buttons off the end of a phone
-// screen: a confirmation you have to scroll past is one nobody reads.
+// What the last edit replaced, before restoring: the stored markdown in `pre`
+// (exactly what would come back), scrolling in its own box so the buttons stay
+// on screen.
 .previous {
   .was-subject {
     margin: 0 0 0.5rem;
@@ -209,13 +193,10 @@
     padding: 0.5rem;
     border-radius: var(--mat-sys-corner-small);
     background: var(--mat-sys-surface-container);
-    // `pre` does not wrap, and a task body has lines far wider than a phone.
-    // Without this the box scrolls sideways under the thumb.
+    // `pre` doesn't wrap; without this the box scrolls sideways.
     white-space: pre-wrap;
     overflow-wrap: break-word;
-    // The same reasoning `.md-content code` carries in styles.scss: monospace
-    // runs optically larger than Roboto at one size, so this tracks the text
-    // around it rather than adding a step to the scale.
+    // As `.md-content code` in styles.scss: monospace tracks the surrounding text size.
     font-size: 0.85em;
     font-family: ui-monospace, monospace;
   }

@@ -1,11 +1,6 @@
-//! What a model is asked about a body, and what is done with the answer.
-//!
-//! ⚠ **The half under test is the half that is NOT a guess.** Whether a model's
-//! reading of a body is right cannot be asserted here, and these do not try:
-//! what they pin is that the standard reaches it, that a body which is fine
-//! costs nothing, and that an answer nobody can read is silence rather than
-//! noise. The advice never refuses a write, so every failure mode below is a
-//! session's attention rather than a session's work.
+//! What a model is asked about a body, and what is done with the answer. Whether
+//! the model is right can't be asserted here; these pin that the standard reaches
+//! it, a fine body costs nothing, and an unreadable answer is silence.
 
 use tasks::tasks::density::{self, RUBRIC, SAMPLER};
 

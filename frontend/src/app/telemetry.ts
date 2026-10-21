@@ -4,27 +4,17 @@ import { TelemetryCore } from '@xinutec/ui-harness/telemetry';
 import { filter } from 'rxjs';
 
 /**
- * The Angular binding for the fleet's activity trace.
- *
- * The queue, the flush policy, the transport and the label rules are shared —
- * `@xinutec/ui-harness/telemetry`, tested once there. What has to stay here is
- * the framework binding: an `@Injectable` cannot be shipped from that package,
- * because it is built by plain `tsc` and Angular's decorators need the Angular
- * compiler to emit their Ivy definitions. A decorated class crossing that
- * boundary carries only inert metadata, and a production build fails on `JIT
- * compiler unavailable`.
- *
- * So the split is: the two capture seams and the DI wiring here, everything
- * else there. Instrumented once, from the app shell, so no screen knows the
- * trace exists and no new control can be missed by forgetting to annotate it.
+ * The Angular binding for the fleet's activity trace
+ * (`@xinutec/ui-harness/telemetry`). The `@Injectable` must live here: that
+ * package is built by plain `tsc`, and decorators crossing it fail a production
+ * build with `JIT compiler unavailable`. Wired once in the shell, so no screen
+ * needs annotating.
  */
 @Injectable({ providedIn: 'root' })
 export class Telemetry {
   private readonly router = inject(Router);
   private readonly doc = inject(DOCUMENT);
-  // No extra headers: the only caller is the signed-in person's own page, and
-  // the session cookie rides along on its own. A session drives this service
-  // through the CLI and has no browser to trace.
+  // No extra headers: only the person's page calls this, with its cookie.
   private readonly core = new TelemetryCore(this.doc);
 
   /** Something the user met and nobody else saw: an uncaught error or a failed request. */
