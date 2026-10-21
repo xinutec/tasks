@@ -1,8 +1,5 @@
-//! Reading and writing tasks.
-//!
-//! Every write records a `task_events` row in the same transaction as the
-//! change it describes: the history is not a log beside the data, and one that
-//! can be absent for a write nobody noticed is not a history.
+//! Every write records its `task_events` row in the same transaction: a
+//! history that can miss a write is not one.
 
 use anyhow::Context;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
@@ -20,42 +17,25 @@ type Result<T> = std::result::Result<T, AppError>;
 /// Which tasks a caller is asking for.
 #[derive(Debug, Clone, Default)]
 pub struct Filter {
-    /// Include closed tasks — done and dropped alike. Every injected path leaves
-    /// it off: see the invariant in `lib.rs`.
+    /// Include closed tasks, done and dropped. No injected path sets it.
     pub include_closed: bool,
     /// Only tasks held by this session id.
     pub session: Option<String>,
     /// Only tasks held by this person (Nextcloud user id).
     pub person: Option<String>,
-    /// Widen [`session`](Self::session) to *and the ones nobody holds*.
-    ///
-    /// Ignored unless `session` is set. Why the digest needs it:
-    /// [`digest_for`](Self::digest_for).
+    /// Widen [`session`](Self::session) to include the pile ([`digest_for`](Self::digest_for)).
     pub or_unheld: bool,
-    /// Strictly the tasks nobody holds — the pile, and nothing else.
-    ///
-    /// The narrow twin of [`or_unheld`](Self::or_unheld), which widens. Wins
-    /// over `session` and `person`: an intersection with a holder would always
-    /// be empty.
+    /// Strictly the pile; wins over `session` and `person`.
     pub unheld: bool,
-    /// Tasks this session FILED and does not hold — what it handed out.
-    ///
-    /// ⚠ **The one question here not about the holder**: it narrows by who
-    /// *wrote* a task and subtracts the writer's own plate. Held by anybody
-    /// else, the pile included. The digest must not use this — it would show
-    /// what another conversation holds.
-    ///
-    /// Wins over the three above: it has answered the holder half itself.
+    /// Tasks this session filed and doesn't hold: what it handed out, to anyone,
+    /// the pile included. Wins over the fields above. Never for the digest, which
+    /// must not show another conversation's tasks.
     pub handed_out_by: Option<String>,
 }
 
 impl Filter {
-    /// What a session's digest asks for: its own open tasks and the pile.
-    ///
-    /// ⚠ **`or_unheld` is the half that must not be dropped.** The pile is the
-    /// handover channel: strictly *mine* makes a task left for whichever
-    /// conversation is around invisible to all of them at once. Looking across
-    /// holders is something to ask for: `task list --all`.
+    /// A session's digest: its own open tasks and the pile. ⚠ Keep `or_unheld`:
+    /// without it a task left for whoever is around is invisible to everyone.
     pub fn digest_for(session: &str) -> Self {
         Self {
             session: Some(session.to_string()),
@@ -73,39 +53,33 @@ struct Row {
     status: Status,
     priority: Option<Priority>,
     due: Option<NaiveDate>,
-    /// `P0` when a near deadline raises this task, else NULL — see `due_soon!`.
+    /// `P0` when a near deadline raises it, else NULL (`due_soon!`).
     escalated_to: Option<Priority>,
-    /// Whether `due` has passed, by the DATABASE's clock — see the projection.
+    /// Whether `due` has passed, by the database's clock.
     past_due: i8,
-    /// The blockers, comma-joined by SQL — see the projection for why.
+    /// The blockers, comma-joined (see the projection).
     blocked_on: Option<String>,
-    /// How many of them are still open, counted in SQL like `detailed`.
+    /// How many are still open.
     open_blockers: i64,
     assignee_kind: AssigneeKind,
     assignee_person: Option<String>,
     assignee_session: Option<String>,
-    /// Resolved through the join, so a list never needs a second query per row.
+    /// Through the join: no query per row.
     session_name: Option<String>,
-    /// Whether the body has anything in it. Computed in SQL, so a list does not
-    /// carry every body across the wire to answer a boolean.
+    /// In SQL, so a list doesn't ship every body to answer a boolean.
     detailed: i8,
-    /// How many lines the body prints as. Counted in SQL for the reason
-    /// `detailed` is, and over the TRIMMED body — see the projection.
+    /// Lines of the trimmed body, in SQL.
     body_lines: i64,
-    /// How long the body was when a model last read it and spoke. NULL when
-    /// nothing is outstanding — see [`Task::sprawl_chars`]. The words it said
-    /// are deliberately NOT here: a list must not carry prose.
+    /// See [`Task::sprawl_chars`]; the words stay off lists.
     sprawl_chars: Option<u32>,
-    /// The filing session's current name, or `NULL` where there is nothing to
-    /// say — see [`Task::filed_by`].
+    /// See [`Task::filed_by`].
     filed_by: Option<String>,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
     closed_at: Option<NaiveDateTime>,
 }
 
-/// The session zone is pinned to UTC in `db::connect`, so a DB-clock column
-/// read back as naive really is UTC.
+/// The session zone is UTC (`db::connect`), so a naive DB-clock value is UTC.
 fn utc(at: NaiveDateTime) -> DateTime<Utc> {
     at.and_utc()
 }
@@ -147,33 +121,23 @@ impl Row {
     }
 }
 
-/// The task projection, with a literal tail appended.
-///
-/// A macro rather than a `const` + `format!` because sqlx accepts only
-/// `&'static str`: `concat!` keeps every query a literal the compiler
-/// assembled, so there is no runtime-built string to audit.
+/// The task projection plus a literal tail: a macro, so every query stays a compile-time literal for sqlx.
 macro_rules! select {
     ($tail:literal) => {
         concat!(
             "SELECT t.id, t.subject, t.status, t.priority, t.due, ",
-            // The VALUE it sorts as — see `Task::escalated_to`. NULL when the
-            // stored rank is already `P0`: nothing was raised.
+            // What it sorts as (`Task::escalated_to`); NULL when already `P0`.
             "IF(",
             due_soon!("t.due"),
             " AND COALESCE(t.priority, 'P2') > 'P0', ",
             "'P0', NULL) AS escalated_to, ",
-            // One clock — the database's — so the CLI, the app and the digest
-            // cannot disagree about which day it is. `CURDATE()` is the session
-            // zone, pinned to UTC in `db::connect`.
+            // The database's clock (UTC, `db::connect`), so CLI, app and digest agree on the day.
             "(t.due IS NOT NULL AND t.due < CURDATE()) AS past_due, ",
             "t.assignee_kind, ",
-            // Correlated subqueries rather than a join: a join to `task_blocks`
-            // MULTIPLIES the task row by its edges, and a list must not gain
-            // rows. Covered by the table's primary key.
+            // Correlated, not joined: a join to `task_blocks` repeats the row per edge.
             //
-            // ⚠ GROUP_CONCAT is capped by `group_concat_max_len` (1024 bytes by
-            // default, ~140 ids); the count beside it is exact regardless, so
-            // `blocked` stays right even if the list were clipped.
+            // ⚠ GROUP_CONCAT stops at `group_concat_max_len` (~140 ids); the count beside
+            // it is exact, so `blocked` stays right.
             "(SELECT GROUP_CONCAT(b.blocked_on ORDER BY b.blocked_on) FROM task_blocks b ",
             "WHERE b.task_id = t.id) AS blocked_on, ",
             "(SELECT COUNT(*) FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
@@ -181,18 +145,13 @@ macro_rules! select {
             still_open!("bt.status"),
             ") AS open_blockers, ",
             "t.assignee_person, t.assignee_session, s.name AS session_name, ",
-            // Both are about the body a reader SEES, so both go through
-            // `body_shown!`.
+            // Both measure the body as shown (`body_shown!`).
             "(LENGTH(",
             body_shown!("t.body"),
             ") > 0) AS detailed, t.sprawl_chars, ",
-            // ⚠ **Counted the way `show` PRINTS it.** Newlines by subtraction:
-            // `LENGTH` is bytes, but a difference over a one-byte needle is an
-            // exact newline count whatever multi-byte text is around it.
-            // `CHAR(10)` rather than `'\n'` for the escaping reason `body_shown!`
-            // gives; `+ 1` because a trimmed body's last line has no newline.
-            // `CAST(... AS SIGNED)`: unsigned arithmetic comes back as `BIGINT
-            // UNSIGNED`, which sqlx refuses as `i64` — at runtime, on real rows.
+            // Counted as `show` prints it: newlines by length difference (exact over a
+            // one-byte needle), `CHAR(10)` for the escaping reason in `body_shown!`, `+ 1`
+            // for the last line. CAST: unsigned arithmetic won't decode as `i64`.
             "CAST(IF(LENGTH(",
             body_shown!("t.body"),
             ") = 0, 0, LENGTH(",
@@ -200,8 +159,7 @@ macro_rules! select {
             ") - LENGTH(REPLACE(",
             body_shown!("t.body"),
             ", CHAR(10), '')) + 1) AS SIGNED) AS body_lines, ",
-            // Correlated, as above; `LIMIT 1` makes gaining rows impossible.
-            // Covered by `idx_task_events_task (task_id, at)`.
+            // Correlated; `LIMIT 1` can't add rows (`idx_task_events_task`).
             "(SELECT f.name FROM task_events c JOIN sessions f ON f.id = c.actor_id ",
             "WHERE c.task_id = t.id AND c.kind = 'created' AND c.actor_kind = 'session' ",
             "ORDER BY c.id LIMIT 1) AS filed_by, ",
@@ -212,36 +170,28 @@ macro_rules! select {
     };
 }
 
-/// Tasks matching a filter: by priority, then oldest id first.
+/// Tasks matching a filter, by effective priority, then oldest id first.
 ///
-/// ⚠ **Ordered by id and NOT by status**: a list that re-sorts as work starts
-/// moves the line somebody was reading. Oldest first, so old tickets get fixed
-/// rather than buried under this morning's.
-///
-/// ⚠ **Priority is the one thing that reorders, because somebody stated it.**
-/// `COALESCE(t.priority, 'P2')`, the mirror of
-/// [`Priority::rank`](crate::tasks::types::Priority::rank): `P0`/`P1` rise
-/// above the unranked, `P3`/`P4` sink below.
-///
-/// ⚠ **The only sort in the service**: `digest::render` preserves the order it
-/// is handed.
+/// Never by status, so a line doesn't move while being read; oldest first, so old
+/// tickets aren't buried. `COALESCE(t.priority, 'P2')` mirrors
+/// [`Priority::rank`](crate::tasks::types::Priority::rank). The only sort in the
+/// service: `digest::render` keeps this order.
 pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     let mut query = QueryBuilder::<MySql>::new(select!(""));
     query.push(" WHERE 1 = 1");
     if !filter.include_closed {
         query.push(concat!(" AND ", still_open!("t.status")));
     }
-    // Exclusive, in the precedence the `Filter` fields document.
+    // Exclusive, in the precedence `Filter` documents.
     if let Some(filer) = &filter.handed_out_by {
-        // The `filed_by` subquery, compared on the actor id rather than the
-        // name, which a rename changes.
+        // By actor id, not the name a rename changes.
         query.push(concat!(
             " AND (SELECT c.actor_id FROM task_events c ",
             "WHERE c.task_id = t.id AND c.kind = 'created' AND c.actor_kind = 'session' ",
             "ORDER BY c.id LIMIT 1) = "
         ));
         query.push_bind(filer);
-        // Handed OUT: still on the filer's own plate is not handed anywhere.
+        // Not still on the filer's own plate.
         query.push(" AND NOT (t.assignee_kind = 'session' AND t.assignee_session = ");
         query.push_bind(filer);
         query.push(")");
@@ -263,8 +213,7 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
         query.push(" AND t.assignee_kind = 'person' AND t.assignee_person = ");
         query.push_bind(person);
     }
-    // The sort key is the EFFECTIVE rank: inside the week a deadline raises a
-    // task to `P0`. The user set that rule; otherwise a date reorders nothing.
+    // The effective rank: within the week a deadline raises a task to `P0`.
     query.push(concat!(
         " ORDER BY IF(",
         due_soon!("t.due"),
@@ -278,7 +227,7 @@ pub async fn list(pool: &MySqlPool, filter: &Filter) -> Result<Vec<Task>> {
     Ok(rows.into_iter().map(Row::into_task).collect())
 }
 
-/// One task, its prose and its history. `None` when there is no such task.
+/// One task with prose and history, or `None`.
 pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
@@ -288,8 +237,7 @@ pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
     let Some(row) = row else {
         return Ok(None);
     };
-    // The critique rides along with the body it is about: one read, and the one
-    // place prose is allowed to cross the wire.
+    // The critique travels with its body, the one read that carries prose.
     let body: Option<(String, Option<String>)> =
         sqlx::query_as("SELECT body, sprawl_said FROM tasks WHERE id = ?")
             .bind(id)
@@ -298,8 +246,7 @@ pub async fn get(pool: &MySqlPool, id: u64) -> Result<Option<TaskDetail>> {
             .context("reading a task body")?;
     let (body, sprawl_said) = body.unwrap_or_default();
     let events = events(pool, id).await?;
-    // A boolean answered in SQL, like `detailed`: fetching the revision would
-    // carry a second body to every reader.
+    // A boolean in SQL: fetching the revision would ship a second body.
     let restorable: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM task_revision r JOIN task_events e ON e.id = r.event_id \
          WHERE e.task_id = ?)",
@@ -323,23 +270,16 @@ struct EventRow {
     at: NaiveDateTime,
     actor_kind: String,
     actor_id: Option<String>,
-    /// Absent when the actor is a person, or a session nobody has named.
+    /// Absent for a person or an unnamed session.
     actor_name: Option<String>,
     kind: String,
     detail: Option<String>,
 }
 
-/// What has happened to a task, oldest first.
-///
-/// ⚠ **The actor is resolved at READ time and the detail was rendered at WRITE
-/// time**, so a session that has since renamed itself reads as its current name
-/// in the `actor` column and as its old one inside `nobody → memview`. That is
-/// deliberate and it is not a contradiction: the actor answers *who did this*,
-/// which is a live conversation you may want to hand the next thing to, and the
-/// detail answers *what the line said then*, which must not be rewritten by a
-/// later rename. Resolving the actor at write time instead would print a
-/// 36-character id in every line for a session that had not yet named itself —
-/// the shape this replaced, and unreadable on a phone.
+/// What happened to a task, oldest first. The actor is resolved at read time
+/// (who to hand the next thing to); the detail was rendered at write time and
+/// keeps the names of then. Resolving at write time would print raw ids for
+/// sessions not yet named.
 pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
     let rows: Vec<EventRow> = sqlx::query_as(
         "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, e.kind, e.detail \
@@ -361,10 +301,7 @@ pub async fn events(pool: &MySqlPool, id: u64) -> Result<Vec<Event>> {
         .collect())
 }
 
-/// Name, then id, then the bare kind.
-///
-/// Each fallback is a real state: a session that never named itself, and — for
-/// a person — no `sessions` row to join to at all.
+/// Name, then id, then the bare kind: each fallback is a real state.
 fn actor_label(name: Option<String>, id: Option<String>, kind: String) -> String {
     name.filter(|name| !name.is_empty()).or(id).unwrap_or(kind)
 }
@@ -379,19 +316,10 @@ struct RevisionRow {
     body: String,
 }
 
-/// The task as it stood before its most recent edit.
+/// The task before its latest edit, or `None` if nothing was overwritten.
 ///
-/// `None` for a task nothing has overwritten, and for one predating revisions —
-/// not worth distinguishing, since in both there is nothing to put back.
-///
-/// ⚠ **Newest by `event_id`, not by `at`.** `task_events.at` is `DATETIME` at
-/// one-second resolution and a subject sweep writes several edits inside one
-/// second, so ordering by time picks an arbitrary one as "the last". The id is
-/// the only total order there is.
-///
-/// ⚠ **Takes the asker**, because what a caller needs before restoring is
-/// whether the edit it would revert is its own — see [`Revision::mine`]. The
-/// only identity a client has is the rendered label.
+/// ⚠ Newest by `event_id`: `at` has one-second resolution, and a sweep writes
+/// several edits a second. Takes the asker, to answer [`Revision::mine`].
 pub async fn previous(pool: &MySqlPool, id: u64, who: &Actor) -> Result<Option<Revision>> {
     let row: Option<RevisionRow> = sqlx::query_as(
         "SELECT e.at, e.actor_kind, e.actor_id, s.name AS actor_name, r.subject, r.body \
@@ -405,9 +333,8 @@ pub async fn previous(pool: &MySqlPool, id: u64, who: &Actor) -> Result<Option<R
     .context("reading a previous version")?;
     Ok(row.map(|row| Revision {
         at: utc(row.at),
-        // Both halves, or a person and a session sharing an id would read as
-        // each other. `actor_id` is NULL only for rows written before the
-        // column existed, and an absent id matches nobody.
+        // Kind and id both, or a person and a session sharing an id would match.
+        // Old rows have a NULL id, which matches nobody.
         mine: row.actor_kind == who.kind() && row.actor_id.as_deref() == Some(who.id()),
         actor: actor_label(row.actor_name, row.actor_id, row.actor_kind),
         subject: row.subject,
@@ -415,10 +342,7 @@ pub async fn previous(pool: &MySqlPool, id: u64, who: &Actor) -> Result<Option<R
     }))
 }
 
-/// When the text an edit is about to replace was last written, and by whom.
-///
-/// `created` counts, so a body nobody has edited still has provenance — filing
-/// a task is how its first body got there.
+/// When and by whom the text about to be replaced was written; filing counts.
 async fn last_written(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
@@ -430,8 +354,7 @@ async fn last_written(
          ORDER BY e.id DESC LIMIT 1",
     )
     .bind(id)
-    // ⚠ **Bound from [`Moved`], not spelled**: a spelled copy fails no test
-    // when a variant is renamed, and silently stops matching.
+    // From [`Moved`]: a spelled copy silently stops matching after a rename.
     .bind(Moved::Created.as_str())
     .bind(Moved::Edited.as_str())
     .fetch_optional(&mut **tx)
@@ -450,23 +373,15 @@ fn yes() -> bool {
     true
 }
 
-/// A task being filed.
-///
-/// ⚠ **The `skip_serializing_if` attributes change no behaviour** — this struct
-/// is never serialised. They state the shape the *client* sends, which
-/// dev-lint's wire-mirror check compares `frontend/src/app/models.ts` against;
-/// without them it would read "always present" and ask the client to send a
-/// key whose absence is the meaning.
+/// A task being filed. Never serialised; the `skip_serializing_if` attributes
+/// tell dev-lint's wire-mirror check which keys the client may omit.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct NewTask {
     pub subject: String,
     #[serde(default)]
     pub body: String,
-    /// Whether the filer let the duplicate check run.
-    ///
-    /// ⚠ **Absent means "it ran", so an old client is not silently exempted**
-    /// from the refusal of an unlicensed skip. `false` has to
-    /// be SAID.
+    /// Whether the duplicate check ran. Absent means it did, so an old client gets
+    /// no silent exemption.
     #[serde(default = "yes")]
     pub checked: bool,
     /// The tasks a refusal named that the filer judged different work, when
@@ -474,33 +389,26 @@ pub struct NewTask {
     /// and the filing's history records them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_duplicate_of: Vec<u64>,
-    /// How urgent — and **the one field a filer may not leave out**.
-    ///
-    /// ⚠ **No `serde(default)`, and no `skip_serializing_if`, deliberately**: a
-    /// missing key is refused, and `"P2"` and `null` (*unassessed*) are both
-    /// things somebody SAID — see [`Ranking`]. Carrying no attributes tells the
-    /// mirror check the key is present and nullable, not optional.
+    /// How urgent: the one field a filer may not leave out. No serde attributes on
+    /// purpose, so a missing key is refused and the mirror reads it as required and
+    /// nullable ([`Ranking`]).
     pub priority: Ranking,
-    /// The day it has to be done by, if something outside already decides it.
+    /// The deadline, if something outside decides it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<NaiveDate>,
-    /// The tasks this one waits for, if they are known at filing time.
+    /// What it waits for, if known when filed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocked_on: Vec<u64>,
-    /// Who it is for. ⚠ **Absent means the filer**, not the pile — see [`create`].
+    /// Who it is for. Absent means the filer, not the pile ([`create`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
-    /// Why this belongs to nobody — **required when, and only when, it does**.
-    ///
-    /// ⚠ **Filings to the pile were routinely corrected later**, so the pile is
-    /// argued for rather than typed. With a holder this is refused: a reason
-    /// for the pile says nothing about a task on somebody's plate.
+    /// Why it belongs to nobody: required exactly when it does. Pile filings used
+    /// to be corrected later, so the pile is argued for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spare: Option<String>,
 }
 
-/// Both answers, because naming only the first reads as *you must pick a
-/// level*. See [`crate::wire`].
+/// Names both answers, or the message reads as *you must pick a level* ([`crate::wire`]).
 impl crate::wire::RequiredKeys for NewTask {
     fn required() -> &'static [(&'static str, &'static str)] {
         &[(
@@ -510,75 +418,46 @@ impl crate::wire::RequiredKeys for NewTask {
     }
 }
 
-/// A change to an existing task. Every field is optional and absent means
-/// *leave it alone* — a genuine partial update, so a client changing a status
-/// need not restate a body it has not read.
+/// A change to a task: absent means leave it alone, so a status change needn't restate the body.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct Change {
-    // As in `NewTask`: absence is the meaning, and these attributes are how that
-    // is stated to the mirror check.
+    // As in `NewTask`, stating to the mirror check that keys may be omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
-    /// Text to put ABOVE the body there already is, keeping all of it.
-    ///
-    /// ⚠ **This is the field that stops the mistake `body` invites.** Without it,
-    /// adding a paragraph means reading the body out, concatenating by hand and
-    /// sending it all back; skip the read and the paragraph becomes the whole
-    /// body.
-    ///
-    /// ⚠ **Above rather than below is the ordinary case** — a body grows in the
-    /// order things happened, so what is still true sinks out of sight.
-    ///
-    /// **Resolved inside the transaction that reads the body**, so two
-    /// conversations adding to one task seconds apart cannot lose each other's
-    /// text.
+    /// Text added above the body, keeping all of it, so adding a paragraph needn't
+    /// read and resend the body. Above, because what is current otherwise sinks.
+    /// Resolved under the row lock, so concurrent additions can't lose each other.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prepend: Option<String>,
-    /// Text to put BELOW the body there already is, keeping all of it.
-    ///
-    /// The twin of [`prepend`](Self::prepend). Both may be sent at once.
+    /// Text added below the body. May be sent with `prepend`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub append: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<Status>,
-    /// ⚠ **This cannot CLEAR a priority**: absent is leave-alone, and a
-    /// meaningful null (`Option<Option<_>>`) makes every client guess. A wrong
-    /// rank is corrected by ranking again.
+    /// Can't clear a priority (a meaningful null makes clients guess); rank again instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<NaiveDate>,
-    /// Take the deadline off.
-    ///
-    /// ⚠ **An explicit flag, where `blocked_on` needs none**: an empty list is a
-    /// value meaning *nothing blocks this*, while every date is a real deadline.
+    /// Take the deadline off. A flag, because every date is a real deadline.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub clear_due: bool,
-    /// The blockers as they should now be — the whole set, not an addition.
-    ///
-    /// ⚠ **An empty list is how a task stops being blocked**; absence still
-    /// means leave it alone.
+    /// The whole blocker set, not an addition; empty unblocks, absent leaves alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_on: Option<Vec<u64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignee: Option<Assignee>,
-    /// Say that a body which keeps almost nothing of the one it replaces is
-    /// meant. See `collapses` for what is refused without it, and why.
-    ///
-    /// ⚠ **Undo sets this, and has to**: undoing an edit that *grew* a body
-    /// restores a shorter one, the shape the guard refuses — and an undo has
-    /// just read the text it restores.
+    /// Says that a body keeping almost nothing of the old one is meant
+    /// (`collapses`). Undo sets it: restoring before an edit that grew a body is
+    /// the shape the guard refuses.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub replace_body: bool,
 }
 
-/// Nothing is required of a change, and taking the default is how that is said.
-///
-/// ⚠ **Not an oversight — do not copy `NewTask`'s list.** A change means *leave
-/// alone what I did not mention*; requiring a rank here would make every edit
-/// restate it, and a rank would stop being something somebody said.
+/// Nothing is required of a change: do not copy `NewTask`'s list, or every
+/// edit would have to restate the rank.
 impl crate::wire::RequiredKeys for Change {}
 
 fn check_subject(subject: &str) -> Result<String> {
@@ -593,8 +472,7 @@ fn check_subject(subject: &str) -> Result<String> {
             subject.chars().count()
         )));
     }
-    // A newline in a subject would split one task across two lines of an
-    // injected digest, where every line is read as its own task.
+    // A newline in a subject would split one task over two digest lines.
     if subject.contains(['\n', '\r']) {
         return Err(AppError::BadRequest(
             "a subject is one line — put the detail in the body".into(),
@@ -603,55 +481,30 @@ fn check_subject(subject: &str) -> Result<String> {
     Ok(subject.to_string())
 }
 
-/// The size below which a body is not worth guarding at all.
-///
-/// ⚠ **Deliberately far from anything a real rewrite does**, as is
-/// [`KEEPS_AT_LEAST`]. The point is not to catch every loss — it is to catch the
-/// writes that were never edits at all, without asking anybody about the
-/// ordinary ones.
+/// Below this a body isn't guarded. Like [`KEEPS_AT_LEAST`], far from any real
+/// rewrite: it catches writes that were never edits.
 const WORTH_GUARDING: usize = 500;
 
-/// The share of a guarded body an edit has to leave standing — a quarter.
-///
-/// ⚠ **A rewrite that keeps half is NOT caught.** This is a backstop against
-/// truncation, not against a confident overwrite; `task undo` covers the rest.
+/// A quarter. A rewrite keeping half passes: a backstop against truncation, not
+/// against overwriting (`task undo` covers that).
 const KEEPS_AT_LEAST: usize = 4;
 
-/// Whether a new body keeps so little of the old one that it is more likely a
-/// mistake than a rewrite.
+/// Whether a new body keeps so little of the old that it is likely a mistake,
+/// like a session writing `--json`'s `detailed` boolean over the prose.
 ///
-/// ⚠ **This gates edits, which [`crate::tasks::undo`] argues against for
-/// ordinary ones** — gating a frequent correct operation teaches everyone to
-/// pass gates. A long body becoming a single word is neither frequent nor
-/// correct: it is a session that read `--json`, took `detailed` for the prose,
-/// and wrote the boolean over the lot.
-///
-/// ⚠ **Must NOT be tightened.** Genuine conclusion-on-top rewrites — what
-/// `task edit --help` asks for — can keep as little as a third, so a higher cut
-/// fires on more correct edits than mistakes. The middle band is answered by
-/// [`Change::prepend`], which removes the need to rewrite.
+/// ⚠ Don't tighten it: good conclusion-first rewrites keep as little as a third.
+/// [`Change::prepend`] answers the middle ground.
 fn collapses(was: &str, now: &str) -> bool {
     let (was, now) = (was.chars().count(), now.chars().count());
     was > WORTH_GUARDING && now * KEEPS_AT_LEAST < was
 }
 
-/// What a body becomes once something is added above or below it.
+/// What a body becomes with an addition above or below.
 ///
-/// ⚠ **Exactly one blank line at each seam, however many newlines were there.** Not
-/// cosmetic: markdown joins adjacent lines into one paragraph, so a one-line note
-/// butted onto a body that opens with prose becomes the first sentence of it, and the
-/// two read as one claim.
-///
-/// ⚠ **Newlines only, never spaces or tabs.** Whitespace inside a line is markdown
-/// content — two trailing spaces are a hard line break, leading spaces set indentation
-/// and continuation — so a plain `trim` would change what a body SAYS through a command
-/// that promised to keep it.
-///
-/// An empty body takes the addition alone, with no seam to normalise: prepending to a
-/// task filed with no prose must not leave it starting with a blank line.
-///
-/// ⚠ **The existing body is trimmed only on a side that gained a neighbour.** Trimming
-/// both ends would let an `append` quietly restyle the TOP of a body it never touched.
+/// Exactly one blank line at each seam, or markdown merges the note into the
+/// next paragraph. Newlines only, never spaces or tabs, which carry markdown
+/// meaning. The body is trimmed only on the side that gained a neighbour, and an
+/// empty body takes the addition alone.
 fn joined(was: &str, prepend: Option<&str>, append: Option<&str>) -> String {
     const SEAM: [char; 2] = ['\n', '\r'];
 
@@ -669,8 +522,7 @@ fn joined(was: &str, prepend: Option<&str>, append: Option<&str>) -> String {
     parts.extend(append.map(|text| text.trim_matches(SEAM)));
     parts
         .into_iter()
-        // A part that is only whitespace contributes nothing but would still
-        // open a seam, leaving the blank line it was supposed to prevent.
+        // A whitespace-only part would still open a seam.
         .filter(|part| !part.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\n\n")
@@ -684,10 +536,7 @@ fn assignee_columns(assignee: &Assignee) -> (AssigneeKind, Option<&str>, Option<
     }
 }
 
-/// Whoever is asking, as a holder.
-///
-/// Filing, starting and closing all infer a holder this way. The name is left
-/// empty: it is resolved through the session join on the way back out.
+/// The asker as a holder, name left for the join to resolve.
 fn actor_holder(actor: &Actor) -> Assignee {
     let (kind, id) = match actor {
         Actor::Person(id) => (AssigneeKind::Person, id),
@@ -716,11 +565,8 @@ fn check_assignee(assignee: &Assignee) -> Result<()> {
     }
 }
 
-/// The comma-joined ids `GROUP_CONCAT` returns, as numbers.
-///
-/// Anything unparseable is dropped rather than defaulted: these are foreign keys
-/// the database itself produced, so a non-number here means the query changed,
-/// and inventing a `0` would point at a task that cannot exist.
+/// The ids `GROUP_CONCAT` returns. Unparseable ones are dropped, never made
+/// `0`: the database produced them, so one means the query changed.
 pub(crate) fn parse_ids(joined: Option<&str>) -> Vec<u64> {
     joined
         .unwrap_or("")
@@ -729,39 +575,19 @@ pub(crate) fn parse_ids(joined: Option<&str>) -> Vec<u64> {
         .collect()
 }
 
-/// A blocked task may be ranked the same as what blocks it, never higher.
-/// Checked at both ends.
-///
-/// A task you cannot start must not claim to be the next thing anybody does —
-/// the move that inflates a scale, and one a machine can catch.
-///
-/// ⚠ **The bound is the LEAST urgent open blocker**, since that is what decides when
-/// this can actually start: blocked on a `P1` and a `P3`, a task waits for the `P3`.
-///
-/// ⚠ **Both ends, because either edit can break it**: ranking the blocked task
-/// up, or ranking a BLOCKER *down* below what waits on it.
-///
-/// ⚠ **Refused, not cascaded.** Quietly demoting whatever waits on a demoted blocker
-/// would edit rows nobody asked about. The refusal names both tasks, so whoever is
-/// deciding sees the pair.
-///
-/// ⚠ **Only while the blocker is OPEN**, or a finished dependency would hold a
-/// rank down for ever.
-///
-/// ⚠ **The rule binds a CLAIM, so an unranked task is never in violation.**
-/// Otherwise *"this waits for that"* could not be recorded until the waiting
-/// task was ranked. A BLOCKER's absent rank still counts as `P2`: the claim
-/// above it has to clear something.
+/// A blocked task may rank equal to its blocker, never higher, checked at both
+/// ends (raising the task, or lowering a blocker). The bound is the least urgent
+/// open blocker. Refused, not cascaded, naming both tasks. Closed blockers don't
+/// count. An unranked task claims nothing, so is never in violation; an unranked
+/// blocker counts as `P2`.
 async fn blocking_is_consistent(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
     priority: Option<Priority>,
     due: Option<NaiveDate>,
 ) -> Result<()> {
-    // ⚠ **The deadline twin of the rank rule**: a task cannot be finished
-    // before what it waits for, so a due date earlier than an open blocker's is
-    // arithmetic, not a judgement. Equal is allowed. Checked before the rank,
-    // because it is the harder fact.
+    // The deadline twin: a due date before an open blocker's is impossible, so it
+    // is refused (equal is fine). Checked first, as the harder fact.
     if let Some(mine) = due {
         let ahead: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
             "SELECT bt.id, bt.due FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
@@ -780,7 +606,7 @@ async fn blocking_is_consistent(
             )));
         }
     }
-    // And the other end: a blocker pushed out past something waiting on it.
+    // The other end: a blocker pushed past what waits on it.
     let stranded: Vec<(u64, NaiveDate)> = sqlx::query_as(concat!(
         "SELECT t.id, t.due FROM task_blocks b JOIN tasks t ON t.id = b.task_id ",
         "WHERE b.blocked_on = ? AND t.due IS NOT NULL AND ",
@@ -802,13 +628,12 @@ async fn blocking_is_consistent(
     }
 
     let Some(stated) = priority else {
-        // Nothing claimed at this end. Whatever is blocked ON this task is still
-        // checked below only where IT has stated something.
+        // This task claims nothing; its dependents are checked below only where they claim something.
         return unblocked_end(tx, id, None).await;
     };
     let mine = Priority::rank(Some(stated));
 
-    // This end: what this task waits for, of those still open.
+    // What this task waits for, still open.
     let blockers: Vec<(u64, Option<Priority>)> = sqlx::query_as(concat!(
         "SELECT bt.id, bt.priority FROM task_blocks b JOIN tasks bt ON bt.id = b.blocked_on ",
         "WHERE b.task_id = ? AND ",
@@ -832,10 +657,7 @@ async fn blocking_is_consistent(
     unblocked_end(tx, id, Some(stated)).await
 }
 
-/// The other end: what waits for this task, and whether demoting it breaks them.
-///
-/// Split out so the early return above reaches it: an unranked task can still
-/// be the blocker of one that is ranked.
+/// What waits for this task, and whether demoting it breaks them. Apart, so an unranked task still checks its dependents.
 async fn unblocked_end(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
@@ -852,8 +674,7 @@ async fn unblocked_end(
     .await
     .context("reading what this task blocks")?;
     for (other, other_priority) in waiting {
-        // Same asymmetry: an untriaged dependent has claimed nothing, so there
-        // is nothing for this demotion to contradict.
+        // An unranked dependent claims nothing.
         let Some(theirs) = other_priority else {
             continue;
         };
@@ -868,11 +689,8 @@ async fn unblocked_end(
     Ok(())
 }
 
-/// Refuse a set of blockers that cannot all be satisfied.
-///
-/// ⚠ **In a cycle nothing could ever start.** The whole graph is walked, not one
-/// step, because `A → B → C → A` arrives as three separate edits. Each task is
-/// visited at most once.
+/// Refuse a cycle, in which nothing could start. The whole graph is walked:
+/// `A → B → C → A` arrives as three edits.
 async fn no_cycle(tx: &mut Transaction<'_, MySql>, id: u64, proposed: &[u64]) -> Result<()> {
     let mut seen: Vec<u64> = vec![id];
     let mut queue: Vec<u64> = proposed.to_vec();
@@ -898,9 +716,7 @@ async fn no_cycle(tx: &mut Transaction<'_, MySql>, id: u64, proposed: &[u64]) ->
     Ok(())
 }
 
-/// Replace a task's blockers, and say what moved.
-///
-/// The whole set is written, not added to — see [`Change::blocked_on`].
+/// Replace a task's blockers (the whole set) and say what moved.
 async fn set_blockers(
     tx: &mut Transaction<'_, MySql>,
     id: u64,
@@ -947,9 +763,7 @@ async fn set_blockers(
     Ok(Some(format!("{} → {}", show(&have), show(&want))))
 }
 
-/// A blocker id with no task behind it, said plainly instead of as a 500.
-///
-/// As [`unknown_holder`]: on this statement one row can be missing.
+/// A blocker id with no task, said plainly instead of a 500.
 fn unknown_blocker(e: sqlx::Error, blocker: u64) -> AppError {
     if e.as_database_error()
         .is_some_and(|db| db.kind() == sqlx::error::ErrorKind::ForeignKeyViolation)
@@ -959,16 +773,11 @@ fn unknown_blocker(e: sqlx::Error, blocker: u64) -> AppError {
     AppError::Other(anyhow::Error::new(e).context("recording what blocks a task"))
 }
 
-/// The assignee foreign key's refusal, turned into an answer the caller can act
-/// on. Any other failure keeps `doing` as its context and stays a 500.
+/// The assignee foreign key's refusal as an answer the caller can act on.
 ///
-/// ⚠ **Discriminated by KIND, not the constraint's NAME**: sqlx's MySQL driver
-/// answers `DatabaseError::constraint()` with `None`, so the name is only in
-/// message text MariaDB may reword. On a statement writing `assignee_session`
-/// there is exactly one foreign key it can be.
-///
-/// ⚠ **The constraint's answer, not a `SELECT` first**, which would cost a
-/// query on every move and still race.
+/// Matched by kind, not constraint name: sqlx's MySQL driver doesn't expose the
+/// name, and this statement has only one foreign key. Using the constraint, not
+/// a `SELECT` first, saves a query and can't race.
 fn unknown_holder(e: sqlx::Error, session: Option<&str>, doing: &'static str) -> AppError {
     let violated = e
         .as_database_error()
@@ -982,13 +791,8 @@ fn unknown_holder(e: sqlx::Error, session: Option<&str>, doing: &'static str) ->
     }
 }
 
-/// What to call an assignee in the history, resolved against the session table.
-///
-/// ⚠ **Both sides of an arrow need the same kind of name.** A caller sends a
-/// kind and an id, while the task read back through the join carries a name;
-/// [`Assignee::label`] on both would write one conversation as its id on one
-/// line and its name on the next. The detail is rendered at write time, so the
-/// name is resolved at write time too.
+/// An assignee's name for history, resolved at write time like the rest of the
+/// line, so one conversation isn't its id on one line and its name the next.
 async fn label_of(tx: &mut Transaction<'_, MySql>, assignee: &Assignee) -> Result<String> {
     let (AssigneeKind::Session, Some(id)) = (assignee.kind, assignee.id.as_deref()) else {
         return Ok(assignee.label());
@@ -998,17 +802,14 @@ async fn label_of(tx: &mut Transaction<'_, MySql>, assignee: &Assignee) -> Resul
         .fetch_optional(&mut **tx)
         .await
         .context("resolving a session name")?;
-    // A session nobody has named reads as its id, as in the list.
+    // An unnamed session reads as its id.
     Ok(name
         .and_then(|(name,)| name)
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| id.to_string()))
 }
 
-/// Write one history row, and say which one it was.
-///
-/// The id is returned because `task_revision` hangs off it: what an edit
-/// replaced is stored against the event that recorded the edit.
+/// Write one history row and return its id, which `task_revision` hangs off.
 async fn record(
     tx: &mut Transaction<'_, MySql>,
     task_id: u64,
@@ -1031,13 +832,10 @@ async fn record(
     Ok(done.last_insert_id())
 }
 
-/// The pile's stated reason, and the refusal when the two do not match.
-///
-/// Whitespace is not a reason: `--spare " "` would pass a presence check while
-/// arguing nothing.
+/// The pile's stated reason, or the refusal; whitespace is no reason.
 fn spare_note(kind: AssigneeKind, spare: Option<&str>) -> Result<Option<String>> {
     let said = spare.map(str::trim).filter(|why| !why.is_empty());
-    // The verdict is shared with the CLI; only the words are this side's.
+    // The verdict is shared with the CLI.
     let nobody = matches!(kind, AssigneeKind::Nobody);
     match crate::tasks::holder::pile_verdict(nobody, said.is_some()) {
         crate::tasks::holder::PileVerdict::Fits => Ok(said.map(str::to_string)),
@@ -1047,18 +845,13 @@ fn spare_note(kind: AssigneeKind, spare: Option<&str>) -> Result<Option<String>>
 
 pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Task> {
     let subject = check_subject(&new.subject)?;
-    // Filing a task takes it on, unless the caller says where it goes —
-    // the user's rule: a task a session deals with is that session's. The pile is
-    // something said (`--to nobody`), not fallen into.
-    //
-    // ⚠ **A filing session needs a row in `sessions`**: the default holder is a
-    // foreign key. The write routes `touch` before reaching here; a caller below
-    // them (a test, an import) must too. Falling back to the pile would hide a
-    // conversation's work rather than fail.
+    // Filing a task takes it on unless told otherwise; the pile is chosen
+    // (`--to nobody`), never fallen into. The holder is a foreign key, so callers
+    // must `touch` the session first.
     let assignee = new.assignee.unwrap_or_else(|| actor_holder(actor));
     check_assignee(&assignee)?;
     let (kind, person, session) = assignee_columns(&assignee);
-    // Before the transaction opens, so a refused filing costs no database work.
+    // Before the transaction, so a refusal costs nothing.
     let spare = spare_note(kind, new.spare.as_deref())?;
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
@@ -1079,8 +872,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     let id = done.last_insert_id();
     record(&mut tx, id, actor, Moved::Created, Some(subject.clone())).await?;
     if !new.checked {
-        // In the filing's own transaction: an override that is not on the record
-        // is the habit this exists to make visible.
+        // In the filing's transaction, so no override goes unrecorded.
         let named: Vec<String> = new
             .not_duplicate_of
             .iter()
@@ -1096,8 +888,7 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
         record(&mut tx, id, actor, Moved::Blocked, Some(moved)).await?;
         blocking_is_consistent(&mut tx, id, new.priority.stored(), new.due).await?;
     }
-    // ⚠ **Recorded for the pile too**, with its reason, so how often the pile
-    // is chosen — and why — can be counted rather than inferred.
+    // Recorded for the pile too, with its reason, so it can be counted.
     let note = match spare {
         Some(why) => format!("→ nobody: {why}"),
         None => format!("→ {}", label_of(&mut tx, &assignee).await?),
@@ -1108,37 +899,18 @@ pub async fn create(pool: &MySqlPool, new: NewTask, actor: &Actor) -> Result<Tas
     list_one(pool, id).await
 }
 
-/// Who a write hands the task to, when the caller did not say.
-///
-/// ⚠ **Pure, and out here on purpose**: `update` needs a real database, and
-/// these rules have regressed before. `tests/holder.rs` drives the whole path;
-/// this lets the decision be asserted without one.
-///
-/// An explicit `change.assignee` always wins and is not considered here: a
-/// caller naming where a task should go is more specific than any inference.
+/// Who a write hands the task to when the caller didn't say. Pure, so the rules
+/// can be asserted without a database (`tests/holder.rs` drives the whole path).
 pub fn inferred_holder(before: &Task, change: &Change, actor: &Actor) -> Option<Assignee> {
-    // FINISHING a task claims it.
-    // Only on the way OUT of open — reopening leaves the holder alone, because
-    // the last person to touch it is a better guess than nobody, and done →
-    // dropped is a correction to a closed task rather than a new closing.
+    // Finishing claims it, on the way out of open only: reopening keeps the holder,
+    // and done → dropped corrects a close.
     let finisher = (change.status.is_some_and(|status| !status.is_open())
         && before.status.is_open()
         && change.assignee.is_none())
     .then(|| actor_holder(actor));
 
-    // Starting a task claims it too — the same rule read at the other end.
-    //
-    // Without it the holder column would only say who finished a task, never
-    // who is carrying it.
-    //
-    // ⚠ **Out of the PILE only.** Guarding on the status instead — claim unless
-    // already `doing` — would let any session running `start` silently take a
-    // task handed to another. Taking somebody else's is a handover: `move`.
-    //
-    // ⚠ **And it does not read the status at all.** A task handed back to the
-    // pile stays `doing`, so `&& status != Doing` would make `start` report
-    // success and move nobody. `update` already writes nothing when the holder
-    // does not change.
+    // Starting claims it, from the pile only (taking someone else's is `move`),
+    // and regardless of status: a task handed back to the pile stays `doing`.
     let starter = (change.status == Some(Status::Doing)
         && before.assignee.kind == AssigneeKind::Nobody
         && change.assignee.is_none())
@@ -1147,21 +919,13 @@ pub fn inferred_holder(before: &Task, change: &Change, actor: &Actor) -> Option<
     finisher.or(starter)
 }
 
-/// Apply a partial change.
-///
-/// ⚠ **Reads the row first and compares.** A change that alters nothing writes
-/// no event: a client that PUTs the whole object on every keystroke would
-/// otherwise fill the history with `open → open`, and a history full of
-/// non-events is one nobody reads.
+/// Apply a partial change. Compares first: a change that alters nothing writes
+/// no event, so the history holds only real moves.
 pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) -> Result<Updated> {
     let before = list_one(pool, id).await?;
 
-    // ⚠ **A closed task may not be left in the pile**: nobody picks up a
-    // finished task, and it would read as done by nobody.
-    //
-    // **Only an EXPLICIT `nobody` is refused.** Closing without naming anybody
-    // is claimed by the finisher in `inferred_holder`; testing the effective
-    // holder here, before inference, would refuse every close from the pile.
+    // A closed task may not go to the pile. Only an explicit `nobody` is refused:
+    // a close from the pile is claimed by the finisher in `inferred_holder`.
     let would_be_closed = change
         .status
         .map_or(!before.status.is_open(), |status| !status.is_open());
@@ -1181,19 +945,14 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 
     let mut tx = pool.begin().await.context("opening a transaction")?;
 
-    // What actually moved, pushed beside each `record`: the event rows ARE the
-    // answer.
+    // What moved, beside each `record`.
     let mut changed: Vec<Moved> = Vec::new();
 
-    // ⚠ **Read ONCE, inside the transaction, whether or not it will change**:
-    // the comparisons need it, and so does the revision snapshot, which holds
-    // the *whole* previous task even when one column moved.
+    // Read once, locked: the comparisons and the revision snapshot need it.
     //
-    // ⚠ **`FOR UPDATE`; a transaction alone is NOT enough.** `prepend` and
-    // `append` build the new body from this read, and under REPEATABLE READ a
-    // plain `SELECT` does not lock: two conversations adding to one task would
-    // both read the old body, and the second commit would drop the first's
-    // text. `tests/body_add.rs` drives that interleaving by hand.
+    // ⚠ `FOR UPDATE`; a transaction alone isn't enough. Under REPEATABLE READ a
+    // plain `SELECT` doesn't lock, and two concurrent additions would both build on
+    // the old body. `tests/body_add.rs` drives that interleaving.
     let (was_subject, was_body): (String, String) =
         sqlx::query_as("SELECT subject, body FROM tasks WHERE id = ? FOR UPDATE")
             .bind(id)
@@ -1201,13 +960,10 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             .await
             .context("reading a task before changing it")?;
 
-    // Asked before this update writes its own events, or it would answer with
-    // the edit currently being made.
+    // Before this update's own events.
     let wrote_it = last_written(&mut tx, id).await?;
 
-    // The event a revision hangs off: the first `edited` this update writes.
-    // `None` until something textual actually moves, which is also the test for
-    // whether a snapshot is owed at all.
+    // The first `edited` event, which the revision hangs off; `None` until text moves.
     let mut edit_event: Option<u64> = None;
 
     if let Some(subject) = &change.subject {
@@ -1225,13 +981,9 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         }
     }
 
-    // Adding to a body is resolved into `body` here, against the text just
-    // read, so everything downstream — the collapse guard, the `N → M chars`
-    // line, the revision snapshot — treats it like any other edit.
-    //
-    // ⚠ **Adding nothing is refused, not quietly ignored.** An empty addition
-    // means the heredoc, variable or command meant to produce the text
-    // produced none, and reporting success would hide that.
+    // Additions resolve into `body` here, so the guard, the size line and the
+    // snapshot treat them like any edit. An empty addition is refused: the command
+    // meant to produce it produced nothing.
     for (flag, text) in [("--prepend", &change.prepend), ("--append", &change.append)] {
         if text.as_ref().is_some_and(|t| t.trim().is_empty()) {
             return Err(AppError::BadRequest(format!(
@@ -1250,8 +1002,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         &change.body,
         change.prepend.is_some() || change.append.is_some(),
     ) {
-        // Both spellings at once contradict each other — one replaces the body
-        // and the other keeps it — so this is refused rather than ordered.
+        // Replacing and adding at once contradict each other.
         (Some(_), true) => {
             return Err(AppError::BadRequest(
                 "--body replaces the whole body and --prepend/--append keep it, so sending \
@@ -1283,11 +1034,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
             .execute(&mut *tx)
             .await
             .context("changing a body")?;
-        // ⚠ **An edit that makes the body SMALLER clears the sprawl flag**, the
-        // same step that resets `accreted`, so the flag and the sampler agree on
-        // what consolidating is. A quiet density read also clears it, but that
-        // cannot be summoned — see `checks::remember`. In the same transaction,
-        // so no critique outlives the body it was about.
+        // A shrinking edit clears the sprawl flag, the step that resets `accreted`,
+        // so flag and sampler agree. Same transaction, so no critique outlives its body.
         if body.chars().count() < was_body.chars().count() {
             sqlx::query("UPDATE tasks SET sprawl_said = NULL, sprawl_chars = NULL WHERE id = ?")
                 .bind(id)
@@ -1295,9 +1043,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
                 .await
                 .context("clearing a body's sprawl flag")?;
         }
-        // ⚠ **The size of the change belongs in the row, not only in the reply.**
-        // The reply goes with the scrollback of whoever made the edit; stored,
-        // it is what tells the next reader that a body was once emptied.
+        // The size goes in the row too, so the next reader sees a body was once emptied.
         let detail = format!(
             "body {} → {} chars",
             was_body.chars().count(),
@@ -1308,10 +1054,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         changed.push(Moved::Edited);
     }
 
-    // ⚠ **One snapshot per update, not per event.** A `task edit --subject
-    // --body` writes two history rows and must leave ONE previous version
-    // behind: `task undo` restores a task as it stood, and two half-revisions
-    // would make it restore a subject from one moment and a body from another.
+    // One snapshot per update, not per event: `undo` restores a task as it stood,
+    // not a subject from one moment and a body from another.
     if let Some(event) = edit_event {
         sqlx::query("INSERT INTO task_revision (event_id, subject, body) VALUES (?, ?, ?)")
             .bind(event)
@@ -1325,10 +1069,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     if let Some(status) = change.status
         && status != before.status
     {
-        // `closed_at` moves with the status in the same statement. The
-        // condition comes from `Status::is_open`, whose `match` is exhaustive,
-        // not SQL against the word: `IF(? = 'done', …)` would leave a dropped
-        // task with no closing time.
+        // `closed_at` moves with the status, decided by `Status::is_open` (exhaustive)
+        // rather than SQL on the word, which would miss `dropped`.
         sqlx::query("UPDATE tasks SET status = ?, closed_at = IF(?, NOW(), NULL) WHERE id = ?")
             .bind(status)
             .bind(!status.is_open())
@@ -1347,10 +1089,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         changed.push(Moved::Status);
     }
 
-    // ⚠ **Compared before writing, like every other field here.** Re-ranking a
-    // task to what it already is must write no event: the history is read, and
-    // one full of `P2 → P2` is one nobody reads. `unranked` is spelled out
-    // rather than left blank so the line says which direction the change went.
+    // Compared before writing: re-ranking to the same rank writes nothing.
+    // `unranked` is spelled out so the line shows the direction.
     if let Some(priority) = change.priority.filter(|p| Some(*p) != before.priority) {
         sqlx::query("UPDATE tasks SET priority = ? WHERE id = ?")
             .bind(priority)
@@ -1370,9 +1110,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         changed.push(Moved::Ranked);
     }
 
-    // `clear_due` wins over `due`: a caller sending both has contradicted
-    // itself, and taking the deadline off is the safer reading — it removes a
-    // claim rather than asserting one.
+    // `clear_due` wins over `due`: removing a claim is the safer reading.
     let due_change = if change.clear_due {
         Some(None)
     } else {
@@ -1406,12 +1144,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         changed.push(Moved::Blocked);
     }
 
-    // ⚠ **After BOTH writes, and once — not inside either.** A change may move
-    // the rank and the blockers together, and each is legal only against the
-    // NEW value of the other: ranking to `P1` while also pointing at a `P1`
-    // blocker is the case. Checking as we go would refuse a change that is
-    // consistent the moment it lands. Inside the transaction, so a refusal rolls
-    // the whole thing back rather than leaving half of it written.
+    // After both writes, once: rank and blockers are each legal only against the
+    // other's new value. In the transaction, so a refusal rolls back both.
     if change.priority.is_some() || change.blocked_on.is_some() || due_change.is_some() {
         blocking_is_consistent(
             &mut tx,
@@ -1422,14 +1156,13 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
         .await?;
     }
 
-    // Who this lands on when the caller did not say — see `inferred_holder`.
+    // Who this lands on when unstated (`inferred_holder`).
     let inferred = inferred_holder(&before, &change, actor);
 
     if let Some(assignee) = change.assignee.as_ref().or(inferred.as_ref()) {
         check_assignee(assignee)?;
         let (kind, person, session) = assignee_columns(assignee);
-        // Compared as (kind, id), which is what the three columns encode, so
-        // this covers every move, including session to session.
+        // As (kind, id), covering every move.
         let moved =
             (kind, assignee.id.as_deref()) != (before.assignee.kind, before.assignee.id.as_deref());
         if moved {
@@ -1458,11 +1191,8 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     }
 
     tx.commit().await.context("committing a task change")?;
-    // Only where text moved, and only where the task had a history to name.
-    //
-    // ⚠ **`now` is the RESOLVED `body`, not `change.body`**, which is None on
-    // every `--prepend`/`--append` and would report a large addition as no
-    // change — wrong in the reassuring direction.
+    // Only where text moved and there is history. Uses the resolved `body`:
+    // `change.body` is None for additions and would report no change.
     let now = body
         .as_deref()
         .map_or(was_body.chars().count(), |body| body.chars().count());
@@ -1478,7 +1208,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     };
 
     let task = list_one(pool, id).await?;
-    // ⚠ **A failed warning is no failed close**: the change has landed.
+    // The change has landed; a failed hint is not a failed close.
     let unwritten = if changed.contains(&Moved::Status) && !task.status.is_open() {
         crate::tasks::lifecycle::unwritten(pool, id)
             .await
@@ -1497,15 +1227,9 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
     })
 }
 
-/// How much this body has grown since anything last made it smaller.
-///
-/// ⚠ **Read out of `task_revision`, not parsed out of the history.**
-/// `task_events.detail` is a line rendered for a person, and parsing it would
-/// make that sentence a wire format. Sizes are `CHAR_LENGTH` in SQL, so no body
-/// is loaded to be measured.
-///
-/// The count starts at the oldest revision, the task as FILED: a body written
-/// in one go is not accretion, however long.
+/// Growth since the body last shrank, from `task_revision` (never the prose
+/// history), measured with `CHAR_LENGTH` in SQL. It starts at the filed body: a
+/// body written in one go is not accretion.
 async fn accreted(pool: &MySqlPool, id: u64, now: usize) -> Result<usize> {
     let stored: Vec<i64> = sqlx::query_scalar(
         "SELECT CHAR_LENGTH(r.body) FROM task_revision r \
@@ -1519,10 +1243,8 @@ async fn accreted(pool: &MySqlPool, id: u64, now: usize) -> Result<usize> {
 
     let mut sizes: Vec<usize> = stored.into_iter().map(|n| n.max(0) as usize).collect();
     sizes.push(now);
-    // Backwards from now: every step that added text counts, and the first that
-    // removed any ends the run — a rewrite has read what it swept up. A step of
-    // ZERO does not end it: a subject-only edit stores a revision too, and must
-    // not clear the count.
+    // Backwards: growth counts, the first shrink ends the run, and a zero step
+    // (a subject-only edit) doesn't end it.
     let mut grown = 0;
     for step in sizes.windows(2).rev() {
         match step[1].checked_sub(step[0]) {
@@ -1533,8 +1255,7 @@ async fn accreted(pool: &MySqlPool, id: u64, now: usize) -> Result<usize> {
     Ok(grown)
 }
 
-/// One task without its prose or history — the read every write does first,
-/// and the value every write returns.
+/// One task without prose or history: what every write reads first and returns.
 async fn list_one(pool: &MySqlPool, id: u64) -> Result<Task> {
     let row: Option<Row> = sqlx::query_as(select!(" WHERE t.id = ?"))
         .bind(id)
@@ -1544,10 +1265,8 @@ async fn list_one(pool: &MySqlPool, id: u64) -> Result<Task> {
     row.map(Row::into_task).ok_or(AppError::NotFound)
 }
 
-/// Render a task body's markdown.
-///
-/// Tables, strikethrough and task lists are all in use in task prose. Raw HTML
-/// renders escaped rather than dropped, so the text stays visible.
+/// Render a body's markdown (tables, strikethrough and task lists are in use).
+/// Raw HTML is escaped, not dropped, so it stays visible.
 pub fn render_markdown(md: &str) -> String {
     let mut options = comrak::Options::default();
     options.extension.table = true;

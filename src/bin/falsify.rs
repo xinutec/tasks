@@ -2,14 +2,9 @@
 //!
 //!     falsify --tasks tasks.json < findings.json
 //!
-//! ⚠ **No network and no database here either.** `--tasks` is a map of task id
-//! to `{subject, body}`, which the caller produces with `task show <id> --json`.
-//! Keeping the fetch outside means this binary is the decision in
-//! [`tasks::tasks::findings`] and nothing else, and it can be run against a
-//! saved corpus long after the tasks have moved on.
-//!
-//! Exit 1 when anything was refused, so a pipeline stops rather than reporting
-//! a clean review it did not get.
+//! `--tasks` maps task ids to `{subject, body}` (from `task show <id> --json`),
+//! so this is the decision in [`tasks::tasks::findings`] alone, runnable on a
+//! saved corpus. Exits 1 when anything was refused, so a pipeline stops.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -73,8 +68,7 @@ fn main() -> Result<()> {
             unknown += 1;
             continue;
         };
-        // A finding about a task whose text was not supplied cannot be checked,
-        // and silence would read as a pass — so it is refused, loudly.
+        // A finding whose task text is missing can't be checked: refused, not passed.
         let Some(t) = texts.get(&r.id.to_string()) else {
             refused += 1;
             *why.entry("task text not supplied".into()).or_default() += 1;

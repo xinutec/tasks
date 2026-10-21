@@ -1,27 +1,15 @@
-//! Whether a task about to be filed is already on the list.
+//! Whether a task about to be filed is already on the list. Conversations
+//! can't see each other's lists, and two spellings of one problem often share
+//! no words, so a model is asked before filing. A refusal costs one re-run (the
+//! caller still holds the body); a duplicate costs attention twice.
 //!
-//! Several conversations file here and none can see the others' lists, so the
-//! same problem arrives twice in different words. A string comparison cannot
-//! catch that — two spellings of one problem often share no words — so a model
-//! is asked, before the filing rather than after.
-//!
-//! Every arm refuses and `--not-duplicate-of` passes any of them: a refusal
-//! costs one re-run, since the caller still holds the body it tried to file,
-//! where a duplicate costs somebody's attention twice.
-//!
-//! ⚠ **A check that could NOT run files the task and says so.** A missing
-//! `claude`, a timeout, an unreadable answer. Only a model that actually names
-//! something refuses; a session that cannot write things down is the worst
-//! outcome available here.
-//!
-//! [`same_subject`] is string equality and has no error rate. [`prompt`] is the
-//! guess, and says so. Closed tasks are read too and refuse as well, but their
-//! remedy is `task reopen` rather than a re-run — see [`reopen_instead`].
+//! ⚠ A check that could not run (no `claude`, a timeout, an unreadable answer)
+//! files the task and says so: only a model that names something refuses.
+//! [`same_subject`] is exact; [`prompt`] is the guess. A closed match's remedy
+//! is `task reopen` ([`reopen_instead`]).
 
-/// The open task whose subject is already the one being filed, if there is one.
-///
-/// Case and surrounding space are ignored: neither distinguishes two pieces of
-/// work, and both are what a second attempt at one filing varies by.
+/// The open task with this exact subject, ignoring case and surrounding space
+/// (what a second attempt at one filing varies by).
 pub fn same_subject(subject: &str, corpus: &[(u64, String)]) -> Option<u64> {
     let want = subject.trim();
     corpus
@@ -30,11 +18,8 @@ pub fn same_subject(subject: &str, corpus: &[(u64, String)]) -> Option<u64> {
         .map(|(id, _)| *id)
 }
 
-/// What a refused filing says.
-///
-/// ⚠ **Names all three ways out.** A collision is usually an *update* to the
-/// task that exists, which is `task edit`; the override is spelled in full so
-/// nobody has to find it in `--help` while holding a body on stdin.
+/// Names all three ways out: usually it is an update (`task edit`), and the
+/// override is spelled in full.
 pub fn collision(already: u64) -> String {
     format!(
         "NOT FILED — #{already} is already open with this exact subject. \
@@ -46,25 +31,16 @@ pub fn collision(already: u64) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Match {
     pub id: u64,
-    /// Its one clause about what the two share. Printed as given.
+    /// Its one clause about what the two share, printed as given.
     pub why: String,
 }
 
-/// A fourth line is not a fourth candidate worth opening — by then the answer
-/// is a list of everything in that area.
+/// Past three, the answer is everything in the area.
 const MOST: usize = 3;
 
-/// The list a model is shown, without either end of an edge the filing declares.
-///
-/// ⚠ **A blocker resembles what it unblocks by construction**, so without this
-/// the check condemns a task for the relationship that proves it is a different
-/// one. No better prompt fixes that, because the reading is not wrong.
-///
-/// ⚠ **[`same_subject`] still runs against the WHOLE list** — an identical
-/// title is one task whatever edge was declared.
-///
-/// Filtered here because a new task's edges reach the service only in the POST
-/// that follows this check.
+/// The open list without either end of an edge the filing declares: a blocker
+/// resembles what it unblocks by construction, so the model would condemn the
+/// very relationship that proves they differ. [`same_subject`] still sees all.
 pub fn edged(corpus: &[(u64, String)], waiting_on: &[u64], unblocks: &[u64]) -> Vec<(u64, String)> {
     corpus
         .iter()
@@ -73,19 +49,14 @@ pub fn edged(corpus: &[(u64, String)], waiting_on: &[u64], unblocks: &[u64]) -> 
         .collect()
 }
 
-/// What the model is asked.
-///
-/// ⚠ **The negative half of the instruction does most of the work.** Asked
-/// plainly whether two tasks are "similar", a model answers about subject
-/// matter and returns everything in the same repository. Naming what is *not* a
-/// duplicate is what makes the answer usable.
+/// What the model is asked. Saying what is not a duplicate does most of the
+/// work: asked about "similar", a model returns everything in the repository.
 pub fn prompt(subject: &str, corpus: &[(u64, String)], settled: bool) -> String {
     let lines: String = corpus
         .iter()
         .map(|(id, subject)| format!("{id} | {subject}\n"))
         .collect();
-    // Named rather than inlined to keep the two blocks visibly apart: this one
-    // varies every filing and the one it points at does not.
+    // Kept apart from the cached block: this part varies every filing.
     let also = if settled {
         "Your instructions also carry every CLOSED task — finished or abandoned. \
          Those count: a task already done should be reopened, not filed again.\n\n"
@@ -108,20 +79,14 @@ pub fn prompt(subject: &str, corpus: &[(u64, String)], settled: bool) -> String 
     )
 }
 
-/// The matches in a model's answer.
-///
-/// ⚠ **Unparseable lines are dropped**, or a model that explains itself puts a
-/// paragraph into a refusal.
-///
-/// ⚠ **An id not on the list it was given is discarded.** A hallucinated number
-/// must not be able to block work, and the corpus is the only thing that says
-/// which numbers were real.
+/// The matches in a model's answer. Unparseable lines are dropped, and so is
+/// any id not on the list it was shown: a hallucinated number must not block
+/// work.
 pub fn parse(said: &str, corpus: &[(u64, String)]) -> Vec<Match> {
     let mut found: Vec<Match> = Vec::new();
     for line in said.lines() {
         let line = line.trim();
-        // A model that says NONE and then explains why has said the useful
-        // part first.
+        // NONE then an explanation is still NONE.
         if line.eq_ignore_ascii_case("NONE") {
             break;
         }
@@ -140,12 +105,8 @@ pub fn parse(said: &str, corpus: &[(u64, String)]) -> Vec<Match> {
     found
 }
 
-/// A numbered list's number, removed — but only where something else is
-/// plainly the id.
-///
-/// ⚠ **A leading `1.` reads as an id and low-numbered tasks are real.**
-/// Stripping every leading `<digits>.` would be worse, since a bare number is a
-/// plausible way to name a task, so it goes only when a `#` id follows.
+/// A list's `1.` removed, but only before a `#` id: low-numbered tasks are
+/// real, and a bare number may be one.
 fn ordinal(line: &str) -> &str {
     let digits = line.chars().take_while(char::is_ascii_digit).count();
     if digits == 0 {
@@ -159,12 +120,9 @@ fn ordinal(line: &str) -> &str {
     if rest.starts_with('#') { rest } else { line }
 }
 
-/// Tolerant of the wrappers a model adds despite being asked not to. Not
-/// tolerant of a missing id, which is what separates an answer from a sentence
-/// about the answer.
+/// Tolerates the wrappers a model adds; a line without an id is not an answer.
 fn one(line: &str) -> Option<Match> {
-    // Emphasis goes because this is printed as plain text, where it arrives as
-    // punctuation rather than as formatting.
+    // Emphasis is stripped: printed as plain text it is punctuation.
     let line: String = line.chars().filter(|c| !"`*_".contains(*c)).collect();
     let line = line.trim().trim_start_matches(['-', '•', '*']).trim();
     let line = ordinal(line);
@@ -176,25 +134,14 @@ fn one(line: &str) -> Option<Match> {
         .trim_start_matches(['-', '—', '–', ':'])
         .trim()
         .to_string();
-    // An id with nothing after it is a number, not a finding: a bare id makes
-    // a reader open a task to learn whether it was worth opening.
+    // An id with no reason is not a finding.
     (!why.is_empty()).then_some(Match { id, why })
 }
 
-/// What a refused filing says.
-///
-/// ⚠ **It says who is talking.** Every other line this CLI prints is read off
-/// the service; this one is a model's reading of titles and has to admit it. A
-/// caller told *this is a duplicate* checks nothing; one told *a model thinks
-/// so, here is what it matched* opens the task.
-///
-/// ⚠ **The override is spelled out in full.** The caller still holds the text
-/// it tried to file, so the remedy is one re-run — saying so is what keeps a
-/// false positive cheap.
-///
-/// **A match the filer holds gets the hand-off.** A session finishing its
-/// half and filing the rest for someone else should hand the open task on, not
-/// close it and file a second one.
+/// What a refused filing says. It admits a model is talking (a caller told *a
+/// model thinks so* opens the task; one told *this is a duplicate* checks
+/// nothing), spells the override, and when the filer holds the match, says to
+/// hand that task on instead of filing a second.
 pub fn refusal(found: &[Match], open: &[(u64, String)], mine: &[u64]) -> String {
     let mut out = String::new();
     for one in found {
@@ -253,43 +200,30 @@ fn only(mut ids: impl ExactSizeIterator<Item = u64>) -> String {
     }
 }
 
-/// A closed task, as the check reads it.
-///
-/// ⚠ **`dropped` and `done` are kept apart** so the refusal can say which: a
-/// done task whose bug came back is reopened, while an abandoned one being
-/// filed again is a decision made twice, and its reason is in the task.
+/// A closed task as the check reads it. Done and dropped differ: a done bug
+/// that came back is reopened, while refiling a dropped one repeats a decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settled {
     pub id: u64,
     pub subject: String,
-    /// Closed without being done — see [`Status::Dropped`].
+    /// Closed without being done ([`Status::Dropped`]).
     ///
     /// [`Status::Dropped`]: crate::tasks::types::Status::Dropped
     pub dropped: bool,
 }
 
-/// Whether a closed row is a description of work at all.
-///
-/// Much of the dropped pile is this tool testing itself, including the
-/// paraphrase pairs written to verify this very check.
-///
-/// ⚠ **A property of the row, never a list of ids** — a hard-coded list rots at
-/// the next probe.
-///
-/// ⚠ **Closing quickly is NOT the signal**: some valuable closed rows were
-/// dropped within a minute and carry a complete plan. What separates the
-/// fixtures is that they say nothing — a filing with no body.
+/// Whether a closed row describes work at all. Many dropped rows are this
+/// check's own test fixtures, and what marks them is an empty body, not a quick
+/// close (some real plans were dropped within a minute) and never a list of ids.
 pub fn worth_reading(detailed: bool) -> bool {
     detailed
 }
 
-/// The closed corpus, as the block that goes in front of the question.
+/// The closed corpus, the cached block before the question.
 ///
-/// ⚠ **Nothing that varies per filing may be appended to this string.** It goes
-/// where a cached prefix goes, and a cache block ends where the varying text
-/// begins — put the subject below this list in one message and every call
-/// rewrites the whole corpus without reading any of it back. The open list and
-/// the subject belong in [`prompt`].
+/// ⚠ Nothing per-filing may be appended: a cache block ends where varying text
+/// begins, and the whole corpus would be rewritten every call. The open list
+/// and subject go in [`prompt`].
 pub fn settled_block(corpus: &[Settled]) -> String {
     let lines: String = corpus
         .iter()
@@ -309,8 +243,7 @@ pub fn settled_block(corpus: &[Settled]) -> String {
     )
 }
 
-/// Which list each match came off. [`parse`] has already dropped ids on
-/// neither.
+/// Which list each match came off; [`parse`] already dropped ids on neither.
 pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, Settled)>) {
     let mut open = Vec::new();
     let mut over = Vec::new();
@@ -323,14 +256,9 @@ pub fn split(found: &[Match], settled: &[Settled]) -> (Vec<Match>, Vec<(Match, S
     (open, over)
 }
 
-/// What a filing is told when it resembles something already closed.
-///
-/// ⚠ **The remedy is why this is not [`refusal`] with a different list.** An
-/// open twin is folded into or re-run past; a closed one is `task reopen`, and
-/// a session not told so files anyway.
-///
-/// ⚠ **The verdict is the LAST line, ids and corpus counts and all**, because
-/// sessions pipe this to `tail`. See the `what_survives_the_tail` tests.
+/// What a filing is told when it resembles a closed task: the remedy is
+/// `task reopen`, which a session not told so never does. The verdict, ids and
+/// counts included, is the last line: sessions read the tail.
 pub fn reopen_instead(found: &[(Match, Settled)], read: usize, unread: usize) -> String {
     let mut out = String::new();
     for (one, task) in found {

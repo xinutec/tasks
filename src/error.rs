@@ -7,10 +7,8 @@ use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    /// No usable credential — or one that stopped short of saying who it is.
-    ///
-    /// The message is carried because "not authenticated" misleads a caller
-    /// whose token is right but who sent no `X-Session-Id`.
+    /// No usable credential, or one that doesn't say who it is; the message tells
+    /// a correct token without an `X-Session-Id` apart from a bad one.
     #[error("{0}")]
     Unauthorized(&'static str),
 
@@ -20,9 +18,7 @@ pub enum AppError {
     #[error("not found")]
     NotFound,
 
-    /// A request that cannot be honoured as asked — an unknown status word, a
-    /// subject too long for its one line. The message is shown to the caller,
-    /// who is the one who can fix it.
+    /// A request that can't be honoured as asked; the message is for the caller to fix it.
     #[error("{0}")]
     BadRequest(String),
 

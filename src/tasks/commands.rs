@@ -1,17 +1,6 @@
-//! What the CLI did, recorded from real use rather than sampled by a probe.
-//!
-//! [`checks`](crate::tasks::checks) records the two model checks, which is the
-//! expensive part of ONE command. This records every command: how long `list`,
-//! `show`, `edit` and the rest actually took for the session that ran them.
-//!
-//! ⚠ **Real invocations only. There is no prober and there must not be one.**
-//! A timer running a command on a cadence times what no session runs, from a
-//! process with no session and a cold cache, and samples the clock rather than
-//! the usage. What a session waits for is only visible from what sessions do.
-//!
-//! ⚠ **Recording must never cost the command anything.** The write goes out
-//! after the answer is printed, and its failures are silent: a session that
-//! cannot reach the service has a worse problem than a missing row.
+//! How long each CLI command took, recorded from real use. No prober: a timer
+//! times what no session runs, from a cold process. Recording is sent after the
+//! answer prints and fails silently.
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -23,19 +12,16 @@ use crate::wire::RequiredKeys;
 
 type Result<T> = std::result::Result<T, AppError>;
 
-/// How a command ended.
-///
-/// ⚠ **Counted apart, never folded together.** A refusal usually returns
-/// without a round trip, so a median over all outcomes reports the tool quicker
-/// than any session experiences it; and a refusal counted as an `Error` makes
-/// `add`, whose duplicate check refuses by design, look like a broken command.
+/// How a command ended. Refusals are counted apart: they usually skip the round
+/// trip, and counted as errors they make `add`, which refuses by design, look
+/// broken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ended {
     Ok,
-    /// The tool DECLINED — a guard fired, or a check refused. Not a fault.
+    /// The tool declined: a guard fired, or a check refused.
     Refused,
-    /// It could not. Something went wrong that nobody chose.
+    /// Something went wrong.
     Error,
 }
 
@@ -48,8 +34,7 @@ impl Ended {
         }
     }
 
-    /// ⚠ **An older client sends `error` for a refusal too**; those rows stay
-    /// `Error`, since guessing would invent the split this exists to measure.
+    /// Older clients send `error` for refusals too; those stay `Error`.
     fn read(word: &str) -> Option<Ended> {
         match word {
             "ok" => Some(Ended::Ok),
@@ -60,10 +45,8 @@ impl Ended {
     }
 }
 
-/// The marker [`declined`] puts under a refusal's message.
-///
-/// ⚠ **A type, never a message match**, as in `checks::outcome`: rewording a
-/// line a caller prints must not silently reclassify a month of runs.
+/// The marker [`declined`] puts under a refusal: a type, never a message match,
+/// so rewording can't reclassify past runs.
 #[derive(Debug)]
 pub struct Refused;
 
@@ -75,10 +58,7 @@ impl std::fmt::Display for Refused {
 
 impl std::error::Error for Refused {}
 
-/// An error that says the tool declined, carrying the same words as before.
-///
-/// The context IS the message a caller reads, so nothing about the output
-/// changes; the marker rides underneath it where only the classifier looks.
+/// A refusal: the caller reads the same words; only the classifier sees the marker.
 pub fn declined(said: impl std::fmt::Display) -> anyhow::Error {
     anyhow::Error::new(Refused).context(said.to_string())
 }
@@ -97,14 +77,9 @@ fn was_refused(why: &anyhow::Error) -> bool {
 
 /// What a caller reads when a command ends badly.
 ///
-/// ⚠⚠ **A REFUSAL PRINTS ITS SENTENCE AND NOTHING UNDER IT, BECAUSE SESSIONS
-/// READ THE LAST THREE LINES.** anyhow's default rendering prints the whole
-/// chain, so a one-line refusal would end in a blank, `Caused by:` and `the
-/// tool declined` — and piped to `tail -3`, that reads as the whole answer with
-/// the remedy cut off.
-///
-/// ⚠ **The chain STAYS for anything that actually went wrong**: a transport
-/// failure is diagnosed from its causes.
+/// ⚠ A refusal prints its sentence and nothing below it: sessions read the last
+/// lines, and anyhow's chain would end with `Caused by: the tool declined`.
+/// Real failures keep the chain, which is how they are diagnosed.
 pub fn said(why: &anyhow::Error) -> String {
     match was_refused(why) {
         true => format!("{why}"),
@@ -112,25 +87,16 @@ pub fn said(why: &anyhow::Error) -> String {
     }
 }
 
-/// One command, as the CLI reports it.
-///
-/// The clock is the service's and the session the credential's, as for
-/// [`checks::Run`](crate::tasks::checks::Run): a client is trusted for how long
-/// it took, not for when it happened.
+/// One command as the CLI reports it. The service supplies the clock and the
+/// session; the client is trusted only for how long it took.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Run {
-    /// `list`, `show`, `add`, … from the CLI's own command enum.
+    /// From the CLI's own command enum.
     pub verb: String,
     pub elapsed_ms: u32,
     pub outcome: Ended,
-    /// Whether this invocation waited for a model check.
-    ///
-    /// ⚠ **This explains the `edit` distribution.** A checked edit waits on a
-    /// model, an unchecked one does not, and the percentile over both moves when
-    /// the check rate moves AND when the model slows down.
-    ///
-    /// Absent from an older client, and stored as NULL rather than `false`: not
-    /// knowing is a third answer.
+    /// Whether it waited for a model check, which is what separates the two `edit`
+    /// populations. NULL from older clients: unknown, not `false`.
     #[serde(default)]
     pub waited_for_a_model: Option<bool>,
 }
@@ -149,10 +115,7 @@ impl RequiredKeys for Run {
     }
 }
 
-/// The longest a `verb` may be, matching the column.
-///
-/// ⚠ **Refused rather than truncated.** `verb` is the trend key, and a value
-/// cut to fit would split one command's history in two.
+/// Matches the column. Refused, not truncated: a cut verb splits its history.
 const VERB_MAX: usize = 32;
 
 pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
@@ -183,14 +146,12 @@ pub struct Ran {
     pub verb: String,
     pub elapsed_ms: u32,
     pub outcome: Ended,
-    /// Whether it waited for a model — `None` when the client did not say.
+    /// `None` when the client didn't say.
     pub waited_for_a_model: Option<bool>,
 }
 
-/// The commands run in the last `days`, newest first.
-///
-/// ⚠ **An outcome this module cannot read is an error, not a skipped row**, as
-/// in `checks::recent`: dropping it would quietly shrink the counts.
+/// The commands run in the last `days`, newest first. An unreadable outcome is
+/// an error, not a skipped row, or the counts shrink quietly.
 pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
     #[derive(sqlx::FromRow)]
     struct Row {
@@ -228,31 +189,19 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
 pub struct Tally {
     pub verb: String,
     pub runs: usize,
-    /// Went wrong — not a refusal, see [`Ended`]. An older client's refusals
-    /// count here, since it could not tell them apart.
+    /// Went wrong (older clients' refusals land here too).
     pub failed: usize,
     /// The tool declined: a guard fired, or a check refused.
     pub refused: usize,
-    /// Milliseconds, by nearest rank over the runs that SUCCEEDED.
-    ///
-    /// ⚠ **Successes only**, or the tool would look fastest on the day it started
-    /// refusing everything.
+    /// Nearest-rank milliseconds over successes only, or the tool looks fastest on
+    /// the day it refuses everything.
     pub median_ms: u32,
     pub p90_ms: u32,
     pub worst_ms: u32,
-    /// The same percentiles over only the runs that did NOT wait for a model.
-    ///
-    /// ⚠ **This is the service's latency; the fields above are the mix.** A
-    /// model call dwarfs the whole request, so over both a percentile mostly
-    /// reports how many edits were checked, and a service regression hides.
-    ///
-    /// `None` when no run in the window said either way — never the mix, which
-    /// it exists to correct.
+    /// The same over runs that didn't wait for a model: the service's own latency.
+    /// Over both, a percentile mostly counts checked edits. `None` when no run said.
     pub unchecked_p90_ms: Option<u32>,
-    /// How many runs waited for a model, and how many said nothing.
-    ///
-    /// ⚠ **`unknown` is carried, not folded into either side**: counting it as
-    /// unchecked would file slow edits into the fast population.
+    /// Runs that waited for a model, and that didn't say; unknown is never folded into either.
     pub waited: usize,
     pub unknown: usize,
 }
@@ -265,10 +214,7 @@ fn rank(sorted: &[u32], part: f64) -> u32 {
     sorted[at.clamp(1, sorted.len()) - 1]
 }
 
-/// Per verb, busiest first.
-///
-/// ⚠ **Ordered by how often a command is RUN, not how slow**: the question is
-/// what sessions spend their time on.
+/// Per verb, most run first: the question is where sessions spend time.
 pub fn tally(runs: &[Ran]) -> Vec<Tally> {
     let mut verbs: Vec<&str> = runs.iter().map(|r| r.verb.as_str()).collect();
     verbs.sort_unstable();
@@ -283,9 +229,7 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
                 .map(|r| r.elapsed_ms)
                 .collect();
             spent.sort_unstable();
-            // The same population, minus the runs that waited for a model. A run
-            // that said nothing is excluded from BOTH sides rather than assumed
-            // fast — see `unknown`.
+            // Minus the runs that waited; runs that didn't say are excluded from both.
             let mut alone: Vec<u32> = mine
                 .iter()
                 .filter(|r| r.outcome == Ended::Ok && r.waited_for_a_model == Some(false))
@@ -312,36 +256,23 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
             }
         })
         .collect();
-    // Then by name, so equally busy verbs do not swap places between readings.
+    // Then by name, so ties don't swap between readings.
     out.sort_by(|a, b| b.runs.cmp(&a.runs).then_with(|| a.verb.cmp(&b.verb)));
     out
 }
 
-/// How long a caller waits before another is handed the reporting job.
-///
-/// ⚠ **This is the PUSH window, not what fleetwatch grades.** This is how often
-/// a fresh point lands; [`REPORTING_INTERVAL_S`] is how long silence is
-/// tolerated before it is a fault.
+/// How often a fresh point is pushed. Not what fleetwatch grades; that is
+/// [`REPORTING_INTERVAL_S`].
 const REPORT_EVERY: chrono::TimeDelta = chrono::TimeDelta::hours(1);
 
-/// The cadence the report declares to fleetwatch, in seconds.
-///
-/// ⚠ **Worked back from fleetwatch's bands, not chosen.** It grades a report
-/// `Fresh` within 1.5× this, `Overdue` to 3×, and `Silent` — a FAILURE —
-/// beyond; this puts `Silent` at several days of nothing, so a quiet weekend is
-/// not a fault.
-///
-/// ⚠ **Silence means NOBODY USED THE TRACKER**, which without a prober cannot be
-/// told from it being broken. Firing only after days makes that tolerable.
+/// The cadence declared to fleetwatch, worked back from its bands (`Silent`, a
+/// failure, past 3×): several days of nothing, so a quiet weekend isn't a fault.
+/// Without a prober, silence can't be told from breakage.
 pub const REPORTING_INTERVAL_S: u64 = 144_000;
 
-/// Whether this caller is the one to carry the timings out, claiming the job if
-/// so.
-///
-/// ⚠ **A conditional UPDATE, and the condition is the whole point.** Two
-/// sessions asking in the same second both read the same old stamp; only one
-/// can match it in the `WHERE`, so only one gets `true`. Doing this as a read
-/// followed by a write would hand the job to both.
+/// Whether this caller carries the timings out, claiming the job if so. A
+/// conditional UPDATE: two callers reading the same old stamp can't both match
+/// it. A read then a write would hand the job to both.
 pub async fn due_to_report(pool: &MySqlPool) -> Result<bool> {
     let claimed = sqlx::query(
         "UPDATE reported SET claimed_at = NOW() \
@@ -355,8 +286,7 @@ pub async fn due_to_report(pool: &MySqlPool) -> Result<bool> {
     if claimed > 0 {
         return Ok(true);
     }
-    // The first ever call: no row to update. `INSERT IGNORE`, so of two callers
-    // racing to create it only one wins.
+    // First ever call: `INSERT IGNORE`, so one racer wins.
     let created =
         sqlx::query("INSERT IGNORE INTO reported (what, claimed_at) VALUES ('timings', NOW())")
             .execute(pool)

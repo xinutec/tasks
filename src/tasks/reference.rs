@@ -1,12 +1,6 @@
-//! Naming a task: a bare number, or `#`-prefixed as the digest prints it.
-//!
-//! ⚠ **Both spellings are the same thing, and that is the whole job.** The
-//! digest puts the hash on every line of every prompt, so a session copying one
-//! out of its own context must not be corrected for what it was shown. Parsing
-//! in one place stops each subcommand growing its own opinion.
-//!
-//! In the library rather than the CLI because [`TaskRef::path`] is the URL for a
-//! reference, and keeping it beside the router stops the two drifting.
+//! Naming a task: a bare number, or `#`-prefixed as the digest prints it, so a
+//! session copying from its own prompt is never corrected. Beside the router,
+//! since [`TaskRef::path`] is its URL.
 
 use std::fmt;
 use std::str::FromStr;

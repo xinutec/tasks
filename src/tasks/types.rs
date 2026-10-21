@@ -1,9 +1,5 @@
-//! What a task is.
-//!
-//! Two small closed vocabularies — a status and who is holding it — and the
-//! records built from them. Both vocabularies are stored as `VARCHAR` and
-//! parsed on the way out, so a value outside the set fails the query loudly
-//! instead of arriving as a default.
+//! Two closed vocabularies, a status and a holder, and the records built from
+//! them. Stored as `VARCHAR` and parsed on read, so an unknown value fails loudly.
 
 use std::fmt;
 use std::str::FromStr;
@@ -13,12 +9,9 @@ use serde::{Deserialize, Serialize};
 
 /// Store a fieldless enum in a `VARCHAR` column.
 ///
-/// ⚠ **Not `#[derive(sqlx::Type)]`.** That derive declares the SQL type as
-/// `ENUM`, and against a `VARCHAR` column it compiles, passes every test that
-/// does not touch the column, and fails *every read of a real row* at runtime.
-/// The three impls delegate to `str` instead. `Decode` parses, so an
-/// out-of-vocabulary value stored by anything else is an error rather than a
-/// silent default.
+/// ⚠ Not `#[derive(sqlx::Type)]`: that declares `ENUM`, and against `VARCHAR` it
+/// compiles, passes tests that don't read the column, and fails every real row
+/// at runtime. These impls delegate to `str`, and `Decode` parses.
 macro_rules! varchar_enum {
     ($name:ident) => {
         impl sqlx::Type<sqlx::MySql> for $name {
@@ -54,15 +47,9 @@ macro_rules! varchar_enum {
     };
 }
 
-/// Where a task stands.
-///
-/// Two open states and two ways out. `Doing` is how a session that has picked
-/// a task up tells the others not to start it.
-///
-/// ⚠ **`Dropped` is a closed task that was never done.** Without it an obsolete
-/// task stays open for ever, or is closed as `Done` and credits somebody with
-/// work nobody did. It buys an honest record and nothing else. There is no
-/// *reason* field beside it: why it went is prose, and prose lives in the body.
+/// Where a task stands: two open states (`Doing` tells others not to start it)
+/// and two ways out. `Dropped` is closed but never done, so obsolete work neither
+/// stays open nor credits work nobody did. Why it went is prose, in the body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -83,9 +70,8 @@ impl Status {
         }
     }
 
-    /// Whether this status is still work. A method rather than a comparison at
-    /// each call site, so adding a state cannot quietly leave one behind; its
-    /// SQL half is [`still_open!`](crate::still_open).
+    /// Whether this status is still work: a method, so a new state can't be missed
+    /// at a call site. The SQL half is [`still_open!`](crate::still_open).
     pub fn is_open(self) -> bool {
         match self {
             Status::Open | Status::Doing => true,
@@ -117,17 +103,9 @@ impl FromStr for Status {
     }
 }
 
-/// SQL for *a deadline close enough to raise the rank*, in exactly one place.
-///
-/// **Less than one week.** A constant here and not a setting: a threshold
-/// somebody can change from a UI is one nobody can reason about.
-///
-/// Spelled once because the sort key, the projection that reports the raise,
-/// and the guard that stops a `P0` claiming to have been raised must agree
-/// about what day it is.
-///
-/// `<` rather than `<=`: *less than*. A task due exactly on the boundary is not
-/// yet inside it, and `tests/blocking.rs` pins that.
+/// SQL for a deadline close enough to raise the rank: under a week, a constant
+/// on purpose. One spelling, because the sort, the projection and the P0 guard
+/// must agree on the day. `<`, not `<=` (`tests/blocking.rs` pins the boundary).
 #[macro_export]
 macro_rules! due_soon {
     ($column:literal) => {
@@ -140,20 +118,11 @@ macro_rules! due_soon {
     };
 }
 
-/// SQL for *the body as a reader actually sees it*: trimmed at both ends, the
-/// way `task show` trims it before printing.
+/// SQL for the body as a reader sees it, trimmed at both ends.
 ///
-/// ⚠⚠ **`TRIM()` IS NOT `trim()` — it removes SPACES AND NOTHING ELSE.** A body
-/// of nothing but newlines therefore has a non-zero trimmed length, so the
-/// service reports prose behind a task that prints as nothing and the app offers
-/// to open an empty sheet — the exact thing `detailed` exists to prevent.
-///
-/// `[[:space:]]` rather than `\s` deliberately: a backslash in a SQL literal is
-/// an escape that `NO_BACKSLASH_ESCAPES` turns off, and this would then trim
-/// nothing while still looking right.
-///
-/// Spelled once because two projections must agree: whether there is a body,
-/// and how many lines it is.
+/// ⚠ SQL `TRIM()` removes only spaces, so a body of newlines would count as
+/// prose. `[[:space:]]`, not `\s`, which `NO_BACKSLASH_ESCAPES` would break
+/// silently.
 #[macro_export]
 macro_rules! body_shown {
     ($column:literal) => {
@@ -165,19 +134,12 @@ macro_rules! body_shown {
     };
 }
 
-/// SQL for *this task is still work*, spelled in exactly one place.
+/// SQL for "this task is still work", in one place.
 ///
-/// ⚠ **The obvious spelling is the wrong one.** `status <> 'done'` counts a
-/// [`Status::Dropped`] task as open, everywhere and silently.
-///
-/// A macro rather than a `const` because sqlx takes only `&'static str`: this
-/// expands inside `concat!` and the compiler assembles the literal, so nothing
-/// is built at runtime. The column is an argument because half these queries
-/// join and have to qualify it.
-///
-/// `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere` is what ties this to
-/// [`Status::is_open`]: nothing else can compare a match arm against a string
-/// living in a database.
+/// ⚠ The obvious `status <> 'done'` counts dropped tasks as open. A macro so it
+/// expands inside `concat!` (sqlx wants `&'static str`); the column is an
+/// argument for joins. `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere`
+/// ties it to [`Status::is_open`].
 #[macro_export]
 macro_rules! still_open {
     ($column:literal) => {
@@ -187,18 +149,10 @@ macro_rules! still_open {
 
 varchar_enum!(Status);
 
-/// How urgent a task is, when somebody has said.
-///
-/// ⚠ **Absence is not a level, and every list depends on that.** Most tasks have
-/// no priority and always will — nobody is going back to triage the backlog. A
-/// default of `P2` would have all of them assert something nobody said, so the
-/// column is nullable and this type only describes a task somebody ranked.
-///
-/// ⚠ **Untriaged sorts as [`Priority::P2`] all the same** — [`Priority::rank`]
-/// and `COALESCE(priority, 'P2')`. That is the decision the whole feature turns
-/// on: `P0`/`P1` go above the untriaged pile and `P3`/`P4` *below* it, where
-/// "ranked first, the rest after" would lift a task marked *when there is room*
-/// above everything nobody has read. Within a rank, id order.
+/// How urgent a task is, when somebody said. Absence is not a level: most tasks
+/// never get one, so the column is nullable rather than defaulting to `P2`.
+/// Unranked still sorts as `P2` ([`Priority::rank`], `COALESCE(priority, 'P2')`),
+/// so `P3`/`P4` sort below the unread pile. Within a rank, id order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Priority {
     P0,
@@ -219,19 +173,10 @@ impl Priority {
         }
     }
 
-    /// What each level means, in one line.
-    ///
-    /// ⚠ **Each one is a TEST that can fail, not a degree of feeling.** A scale
-    /// of importance has no anchor: every filer argues their item above the
-    /// line, and it drifts until everything is `P0`. These are distinct
-    /// SITUATIONS applied as a cascade — the first test that passes is the rank —
-    /// answerable about a ticket, so two conversations reach the same answer.
-    ///
-    /// ⚠ **A full range is a check on the RANKING, never a quota on the
-    /// tickets.** Mostly `P0` means the tests are applied loosely, all `P2` that
-    /// the ranker is not reading; moving tickets to fill a bucket fixes neither.
-    ///
-    /// Printed by `task --help`, which is where it will actually be read.
+    /// What each level means. Each is a test that can fail, applied as a cascade,
+    /// so two conversations reach the same rank; a scale of feeling drifts to all
+    /// `P0`. A spread of ranks checks the ranker; it is never a quota. Printed by
+    /// `task --help`.
     pub fn gloss(self) -> &'static str {
         match self {
             Priority::P0 => "damage is accruing — every hour it stays open costs more",
@@ -242,7 +187,7 @@ impl Priority {
         }
     }
 
-    /// Every level, most urgent first. One source for `--help` and the parser.
+    /// Every level, most urgent first, for `--help` and the parser.
     pub fn all() -> [Priority; 5] {
         [
             Priority::P0,
@@ -253,41 +198,29 @@ impl Priority {
         ]
     }
 
-    /// Where an `Option<Priority>` sorts. Unranked ranks as `P2`.
-    ///
-    /// The Rust twin of the SQL's `COALESCE(priority, 'P2')`; `tests/priority.rs`
-    /// compares the two against a real database.
+    /// Where an `Option<Priority>` sorts: unranked as `P2`, the twin of the SQL's
+    /// `COALESCE` (`tests/priority.rs` compares them on a real database).
     pub fn rank(this: Option<Priority>) -> Priority {
         this.unwrap_or(Priority::P2)
     }
 }
 
-/// What a filer said about urgency. **There is no "did not say".**
+/// What a filer said about urgency; there is no "did not say". `Unassessed` is
+/// an answer, kept so `P2` means somebody looked: a required field with an easy
+/// safe answer gets filled reflexively. Both sort at `P2`.
 ///
-/// ⚠ **This type exists so that omission is not a state.** `Option<Priority>`
-/// fits a task that exists, but at FILING it lets a client skip the question,
-/// and `None` would mean both *nobody has judged this* and *nobody was asked*.
-///
-/// [`Ranking::Unassessed`] is kept as an answer on purpose: a required field
-/// with an obvious safe answer gets filled reflexively, and everything ends up
-/// `P2`. An honest *I am not judging this* is worth more.
-///
-/// ⚠ **It changes no ordering** — both sort at `P2` via [`Priority::rank`]. What
-/// it buys is that `P2` means **somebody looked and called it ordinary**.
-///
-/// The wire form is `Priority` or `null`, and an ABSENT key is a
-/// deserialisation error. Removing `#[serde(default)]` does NOT make an
-/// `Option` field mandatory, which is the wrong first attempt this invites.
+/// On the wire: a level or `null`; an absent key is an error. (Dropping
+/// `#[serde(default)]` does not make an `Option` field mandatory.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ranking {
     /// Judged, at this level.
     At(Priority),
-    /// Explicitly not judged. Sorts as `P2`; means *nobody has assessed this*.
+    /// Explicitly not judged; sorts as `P2`.
     Unassessed,
 }
 
 impl Ranking {
-    /// What goes in the column: `NULL` for unassessed.
+    /// The column value; `NULL` for unassessed.
     pub fn stored(self) -> Option<Priority> {
         match self {
             Ranking::At(priority) => Some(priority),
@@ -297,17 +230,11 @@ impl Ranking {
 }
 
 impl<'de> Deserialize<'de> for Ranking {
-    /// `null` is [`Ranking::Unassessed`]; a string must be a level; **absent is
-    /// an error**, which is the entire point of this impl.
+    /// `null` is unassessed, a string must be a level, and absent is an error.
     ///
-    /// ⚠ **`deserialize_any`, and NOT `Option::<Priority>::deserialize`.** The
-    /// obvious spelling silently accepts a filing with no `priority` key: serde
-    /// fills a missing field through `missing_field`, whose deserialiser rejects
-    /// everything EXCEPT `deserialize_option`, which it answers with
-    /// `visit_none`. Delegating to `Option` opts straight into the fallback this
-    /// type exists to refuse. `deserialize_any` takes the path it errors on.
-    ///
-    /// The two spellings differ by one line and on one input, so keep the test.
+    /// ⚠ `deserialize_any`, not `Option::<Priority>::deserialize`: serde fills a
+    /// missing field via `missing_field`, which answers `deserialize_option` with
+    /// `None`, so the obvious spelling accepts a filing with no key. The test pins it.
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct Stated;
 
@@ -318,20 +245,17 @@ impl<'de> Deserialize<'de> for Ranking {
                 f.write_str("a priority (\"P0\" to \"P4\"), or null for unassessed")
             }
 
-            /// [`Priority`]'s own derive, not `FromStr`: the CLI's parser
-            /// case-folds so a hand can type `p0`, and the wire should not.
+            /// [`Priority`]'s derive, not `FromStr`: the wire isn't case-folded.
             fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Ranking, E> {
                 Priority::deserialize(serde::de::value::StrDeserializer::<E>::new(s))
                     .map(Ranking::At)
             }
 
-            /// JSON `null` through `deserialize_any`.
             fn visit_unit<E: serde::de::Error>(self) -> Result<Ranking, E> {
                 Ok(Ranking::Unassessed)
             }
 
-            /// `null` reached through a self-describing format that models it as
-            /// an option instead. Both spellings mean the same answer.
+            /// `null` from a format that models it as an option.
             fn visit_none<E: serde::de::Error>(self) -> Result<Ranking, E> {
                 Ok(Ranking::Unassessed)
             }
@@ -344,8 +268,7 @@ impl<'de> Deserialize<'de> for Ranking {
 impl FromStr for Priority {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Case-folded for the CLI: `p0` is what a hand types. The bare digit is
-        // accepted for the same reason. The stored spelling is `P<n>`.
+        // Case-folded and digit-only allowed for typing (`p0`, `0`); stored as `P<n>`.
         match s.to_ascii_uppercase().as_str() {
             "P0" | "0" => Ok(Priority::P0),
             "P1" | "1" => Ok(Priority::P1),
@@ -363,11 +286,11 @@ varchar_enum!(Priority);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssigneeKind {
-    /// In the pile: nobody has taken it, and whichever conversation is around may.
+    /// In the pile: whichever conversation is around may take it.
     Nobody,
-    /// A Nextcloud user — the user.
+    /// A Nextcloud user.
     Person,
-    /// A Claude Code conversation, by the CLI's session id.
+    /// A Claude Code conversation, by session id.
     Session,
 }
 
@@ -395,12 +318,8 @@ impl FromStr for AssigneeKind {
 
 varchar_enum!(AssigneeKind);
 
-/// Who is holding a task, resolved for display.
-///
-/// The `id` is what the database stores and what an API caller sends back;
-/// `name` is what a person reads and may be absent — a session that has not
-/// named itself yet, or one whose row has been forgotten. **Never key anything
-/// on `name`**: a session renames itself as its job changes.
+/// Who holds a task. `id` is stored and sent back; `name` is for reading and may
+/// be absent. Never key on `name`: sessions rename themselves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Assignee {
     pub kind: AssigneeKind,
@@ -419,9 +338,8 @@ impl Assignee {
         }
     }
 
-    /// What to call this holder in one word — for a digest line or a chip.
-    /// Falls back to the id, and then to `nobody`, because a blank there reads
-    /// as "unassigned" and would be a lie about a task somebody is holding.
+    /// One word for a digest line or chip: the name, else the id, else `nobody`; a
+    /// blank would read as unassigned.
     pub fn label(&self) -> String {
         match (&self.name, &self.id) {
             (Some(name), _) if !name.is_empty() => name.clone(),
@@ -431,105 +349,51 @@ impl Assignee {
     }
 }
 
-/// A task as it appears in any list: everything except the prose.
-///
-/// ⚠ **The body is deliberately not here**: a list carrying bodies costs far
-/// more than the lines it renders. [`TaskDetail`] carries prose, one task at a
-/// time.
+/// A task in a list: everything but the prose, which [`TaskDetail`] carries one
+/// task at a time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: u64,
     pub subject: String,
     pub status: Status,
-    /// How urgent, when somebody has said. Absent is the ordinary case and is
-    /// not a level — see [`Priority`].
+    /// When somebody said; usually absent ([`Priority`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
-    /// The day this has to be done by, when something outside decides.
-    ///
-    /// ⚠ **A day, not an instant** — *by the 14th*. A time would invent
-    /// precision nobody stated and make every reader choose a timezone.
-    ///
-    /// ⚠ **It does not reorder anything by itself.** How long the work takes
-    /// would decide *what next*, and nothing records it, so a date is evidence
-    /// for a rank that a person makes — except inside the week, see
-    /// [`escalated_to`](Self::escalated_to).
+    /// The day it must be done by, when something outside decides: a date, not an
+    /// instant, inventing no time or zone. It reorders nothing, except within the
+    /// week ([`escalated_to`](Self::escalated_to)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due: Option<NaiveDate>,
-    /// What this sorts as instead, when a near deadline has raised it.
-    ///
-    /// ⚠ **Absent is the ordinary case, and present always means
-    /// [`Priority::P0`].** Inside the deadline window a task sorts as `P0`
-    /// whatever it was set to, and [`priority`](Self::priority) still holds what
-    /// somebody actually chose.
-    ///
-    /// ⚠ **Derived at read time, never written**: stamping `P0` into the row
-    /// would edit history and need a scheduler. Recomputed from `due` and the
-    /// clock, it cannot drift.
-    ///
-    /// ⚠ **A value rather than a flag, so no renderer knows the rule**: each
-    /// draws [`Task::urgency`], and the window and level live in
-    /// [`due_soon!`](crate::due_soon). With a fixed date and work remaining,
-    /// `P0`'s own test does pass: every hour costs more.
+    /// What it sorts as when a near deadline raised it: always `P0` when present,
+    /// while [`priority`](Self::priority) keeps what was chosen. Derived at read
+    /// time from `due` and the clock, never stored, so it can't drift; renderers use
+    /// [`Task::urgency`] and the rule lives in [`due_soon!`](crate::due_soon).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escalated_to: Option<Priority>,
-    /// Whether [`due`](Self::due) has passed, by the database's clock.
-    ///
-    /// Derived server-side, or the CLI and the app would each compare against
-    /// their own idea of today.
+    /// Whether [`due`](Self::due) has passed, by the database's clock, so CLI and app agree.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub overdue: bool,
-    /// The tasks this one is waiting for, oldest id first. Usually empty.
-    ///
-    /// ⚠ **A LIST**: with one slot, a second blocker would go in the body and
-    /// go stale there.
-    ///
-    /// ⚠ **It carries a rule about [`priority`](Self::priority).** A task may not
-    /// be ranked more urgently than what blocks it — equal is allowed — because
-    /// *do this next* about something you cannot start empties the scale. With
-    /// several blockers the bound is the LEAST urgent open one, which decides
-    /// when this can start.
-    ///
-    /// ⚠ **Kept when a blocker closes.** The dependency is a fact about how the
-    /// work went; what stops is the effect, which is [`blocked`](Self::blocked).
+    /// The tasks this one waits for, oldest first. A list, so a second blocker
+    /// doesn't go stale in the body. A task may not outrank its least urgent open
+    /// blocker. Kept after a blocker closes; [`blocked`](Self::blocked) is the effect.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocked_on: Vec<u64>,
-    /// Whether any of [`blocked_on`](Self::blocked_on) is still open — resolved
-    /// through the projection, so no reader needs a second query and no client
-    /// has to know that a closed blocker does not count.
+    /// Whether any blocker is still open, resolved in the projection.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub blocked: bool,
     pub assignee: Assignee,
-    /// Whether there is prose behind it worth opening. A task written as a
-    /// one-line reminder has none, and offering to open an empty sheet is worse
-    /// than not offering.
+    /// Whether there is prose worth opening.
     pub detailed: bool,
-    /// How many lines the body prints as, `0` when there is none.
-    ///
-    /// ⚠ **So a reader that truncates knows what it truncated** — a read piped
-    /// to `head` otherwise looks complete. Unconditional, not a flag over a
-    /// threshold: the reader who needs it is the one who cannot see it coming.
+    /// Body lines, always sent, so a reader that truncates (`| head`) knows it did.
     pub body_lines: u32,
-    /// What the session that filed it calls itself — `observe`, `dev-lint`.
-    /// Absent when the user filed it, or the filing session has no name.
-    ///
-    /// ⚠ **A hint about where the work lives, deliberately not a filter**: a
-    /// session scanning the pile learns from it without opening the task, and
-    /// a filter by where work lives hides work.
-    ///
-    /// **A fact rather than a field**: read from the `created` event and
-    /// resolved through the join like a holder's, so nothing has to be kept true.
+    /// What the filing session calls itself (`observe`, `dev-lint`); absent for the
+    /// person or an unnamed session. A hint where the work lives, never a filter.
+    /// Read from the `created` event, so nothing has to be kept true.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filed_by: Option<String>,
-    /// How long this body was when a model last read it and had something to
-    /// say — absent when nothing is outstanding.
-    ///
-    /// ⚠ **The number, not the words**: a list must not carry prose, so the
-    /// critique is on [`TaskDetail::sprawl_said`].
-    ///
-    /// ⚠ **Present means the LAST read spoke, not that it ever did.** Cleared
-    /// only by an edit that makes the body smaller — see `repo::update`, which
-    /// keeps this and the sampler agreeing on what counts as consolidating.
+    /// The body's length when a model last read it and spoke; absent when nothing is
+    /// outstanding. The words are on [`TaskDetail::sprawl_said`]. Cleared only by an
+    /// edit that shrinks the body (`repo::update`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sprawl_chars: Option<u32>,
     pub created_at: DateTime<Utc>,
@@ -538,22 +402,15 @@ pub struct Task {
     pub closed_at: Option<DateTime<Utc>>,
 }
 impl Task {
-    /// The rank this actually sorts and renders as.
-    ///
-    /// ⚠⚠ **`escalated_to` first, and never the other way round.** Reading
-    /// `priority` alone hides the rank a near deadline raised; reversed, nothing
-    /// fails to compile and the list stops agreeing with itself. Every renderer
-    /// calls this rather than spelling the rule.
+    /// The rank it sorts and renders as. ⚠ `escalated_to` first: reversed, it still
+    /// compiles and the list stops agreeing with itself.
     pub fn urgency(&self) -> Option<Priority> {
         self.escalated_to.or(self.priority)
     }
 }
 
-/// What a write moved, in the words the history uses.
-///
-/// ⚠⚠ **One vocabulary** for `task_events.kind` and a write's `changed` list,
-/// which name the same facts: spelled by hand at each site, they drift, and a
-/// client keying off one disagrees with a reader of the other.
+/// What a write moved: one vocabulary for `task_events.kind` and a write's
+/// `changed` list, which would drift if spelled at each site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Moved {
@@ -583,87 +440,62 @@ impl Moved {
     }
 }
 
-/// A task after a write, and what the write actually moved.
-///
-/// ⚠ **An empty `changed` means the call did nothing, and says so.** Otherwise a
-/// no-op answers exactly like a write that worked.
-///
-/// **Reported rather than refused**: a no-op is often correct — `start` on a
-/// task already yours is meant to be quiet.
+/// A task after a write. An empty `changed` says the call did nothing; that is
+/// reported, not refused, since a no-op is often right.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Updated {
     #[serde(flatten)]
     pub task: Task,
     /// The event kinds written, in the order written.
     pub changed: Vec<Moved>,
-    /// What this edit displaced, when it displaced any text. Absent for a
-    /// change that moved only a status, a rank or a holder.
+    /// What this edit displaced, if it replaced any text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replaced: Option<Replaced>,
-    /// When this change closed the task without anything having been written
-    /// to it since it last moved: when its text was last written. See
-    /// [`lifecycle::unwritten`](crate::tasks::lifecycle::unwritten).
+    /// When the text was last written, if this change closed the task without a
+    /// rewrite ([`lifecycle::unwritten`](crate::tasks::lifecycle::unwritten)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unwritten: Option<DateTime<Utc>>,
 }
 
-/// What filing a task answers: the task, and what the filing may have meant
-/// instead.
+/// What filing answers: the task, and hints about what was meant instead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Created {
     #[serde(flatten)]
     pub task: Task,
-    /// Tasks this filing names as `#<id>` that its filer closed recently —
-    /// usually a sign it continues one and `task reopen` was meant. See
-    /// [`lifecycle`](crate::tasks::lifecycle).
+    /// Tasks this filing names as `#<id>` that its filer closed recently, likely a
+    /// continuation ([`lifecycle`](crate::tasks::lifecycle)).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub closed: Vec<crate::tasks::lifecycle::Closed>,
 }
 
-/// What an edit overwrote, told to whoever made it.
-///
-/// ⚠ **This is the whole of the prevention, and it refuses nothing.** The loss
-/// is a session writing a body from a stale snapshot, but sessions rewrite each
-/// other's words by standing permission, so the write goes through and says
-/// what it landed on — a writer told the text was rewritten recently by
-/// somebody else can stop.
+/// What an edit overwrote, told to whoever made it. Refuses nothing (sessions
+/// may rewrite each other's text), but a writer told it landed on someone's
+/// recent text can stop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Replaced {
     /// When the text this edit replaced was last written.
     pub at: DateTime<Utc>,
-    /// Who wrote it, resolved the same way a history line's actor is.
+    /// Who wrote it, resolved like a history line's actor.
     pub by: String,
-    /// Body length before and after, in characters: a rewrite that loses most
-    /// of a body says so even when nobody reads the dates.
+    /// Lengths before and after, so losing most of a body shows.
     pub was: usize,
     pub now: usize,
-    /// How much this body has grown, in characters, since the last edit that
-    /// made it smaller — this one included.
-    ///
-    /// ⚠ **Neither a size nor a count of edits.** A size cannot tell a body just
-    /// rewritten from one that has doubled unread, and an edit count cannot tell
-    /// typo fixes from dumps. This is the text nobody has read as a whole —
-    /// exactly what goes stale in place.
-    ///
-    /// Zero on the edit that consolidates, because that edit is the answer.
+    /// Characters grown since the last edit that shrank it, this one included: the
+    /// text nobody has read whole. Neither size nor edit count can show that. Zero on
+    /// the consolidating edit.
     pub accreted: usize,
 }
 
-/// A task as it stood before an edit — one complete previous version.
-///
-/// Both columns, always: a revision is restored as a unit. `Deserialize` too,
-/// because the CLI reads it back to decide whether restoring is safe.
+/// A task's previous version, restored whole; `Deserialize` because the CLI
+/// checks it before restoring.
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct Revision {
-    /// When the edit that displaced this text was made, and by whom. Read off
-    /// the event this revision hangs from rather than stored a second time.
+    /// When and by whom it was displaced, read off the event.
     pub at: DateTime<Utc>,
     pub actor: String,
-    /// Whether the edit this would revert was made by whoever is asking.
-    ///
-    /// ⚠ **Answered by the server on the stored identity, not by comparing
-    /// [`actor`](Self::actor)**, a rendered label two conversations can share
-    /// and a rename changes. See [`crate::tasks::undo`] for why it matters.
+    /// Whether the edit this would revert is the asker's, decided by the server on
+    /// stored identity, not the rendered [`actor`](Self::actor) label
+    /// ([`crate::tasks::undo`]).
     pub mine: bool,
     pub subject: String,
     pub body: String,
@@ -676,19 +508,12 @@ pub struct TaskDetail {
     pub task: Task,
     /// The body as written, in markdown.
     pub body: String,
-    /// The body rendered. Both are sent: the app shows the HTML, and a session
-    /// reading through the CLI wants the markdown it will edit.
+    /// Rendered HTML for the app; the markdown for the CLI to edit.
     pub body_html: String,
     pub events: Vec<Event>,
-    /// Whether an edit has replaced text here, so there is something to put
-    /// back — answered without sending a revision the client mostly will not
-    /// want.
+    /// Whether there is a previous version to restore.
     pub restorable: bool,
-    /// What a model last said about this body, verbatim, when it had something
-    /// to say.
-    ///
-    /// ⚠ **Stored so it reaches whoever opens the task next**, rather than only
-    /// the session whose edit prompted it.
+    /// What a model last said about this body, kept for whoever opens it next.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sprawl_said: Option<String>,
 }
@@ -700,12 +525,11 @@ pub struct Event {
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
-    /// Who did it, resolved to a readable label at READ time — see
-    /// [`repo::events`](crate::tasks::repo::events).
+    /// Who did it, resolved at read time ([`repo::events`](crate::tasks::repo::events)).
     pub actor: String,
 }
 
-/// Who is making a change — carried into every write so `task_events` can say.
+/// Who is making a change, carried into every write for `task_events`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Actor {
     Person(String),
@@ -727,8 +551,6 @@ impl Actor {
     }
 }
 
-/// The longest subject that may be stored, matching the column.
-///
-/// A cap, not a style rule: this column is the per-turn cost of the whole
-/// system, and something that does not fit on a line is a body.
+/// Matches the column. A cap, not style: subjects are the per-turn cost, and
+/// what doesn't fit on a line is a body.
 pub const MAX_SUBJECT: usize = 200;

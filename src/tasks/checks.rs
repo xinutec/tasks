@@ -1,15 +1,7 @@
-//! What the two model checks did, recorded so that their rate and their latency
-//! are facts.
-//!
-//! [`duplicates`](crate::tasks::duplicates) runs before a filing and can refuse
-//! it; [`density`](crate::tasks::density) runs after an edit and can only
-//! advise. Both spawn a one-shot session, read its answer, and delete its
-//! transcript, so without this table a check leaves nothing behind.
-//!
-//! ⚠ **Written on every path, including the ones that failed**, because a check
-//! that did not run is the finding. Whether the density read fires at the rate
-//! it was calibrated for, and whether `PATIENCE` abandons calls that would have
-//! answered, are questions about a distribution.
+//! What the model checks did, so their rate and latency are facts: each runs a
+//! one-shot session and deletes its transcript, leaving nothing else behind.
+//! Written on every path, failures included: a check that did not run is the
+//! finding.
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -30,17 +22,13 @@ pub enum Kind {
     Filing,
     /// After an edit, against the one body that has grown.
     Density,
-    /// Before a filing, an open task with exactly this subject: string
-    /// equality, no model. Recorded so the refusal licenses its override.
+    /// An open task with exactly this subject: no model; recorded so its refusal licenses an override.
     Collision,
 }
 
-/// What came of it.
-///
-/// ⚠ **`Quiet` and `Timeout` are the two that look alike from outside and mean
-/// opposite things.** A quiet check read the input and had nothing to say; a
-/// timed-out one never answered at all, and the task was filed or the edit kept
-/// regardless. Counting them together would report a well-behaved tool.
+/// What came of it. ⚠ `Quiet` and `Timeout` look alike from outside: one read
+/// the input and found nothing, the other never answered. Counted together they
+/// report a well-behaved tool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Outcome {
@@ -48,9 +36,9 @@ pub enum Outcome {
     Quiet,
     /// It named a duplicate, or gave advice on a body.
     Spoke,
-    /// No answer inside the patience the caller allowed.
+    /// No answer within the caller's patience.
     Timeout,
-    /// It could not be asked, or what came back could not be read.
+    /// Couldn't be asked, or the answer was unreadable.
     Error,
 }
 
@@ -75,10 +63,7 @@ impl Outcome {
     }
 }
 
-/// One run, as the CLI reports it.
-///
-/// The session and the clock are the service's: a client is trusted for how
-/// long its call took, not for who it was or when.
+/// One run as the CLI reports it; the service supplies session and clock.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Run {
     pub kind: Kind,
@@ -91,32 +76,22 @@ pub struct Run {
     pub accreted: Option<u32>,
     pub elapsed_ms: u32,
     pub outcome: Outcome,
-    /// What was refused, hashed — see [`subject_key`].
-    ///
-    /// ⚠ **Only a filing check that REFUSED sets this**, and it is what licenses
-    /// a later `--not-duplicate-of` for the same subject. A density read has
-    /// no subject and a check that passed has nothing to license.
+    /// The refused subject, hashed ([`subject_key`]): set only by a refusal, and
+    /// what licenses a later `--not-duplicate-of` for that subject.
     #[serde(default)]
     pub subject_key: Option<String>,
     /// The tasks a filing check named. Empty on every other run.
     #[serde(default)]
     pub matched: Vec<u64>,
-    /// What a density read said, verbatim, so it outlives the tool result.
-    ///
-    /// ⚠ **Sent on this run, not by a second call**: a `PATCH` to the task
-    /// would put a write on the failure path of a check that is allowed to fail
-    /// silently.
-    ///
-    /// Absent on a filing check and on a quiet density read; [`record`] treats
-    /// the quiet read as clearing the finding.
+    /// What a density read said, verbatim, sent with the run (not a second call
+    /// that could fail). Absent on a quiet read, which [`record`] takes as clearing
+    /// the finding.
     #[serde(default)]
     pub said: Option<String>,
 }
 
-/// The key a refusal is remembered by.
-///
-/// ⚠ **Case and surrounding space are ignored, as [`same_subject`] ignores
-/// them**, or a re-run differing only in whitespace would not be licensed.
+/// The key a refusal is remembered by, ignoring case and surrounding space as
+/// [`same_subject`] does, so a re-typed re-run is still licensed.
 ///
 /// [`same_subject`]: crate::tasks::duplicates::same_subject
 pub fn subject_key(subject: &str) -> String {
@@ -173,20 +148,15 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     Ok(())
 }
 
-/// Keep what a density read said, on the task it was about, in the same
-/// transaction as the run that said it.
-///
-/// ⚠ **Only `spoke` and `quiet` touch the flag; a timeout or an error must
-/// not.** Those two mean the body was never judged, and clearing on them lets a
-/// slow model retire a finding nobody has addressed. Silence from a checker that
-/// never ran is not a verdict — the distinction [`Outcome`] exists to preserve.
+/// Keep what a density read said on its task. ⚠ Only `spoke` and `quiet` touch
+/// it: a timeout or error never judged the body, and clearing on one would let a
+/// slow model retire an unaddressed finding.
 async fn remember(conn: &mut MySqlConnection, run: &Run) -> Result<()> {
     let (Kind::Density, Some(id)) = (run.kind, run.task_id) else {
         return Ok(());
     };
     match run.outcome {
-        // A later read replaces an earlier one: this is the last thing said
-        // about the body, not a log of opinions. `check_run` keeps the log.
+        // The latest read replaces the last; `check_run` keeps the log.
         Outcome::Spoke => {
             sqlx::query("UPDATE tasks SET sprawl_said = ?, sprawl_chars = ? WHERE id = ?")
                 .bind(run.said.as_deref())
@@ -196,10 +166,8 @@ async fn remember(conn: &mut MySqlConnection, run: &Run) -> Result<()> {
                 .await
                 .context("keeping what a density read said")?;
         }
-        // `DENSE` is a verdict about the body as it stands now, and a later
-        // verdict outranks an earlier one. It cannot be summoned to clear a
-        // flag: the read fires only on fresh accretion, so the cheapest way to
-        // reach it is to make the body worse.
+        // `DENSE` clears it. It can't be summoned: the read fires only on fresh
+        // growth.
         Outcome::Quiet => {
             sqlx::query("UPDATE tasks SET sprawl_said = NULL, sprawl_chars = NULL WHERE id = ?")
                 .bind(id)
@@ -212,14 +180,9 @@ async fn remember(conn: &mut MySqlConnection, run: &Run) -> Result<()> {
     Ok(())
 }
 
-/// What to record for an answer that came back, or did not.
-///
-/// This is where a timeout is told from a quiet check (see [`Outcome`]), and it
-/// turns on the error's chain rather than its message, so rewording the line a
-/// caller prints cannot silently reclassify a month of runs.
-///
-/// `spoke` is the caller's, because only it knows whether the words amounted to
-/// anything: the same answer is a refusal on one path and advice on the other.
+/// What to record for an answer. Timeouts are told from quiet checks by the
+/// error chain, not its message. `spoke` is the caller's call: the same answer
+/// is a refusal on one path and advice on the other.
 pub fn outcome(said: &anyhow::Result<String>, spoke: bool) -> Outcome {
     match said {
         Ok(_) if spoke => Outcome::Spoke,
@@ -235,11 +198,7 @@ pub fn outcome(said: &anyhow::Result<String>, spoke: bool) -> Outcome {
     }
 }
 
-/// One recorded run, as it comes back out.
-///
-/// [`Run`]'s fields plus the service's clock. Two shapes, not an optional
-/// field: a struct that could carry a time on the way in will eventually be
-/// given one.
+/// A recorded run with the service's clock: a separate type, so nothing can send a time in.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ran {
     pub ran_at: DateTime<Utc>,
@@ -277,14 +236,9 @@ impl Outcome {
     }
 }
 
-/// Every run in the last `days`, newest first.
-///
-/// ⚠ **A word this module cannot read is an error, not a skipped row.** It
-/// means a newer version wrote the table, and dropping the row would quietly
-/// shrink the counts.
+/// Every run in the last `days`, newest first. An unknown word means a newer
+/// version wrote it: an error, not a skipped row.
 pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
-    /// A row as the table holds it: the two words are strings there, and
-    /// reading them back into the enums is what this function is for.
     #[derive(sqlx::FromRow)]
     struct Row {
         ran_at: chrono::NaiveDateTime,
@@ -331,14 +285,12 @@ pub async fn recent(pool: &MySqlPool, days: u32) -> Result<Vec<Ran>> {
 pub struct Tally {
     pub kind: Kind,
     pub runs: usize,
-    /// Counted separately rather than summed into "ran" and "did not": the
-    /// difference between them is the finding.
+    /// Separate counts: the difference between them is the finding.
     pub quiet: usize,
     pub spoke: usize,
     pub timeout: usize,
     pub error: usize,
-    /// Milliseconds, by nearest rank over every run including the abandoned
-    /// ones: a timeout took the whole patience.
+    /// Nearest rank over every run, timeouts included: they took the whole patience.
     pub median_ms: u32,
     pub p90_ms: u32,
     pub worst_ms: u32,
@@ -381,17 +333,12 @@ pub fn tally(runs: &[Ran]) -> Vec<Tally> {
         .collect()
 }
 
-/// How long a refusal licenses an override for.
-///
-/// ⚠ **Long enough to read the refusal and re-run, far too short to collect a
-/// licence in the morning and skip checks all afternoon.**
+/// Long enough to read a refusal and re-run; too short to skip checks all afternoon.
 const LICENCE: i64 = 1800;
 
-/// What this session's latest refusal of `subject` named, if it was refused
-/// within [`LICENCE`]: the tasks an override has to name.
-///
-/// Keyed on the subject, not merely the session: one refusal licenses
-/// re-filing THAT subject, never a different one filed next.
+/// What this session's latest refusal of `subject` named, if within
+/// `LICENCE`: the tasks an override must name. Per subject, never a licence
+/// for the next filing.
 pub async fn licence(pool: &MySqlPool, session: &str, subject: &str) -> Result<Option<Vec<u64>>> {
     let key = subject_key(subject);
     let found: Option<(u64, Option<String>)> = sqlx::query_as(
@@ -412,15 +359,13 @@ pub async fn licence(pool: &MySqlPool, session: &str, subject: &str) -> Result<O
     Ok(found.map(|(_, named)| parse_ids(named.as_deref())))
 }
 
-/// The answer to `GET /api/checks/licence`: what the refusal named, or `None`
-/// when nothing has refused this subject, so the check has to run.
+/// `GET /api/checks/licence`: `None` when nothing refused this subject, so the check runs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Licence {
     pub matched: Option<Vec<u64>>,
 }
 
-/// What a filing is told when its override leaves out a task the refusal
-/// named.
+/// When an override leaves out a task the refusal named.
 pub fn unnamed(missing: &[u64]) -> String {
     let ids: Vec<String> = missing.iter().map(|id| format!("#{id}")).collect();
     format!(
@@ -436,10 +381,7 @@ pub fn unnamed(missing: &[u64]) -> String {
     )
 }
 
-/// How often each session was refused, and how often it filed past one.
-///
-/// A session that overrules every refusal is not judging them; this is where
-/// that shows.
+/// Per session: refusals, and filings past one. Overruling every refusal is not judging them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Overrules {
     pub session: String,
@@ -475,10 +417,7 @@ pub async fn overrules(pool: &MySqlPool, days: u32) -> Result<Vec<Overrules>> {
         .collect())
 }
 
-/// What a filing is told when it skipped the check without having been refused.
-///
-/// ⚠ **It must not read as a bug**: the caller passed a documented flag, so the
-/// message says plainly what to do.
+/// An override with no refusal behind it. Says plainly what to do: the flag is documented.
 pub fn unlicensed() -> String {
     "NOT FILED — nothing has refused this subject in this conversation, so there is \
      nothing to overrule. Re-run without --not-duplicate-of: the check runs, and if it \
