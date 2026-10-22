@@ -430,6 +430,9 @@ pub struct Change {
     /// Text added above the body, keeping all of it, so adding a paragraph needn't
     /// read and resend the body. Above, because what is current otherwise sinks.
     /// Resolved under the row lock, so concurrent additions can't lose each other.
+    /// Removing it was considered and refuted: sessions typed the same prepends by
+    /// hand before it existed, so it saves no reading, only a `--body` that replaces
+    /// everything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prepend: Option<String>,
     /// Text added below the body. May be sent with `prepend`.
