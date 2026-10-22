@@ -13,13 +13,16 @@
          for themed icons, where a tinted second colour would wash out.
 
          The source viewBox is 0 0 64 64 and the adaptive-icon safe zone is the
-         middle 72 of 108, so the group scales by 72/64 = 1.125 and is offset by
-         (108 - 64 * 1.125) / 2 = 18. -->
+         middle 72 of 108, so the group scales by 72/64 = 1.125. The offset
+         centres the INK, not the viewBox: the mark spans x 10..47, y 14..60
+         with the strokes, so its centre (28.5, 37) lands on 54,54 at
+         54 - 1.125 * 28.5 = 21.94 and 54 - 1.125 * 37 = 12.38. Centred on the
+         viewBox it sat 5.6dp low and 3.9dp left. -->
     <group
         android:scaleX="1.125"
         android:scaleY="1.125"
-        android:translateX="18"
-        android:translateY="18">
+        android:translateX="21.94"
+        android:translateY="12.38">
         <!-- The box: rect x=12 y=16 w=26 h=26 rx=5, as a rounded path. -->
         <path
             android:strokeColor="#FFFFFF"
