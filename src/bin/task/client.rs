@@ -23,12 +23,9 @@ pub(crate) fn token() -> Option<String> {
 
 /// Which conversation this is: `$TASKS_SESSION` for scripts, else `$CLAUDE_CODE_SESSION_ID`.
 pub(crate) fn session_id() -> Option<String> {
-    let set = |v: Result<String, std::env::VarError>| {
-        v.ok()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-    };
-    set(std::env::var("TASKS_SESSION")).or_else(|| set(std::env::var("CLAUDE_CODE_SESSION_ID")))
+    let set = |v: Option<String>| v.map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    set(std::env::var("TASKS_SESSION").ok())
+        .or_else(|| set(std::env::var("CLAUDE_CODE_SESSION_ID").ok()))
 }
 
 /// What Claude Code calls this conversation now, from the transcript
