@@ -120,29 +120,7 @@ pub(crate) struct Cli {
 #[derive(Subcommand)]
 pub(crate) enum Command {
     /// What is open: yours and the pile, unless asked otherwise.
-    List {
-        /// Every open task, whoever is holding it.
-        #[arg(long)]
-        all: bool,
-        /// Strictly what this session holds, without the pile.
-        #[arg(long, conflicts_with = "all")]
-        mine: bool,
-        /// Strictly the pile. Your prompt shows only the first few; the rest are here.
-        #[arg(long, conflicts_with_all = ["all", "mine"])]
-        pile: bool,
-        /// What you filed that anyone else holds, the pile included: your prompt
-        /// never shows another conversation's work, so this is how to see what you
-        /// handed out.
-        #[arg(long, alias = "handed", conflicts_with_all = ["all", "mine", "pile", "to"])]
-        handed_out: bool,
-        /// Include finished tasks.
-        #[arg(long)]
-        done: bool,
-        /// What one holder carries: a session by name or id, `human`, or `nobody`.
-        /// Strictly that holder. `--assignee` and `--holder` work too.
-        #[arg(long, conflicts_with_all = ["all", "mine", "pile"], aliases = ["assignee", "holder"])]
-        to: Option<To>,
-    },
+    List(ListArgs),
     /// Work on a few things and let the rest go quiet for a while.
     ///
     ///     task focus 849 850 --for 4h
@@ -151,105 +129,18 @@ pub(crate) enum Command {
     /// `task list` still shows everything, and P0 and overdue tasks break through.
     /// It always expires; past a day it would be a handover, which is `task move`.
     /// Naming no task shows the focus; `--clear` ends it.
-    Focus {
-        /// What you are working on; repeat for several. Replaces the set.
-        ids: Vec<TaskRef>,
-        /// How long: `4h`, `90m`, `2h30m`; a bare number is minutes. Required: expiry is
-        /// what makes hiding safe.
-        #[arg(long = "for")]
-        period: Option<String>,
-        /// End it now, before its hour.
-        #[arg(long, conflicts_with_all = ["ids", "period"])]
-        clear: bool,
-    },
+    Focus(FocusArgs),
     /// One task, with its prose and its history.
     #[command(alias = "history")]
-    Show {
-        id: TaskRef,
-        /// Print the body alone, exactly as stored, for diffing or editing a faithful copy.
-        #[arg(long, conflicts_with = "json")]
-        body: bool,
-        /// The task before its latest edit. With `--body`: `task show 25 --previous --body
-        /// > was.md`.
-        #[arg(long)]
-        previous: bool,
-    },
+    Show(ShowArgs),
     /// Put back the subject and body the latest edit replaced.
     ///
     /// Undo is itself an edit, recorded and undoable. ⚠ It reverts the task's last
     /// edit, not yours: if that was another conversation's it refuses, and
     /// `--anyway` insists. Check first with `task show <id> --previous`.
-    Undo {
-        id: TaskRef,
-        /// Revert the last edit even though another conversation made it.
-        #[arg(long)]
-        anyway: bool,
-    },
+    Undo(UndoArgs),
     /// File a task. Urgency is required: `--priority`, or `--unassessed`.
-    #[command(group(clap::ArgGroup::new("rank").required(true).args(["priority", "unassessed"])))]
-    Add {
-        /// The one-line subject.
-        // Optional only so a missing one is answered in a sentence, not by clap.
-        subject: Option<String>,
-        /// The body. `-` reads stdin, which avoids shell quoting.
-        #[arg(long)]
-        body: Option<String>,
-        /// Who it is for: `me` (default: whoever is filing), `human`, `nobody`, or a session.
-        #[arg(long)]
-        to: Option<To>,
-        /// Why this is nobody's; required by `--to nobody` and only by it. Pile filings
-        /// were usually corrected later, so the pile is argued for.
-        #[arg(long, value_name = "WHY")]
-        spare: Option<String>,
-        /// How urgent: P0 to P4, or say `--unassessed`. The levels, under
-        /// `task --help`, are tests a task passes or fails; `P2` when none of the others
-        /// fit.
-        #[arg(long)]
-        priority: Option<Priority>,
-        /// Say you are not judging this one: when the work is not yours to rank, such as
-        /// filing into another session's domain. Sorts like `P2`, but `P2` claims
-        /// somebody read it and called it ordinary.
-        #[arg(long, conflicts_with = "priority")]
-        unassessed: bool,
-        /// Task ids this one waits for. Repeat for several.
-        #[arg(long = "blocked-on")]
-        blocked_on: Vec<u64>,
-
-        /// Task ids this one unblocks, recorded on them once this is filed. Like
-        /// `--blocked-on`, the duplicate check doesn't compare against them: a blocker
-        /// resembles what it unblocks.
-        #[arg(long = "blocks")]
-        blocks: Vec<u64>,
-        /// The day it has to be done by: YYYY-MM-DD.
-        #[arg(long)]
-        due: Option<NaiveDate>,
-        /// Refused by name: a task has had no repo since migration 0004 (the holder is
-        /// the assignment). clap's `unexpected argument` would suggest a typo.
-        #[arg(long, hide = true)]
-        repo: Option<String>,
-        /// The same.
-        #[arg(long, hide = true)]
-        project: Option<String>,
-        /// Refused by name: the subject is the first argument, and `unexpected argument`
-        /// reads as a quoting mistake.
-        #[arg(long = "subject", hide = true)]
-        subject_flag: Option<String>,
-        /// File past a duplicate refusal you have just seen, naming each task
-        /// it named that you judged different work: `--not-duplicate-of 2037,12`.
-        ///
-        /// Only after a refusal of the same subject in this conversation, and
-        /// only naming every task it named; otherwise the check runs as usual.
-        /// The filing's history records what it overruled. A check that cannot
-        /// run files the task and says so.
-        #[arg(long, value_delimiter = ',', num_args = 1..)]
-        not_duplicate_of: Vec<u64>,
-        /// Kept for older habits. The check runs anyway, and if it refuses, the
-        /// refusal says which ids `--not-duplicate-of` must name.
-        #[arg(long, hide = true)]
-        no_duplicate_check: bool,
-        #[arg(long, conflicts_with = "not_duplicate_of")]
-        check_only: bool,
-    },
+    Add(AddArgs),
     /// Mark a task as being worked on.
     Start { id: TaskRef },
     /// Mark a task finished. `close` is the same command.
@@ -295,62 +186,10 @@ pub(crate) enum Command {
     /// It ends when every named task is closed. Exit 0 means done; otherwise read
     /// stderr (a dropped blocker means the fix never happened). A restart loses the
     /// wait but not the edge.
-    Wait {
-        /// What to wait for: all of them, not the first.
-        #[arg(required = true)]
-        ids: Vec<TaskRef>,
-        /// How long before giving up: `4h`, `90m`, `2h30m`; a bare number is minutes.
-        /// Always bounded: a wait that hangs forever goes unnoticed.
-        #[arg(long = "for", default_value = "24h")]
-        period: String,
-    },
+    Wait(WaitArgs),
     /// Change a task's words. `update` and `rank` are the same command.
     #[command(long_about = edit_about(), aliases = ["update", "rank"])]
-    Edit {
-        id: TaskRef,
-        /// The one-line subject. `--title` is accepted too.
-        #[arg(long, alias = "title")]
-        subject: Option<String>,
-        /// `-` reads stdin. Replaces the whole body; `--prepend` keeps it.
-        #[arg(long, conflicts_with_all = ["prepend", "append"])]
-        body: Option<String>,
-        /// Put text above the body, keeping all of it. `-` reads stdin.
-        ///
-        ///     task edit 42 --prepend "DONE in a2c3ab6 — deployed and verified."
-        ///
-        /// Usually the one you want: where it stands first, history below.
-        #[arg(long)]
-        prepend: Option<String>,
-        /// Put text below the body, keeping all of it: for what happened next rather than
-        /// the conclusion. Combines with `--prepend`.
-        #[arg(long)]
-        append: Option<String>,
-        /// Skip the model's read of a grown body. It never refuses, so this is for
-        /// scripts, not for getting past it.
-        #[arg(long = "no-density-check")]
-        no_density_check: bool,
-        /// Mean it, when `--body` would leave almost nothing of a long body: refused by
-        /// default, since that is usually `detailed` from `--json` written over the prose.
-        #[arg(long = "replace-body")]
-        replace_body: bool,
-        /// Rank it: P0 to P4 (`task --help`). There is no unrank: rank again to correct.
-        #[arg(long)]
-        priority: Option<Priority>,
-        /// What this task waits for; repeat for several. Replaces the set (`--unblock`
-        /// clears). It may not outrank a blocker, block itself or close a loop.
-        #[arg(long = "blocked-on", conflicts_with = "unblock")]
-        blocked_on: Vec<u64>,
-        /// It is not waiting for anything any more.
-        #[arg(long)]
-        unblock: bool,
-        /// The deadline, YYYY-MM-DD: evidence for a rank, until the last week, when it
-        /// sorts as `P0!`. Earlier than an open blocker's is refused.
-        #[arg(long, conflicts_with = "no_due")]
-        due: Option<NaiveDate>,
-        /// Take the deadline off.
-        #[arg(long = "no-due")]
-        no_due: bool,
-    },
+    Edit(EditArgs),
     /// Exactly what a prompt receives: for checking the cost.
     Digest,
     /// Who holds what, open/total: sessions, the person, the pile.
@@ -362,11 +201,7 @@ pub(crate) enum Command {
     /// Tell the service what this session now calls itself.
     Rename { name: String },
     /// What the duplicate check and the density read have been doing.
-    Checks {
-        /// How far back to look.
-        #[arg(long, default_value_t = 7)]
-        days: u32,
-    },
+    Checks(ChecksArgs),
     /// How long commands have taken, from real use (nothing polls, so a quiet day reads as quiet).
     Timings {
         /// How far back to look.
@@ -399,4 +234,201 @@ impl Command {
             Command::Timings { .. } => "timings",
         }
     }
+}
+
+/// The arguments of `task list`.
+#[derive(clap::Args)]
+pub(crate) struct ListArgs {
+    /// Every open task, whoever is holding it.
+    #[arg(long)]
+    pub(crate) all: bool,
+    /// Strictly what this session holds, without the pile.
+    #[arg(long, conflicts_with = "all")]
+    pub(crate) mine: bool,
+    /// Strictly the pile. Your prompt shows only the first few; the rest are here.
+    #[arg(long, conflicts_with_all = ["all", "mine"])]
+    pub(crate) pile: bool,
+    /// What you filed that anyone else holds, the pile included: your prompt
+    /// never shows another conversation's work, so this is how to see what you
+    /// handed out.
+    #[arg(long, alias = "handed", conflicts_with_all = ["all", "mine", "pile", "to"])]
+    pub(crate) handed_out: bool,
+    /// Include finished tasks.
+    #[arg(long)]
+    pub(crate) done: bool,
+    /// What one holder carries: a session by name or id, `human`, or `nobody`.
+    /// Strictly that holder. `--assignee` and `--holder` work too.
+    #[arg(long, conflicts_with_all = ["all", "mine", "pile"], aliases = ["assignee", "holder"])]
+    pub(crate) to: Option<To>,
+}
+
+/// The arguments of `task focus`.
+#[derive(clap::Args)]
+pub(crate) struct FocusArgs {
+    /// What you are working on; repeat for several. Replaces the set.
+    pub(crate) ids: Vec<TaskRef>,
+    /// How long: `4h`, `90m`, `2h30m`; a bare number is minutes. Required: expiry is
+    /// what makes hiding safe.
+    #[arg(long = "for")]
+    pub(crate) period: Option<String>,
+    /// End it now, before its hour.
+    #[arg(long, conflicts_with_all = ["ids", "period"])]
+    pub(crate) clear: bool,
+}
+
+/// The arguments of `task show`.
+#[derive(clap::Args)]
+pub(crate) struct ShowArgs {
+    pub(crate) id: TaskRef,
+    /// Print the body alone, exactly as stored, for diffing or editing a faithful copy.
+    #[arg(long, conflicts_with = "json")]
+    pub(crate) body: bool,
+    /// The task before its latest edit. With `--body`, for a diff:
+    /// `task show 25 --previous --body > was.md`.
+    #[arg(long)]
+    pub(crate) previous: bool,
+}
+
+/// The arguments of `task undo`.
+#[derive(clap::Args)]
+pub(crate) struct UndoArgs {
+    pub(crate) id: TaskRef,
+    /// Revert the last edit even though another conversation made it.
+    #[arg(long)]
+    pub(crate) anyway: bool,
+}
+
+/// The arguments of `task add`.
+#[derive(clap::Args)]
+#[command(group(clap::ArgGroup::new("rank").required(true).args(["priority", "unassessed"])))]
+pub(crate) struct AddArgs {
+    /// The one-line subject.
+    // Optional only so a missing one is answered in a sentence, not by clap.
+    pub(crate) subject: Option<String>,
+    /// The body. `-` reads stdin, which avoids shell quoting.
+    #[arg(long)]
+    pub(crate) body: Option<String>,
+    /// Who it is for: `me` (default: whoever is filing), `human`, `nobody`, or a session.
+    #[arg(long)]
+    pub(crate) to: Option<To>,
+    /// Why this is nobody's; required by `--to nobody` and only by it. Pile filings
+    /// were usually corrected later, so the pile is argued for.
+    #[arg(long, value_name = "WHY")]
+    pub(crate) spare: Option<String>,
+    /// How urgent: P0 to P4, or say `--unassessed`. The levels, under
+    /// `task --help`, are tests a task passes or fails; `P2` when none of the others
+    /// fit.
+    #[arg(long)]
+    pub(crate) priority: Option<Priority>,
+    /// Say you are not judging this one: when the work is not yours to rank, such as
+    /// filing into another session's domain. Sorts like `P2`, but `P2` claims
+    /// somebody read it and called it ordinary.
+    #[arg(long, conflicts_with = "priority")]
+    pub(crate) unassessed: bool,
+    /// Task ids this one waits for. Repeat for several.
+    #[arg(long = "blocked-on")]
+    pub(crate) blocked_on: Vec<u64>,
+
+    /// Task ids this one unblocks, recorded on them once this is filed. Like
+    /// `--blocked-on`, the duplicate check doesn't compare against them: a blocker
+    /// resembles what it unblocks.
+    #[arg(long = "blocks")]
+    pub(crate) blocks: Vec<u64>,
+    /// The day it has to be done by: YYYY-MM-DD.
+    #[arg(long)]
+    pub(crate) due: Option<NaiveDate>,
+    /// Refused by name: a task has had no repo since migration 0004 (the holder is
+    /// the assignment). clap's `unexpected argument` would suggest a typo.
+    #[arg(long, hide = true)]
+    pub(crate) repo: Option<String>,
+    /// The same.
+    #[arg(long, hide = true)]
+    pub(crate) project: Option<String>,
+    /// Refused by name: the subject is the first argument, and `unexpected argument`
+    /// reads as a quoting mistake.
+    #[arg(long = "subject", hide = true)]
+    pub(crate) subject_flag: Option<String>,
+    /// File past a duplicate refusal you have just seen, naming each task
+    /// it named that you judged different work: `--not-duplicate-of 2037,12`.
+    ///
+    /// Only after a refusal of the same subject in this conversation, and
+    /// only naming every task it named; otherwise the check runs as usual.
+    /// The filing's history records what it overruled. A check that cannot
+    /// run files the task and says so.
+    #[arg(long, value_delimiter = ',', num_args = 1..)]
+    pub(crate) not_duplicate_of: Vec<u64>,
+    /// Kept for older habits. The check runs anyway, and if it refuses, the
+    /// refusal says which ids `--not-duplicate-of` must name.
+    #[arg(long, hide = true)]
+    pub(crate) no_duplicate_check: bool,
+    #[arg(long, conflicts_with = "not_duplicate_of")]
+    pub(crate) check_only: bool,
+}
+
+/// The arguments of `task wait`.
+#[derive(clap::Args)]
+pub(crate) struct WaitArgs {
+    /// What to wait for: all of them, not the first.
+    #[arg(required = true)]
+    pub(crate) ids: Vec<TaskRef>,
+    /// How long before giving up: `4h`, `90m`, `2h30m`; a bare number is minutes.
+    /// Always bounded: a wait that hangs forever goes unnoticed.
+    #[arg(long = "for", default_value = "24h")]
+    pub(crate) period: String,
+}
+
+/// The arguments of `task edit`.
+#[derive(clap::Args)]
+pub(crate) struct EditArgs {
+    pub(crate) id: TaskRef,
+    /// The one-line subject. `--title` is accepted too.
+    #[arg(long, alias = "title")]
+    pub(crate) subject: Option<String>,
+    /// `-` reads stdin. Replaces the whole body; `--prepend` keeps it.
+    #[arg(long, conflicts_with_all = ["prepend", "append"])]
+    pub(crate) body: Option<String>,
+    /// Put text above the body, keeping all of it. `-` reads stdin.
+    ///
+    ///     task edit 42 --prepend "DONE in a2c3ab6 — deployed and verified."
+    ///
+    /// Usually the one you want: where it stands first, history below.
+    #[arg(long)]
+    pub(crate) prepend: Option<String>,
+    /// Put text below the body, keeping all of it: for what happened next rather than
+    /// the conclusion. Combines with `--prepend`.
+    #[arg(long)]
+    pub(crate) append: Option<String>,
+    /// Skip the model's read of a grown body. It never refuses, so this is for
+    /// scripts, not for getting past it.
+    #[arg(long = "no-density-check")]
+    pub(crate) no_density_check: bool,
+    /// Mean it, when `--body` would leave almost nothing of a long body: refused by
+    /// default, since that is usually `detailed` from `--json` written over the prose.
+    #[arg(long = "replace-body")]
+    pub(crate) replace_body: bool,
+    /// Rank it: P0 to P4 (`task --help`). There is no unrank: rank again to correct.
+    #[arg(long)]
+    pub(crate) priority: Option<Priority>,
+    /// What this task waits for; repeat for several. Replaces the set (`--unblock`
+    /// clears). It may not outrank a blocker, block itself or close a loop.
+    #[arg(long = "blocked-on", conflicts_with = "unblock")]
+    pub(crate) blocked_on: Vec<u64>,
+    /// It is not waiting for anything any more.
+    #[arg(long)]
+    pub(crate) unblock: bool,
+    /// The deadline, YYYY-MM-DD: evidence for a rank, until the last week, when it
+    /// sorts as `P0!`. Earlier than an open blocker's is refused.
+    #[arg(long, conflicts_with = "no_due")]
+    pub(crate) due: Option<NaiveDate>,
+    /// Take the deadline off.
+    #[arg(long = "no-due")]
+    pub(crate) no_due: bool,
+}
+
+/// The arguments of `task checks`.
+#[derive(clap::Args)]
+pub(crate) struct ChecksArgs {
+    /// How far back to look.
+    #[arg(long, default_value_t = 7)]
+    pub(crate) days: u32,
 }
