@@ -23,14 +23,12 @@ pub(crate) fn token() -> Option<String> {
 
 /// Which conversation this is: `$TASKS_SESSION` for scripts, else `$CLAUDE_CODE_SESSION_ID`.
 pub(crate) fn session_id() -> Option<String> {
-    ["TASKS_SESSION", "CLAUDE_CODE_SESSION_ID"]
-        .into_iter()
-        .find_map(|name| {
-            std::env::var(name)
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-        })
+    let set = |v: Result<String, std::env::VarError>| {
+        v.ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    };
+    set(std::env::var("TASKS_SESSION")).or_else(|| set(std::env::var("CLAUDE_CODE_SESSION_ID")))
 }
 
 /// What Claude Code calls this conversation now, from the transcript
