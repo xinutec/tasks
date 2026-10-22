@@ -14,10 +14,10 @@ pub(crate) fn test_db_url() -> String {
              on the SQL — so this is a failure rather than a skip.\n\
              \n\
              Run the whole gate, which supplies a throwaway MariaDB itself:\n\
-             \x20   nix run ../dev-lint#gate -- . gate.json\n\
+             \x20   nix run \"git+file:../dev-lint?ref=HEAD#gate\" -- . gate.json\n\
              \n\
              Or just this suite against one:\n\
-             \x20   nix develop --command nix run ../dev-lint#with-test-db -- \\\n\
+             \x20   nix develop --command nix run \"git+file:../dev-lint?ref=HEAD#with-test-db\" -- \\\n\
              \x20     --database tasks --user tasks --password tasks --port 3321 \\\n\
              \x20     --url-env TASKS_TEST_DATABASE_URL -- cargo test -- --test-threads=1"
         )

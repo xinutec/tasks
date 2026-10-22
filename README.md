@@ -462,7 +462,7 @@ proxies `/api` to `127.0.0.1:8092` for UI work.
 ## Verify
 
 ```sh
-nix run ../dev-lint#gate -- . gate.json   # what the pre-commit hook runs
+nix run "git+file:../dev-lint?ref=HEAD#gate" -- . gate.json   # what the pre-commit hook runs
 ./scripts/setup-hooks.sh                  # install the hook, once per clone
 ```
 
