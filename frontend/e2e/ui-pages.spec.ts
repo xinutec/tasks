@@ -8,6 +8,7 @@ import {
   expectUpInTheBar,
   expectViewportIsPhone,
 } from '@xinutec/ui-harness';
+import { routesFrom, screens } from '@xinutec/ui-harness/routes';
 
 import type { Created, Updated } from '../src/app/models';
 import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
@@ -19,6 +20,20 @@ import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
  */
 
 // Fail if the device preset is lost and the suite runs at desktop width.
+
+/** Every screen in the route table (`routes.json`), not only those a test opens. */
+for (const { route, url } of screens(
+  routesFrom('e2e/routes.json'),
+  { id: String(TASKS[1].id) },
+)) {
+  test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
+    await mockApi(page);
+    await page.goto(url);
+    await page.waitForLoadState('networkidle');
+    // A task's markdown scrolls its code sideways, as the `/t/92` tests allow.
+    await expectCleanLayout(page, testInfo, { allow: route === '/t/:id' ? MD_SCROLLERS : [] });
+  });
+}
 test('the suite really runs at phone geometry', async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
