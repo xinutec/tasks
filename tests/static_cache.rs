@@ -26,6 +26,9 @@ impl StaticDir {
         std::fs::create_dir_all(&dir).expect("create static dir");
         std::fs::write(dir.join("index.html"), "<!doctype html><html></html>").expect("index");
         std::fs::write(dir.join("main-URXJXJF6.js"), "export {};").expect("bundle");
+        for name in ["icon.svg", "manifest.webmanifest", "ngsw-worker.js"] {
+            std::fs::write(dir.join(name), "x").expect("file");
+        }
         Self(dir)
     }
 }
@@ -96,7 +99,8 @@ async fn the_content_hashed_bundle_may_be_kept() {
 async fn a_missing_asset_is_not_told_how_long_to_keep_the_404() {
     let (status, cc) = cache_control("/media/nope.woff2").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(cc, "", "a 404 must carry no Cache-Control at all");
+    // `no-cache`, not silence: without a header a 404 may be kept on heuristics.
+    assert_eq!(cc, "no-cache", "a 404 must not be kept");
 }
 
 /// A 304 is not an error. `!status.is_success()` would catch it, and a
@@ -148,4 +152,16 @@ async fn a_revalidated_asset_is_still_told_it_may_be_kept() {
             .map(|v| v.to_str().unwrap()),
         Some("public, max-age=31536000, immutable"),
     );
+}
+
+/// Only a name carrying its content hash may be kept for good. An icon, the
+/// manifest and the service worker's files keep their names across builds, so a
+/// year of `immutable` pins the old one on every phone.
+#[tokio::test]
+async fn a_file_that_keeps_its_name_revalidates() {
+    for path in ["/icon.svg", "/manifest.webmanifest", "/ngsw-worker.js"] {
+        let (status, cc) = cache_control(path).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert_eq!(cc, "no-cache", "{path}");
+    }
 }

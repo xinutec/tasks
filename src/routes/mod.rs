@@ -5,39 +5,53 @@ pub mod auth;
 pub mod telemetry;
 
 use axum::Router;
-use axum::http::{HeaderValue, Response, header};
+use axum::http::{HeaderValue, header};
 use axum::routing::{get, patch, post};
 use tower::ServiceBuilder;
 use tower_http::services::ServeDir;
-use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
 use crate::state::AppState;
 
-/// How long a static response may be reused without asking.
-///
-/// ⚠ `index.html` must revalidate (`no-cache`, still a bodiless 304 via `ETag`):
-/// cached heuristically, it keeps naming the old hashed bundle and a deploy is
-/// invisible. Everything else has a content hash in its name, so `immutable` is
-/// honest there. Generic over the body because the fallback is the `spa` handler.
-fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
-    // Errors aren't assets: [`spa`] 404s missing files often, and a year of
-    // `immutable` on one stops the client asking again. Not `!is_success()`,
-    // which would drop the headers from a 304.
-    if res.status().is_client_error() || res.status().is_server_error() {
-        return None;
-    }
-    let is_html = res
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|ct| ct.starts_with("text/html"));
-    Some(if is_html {
-        HeaderValue::from_static("no-cache")
+/// A name carrying its content hash (`main-7GNM4EPX.js`, a font's `-ABCD1234`):
+/// a new build is a new name, so it may be cached for ever.
+fn is_content_hashed(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or("");
+    let Some((stem, _ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    let Some((_, hash)) = stem.rsplit_once('-') else {
+        return false;
+    };
+    hash.len() == 8
+        && hash
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+}
+
+/// How long a static response may be reused. A hashed file is `immutable`.
+/// Everything else revalidates (`no-cache`: ask first, then a 304 via the ETag):
+/// the page names the bundle, and an icon, the manifest and the service worker's
+/// files keep their names across builds, so a year of `immutable` pins the old
+/// one on every phone. Without `Cache-Control` a WebView caches heuristically and
+/// runs a build several deploys old. An error is never `immutable`, or the name is
+/// not asked for again; a 304 keeps what a 200 would say.
+async fn cache_headers(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let hashed = is_content_hashed(req.uri().path());
+    let mut res = next.run(req).await;
+    let failed = res.status().is_client_error() || res.status().is_server_error();
+    let value = if hashed && !failed {
+        "public, max-age=31536000, immutable"
     } else {
-        HeaderValue::from_static("public, max-age=31536000, immutable")
-    })
+        "no-cache"
+    };
+    res.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static(value));
+    res
 }
 
 pub fn router(state: AppState) -> Router {
@@ -87,10 +101,7 @@ pub fn router(state: AppState) -> Router {
         }));
         // Wraps the static service only, or API JSON would be cached as `immutable`.
         let serve = ServiceBuilder::new()
-            .layer(SetResponseHeaderLayer::overriding(
-                header::CACHE_CONTROL,
-                cache_control_for,
-            ))
+            .layer(axum::middleware::from_fn(cache_headers))
             .service(serve);
         app.fallback_service(serve)
     } else {
