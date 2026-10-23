@@ -67,13 +67,18 @@ mod retry {
     use tower::ServiceExt;
 
     pub(super) fn app() -> axum::Router {
+        app_at("https://dash.example")
+    }
+
+    /// The app, signing in against the Nextcloud at `nc`.
+    pub(super) fn app_at(nc: &str) -> axum::Router {
         let cfg = Config {
             database_url: String::new(),
             bind_addr: "127.0.0.1:0".into(),
             static_dir: None,
             auth: Some(AuthConfig {
                 session_secret: "test-secret".into(),
-                nc_base_url: "https://dash.example".into(),
+                nc_base_url: nc.into(),
                 nc_internal_url: None,
                 nc_client_id: "id".into(),
                 nc_client_secret: "secret".into(),
@@ -215,5 +220,92 @@ mod another_browser {
         // Refused for the state, before the code went anywhere: an exchange
         // attempt would answer that Nextcloud failed instead.
         assert!(body.contains("did not start in this browser"), "{body}");
+    }
+}
+
+/// A cookie set at `Path=/` is removed only by a removal at `Path=/`. Without
+/// one, the browser scopes the removal to the request's directory — `/auth`
+/// for the callback — and the cookie it meant to drop stays.
+mod cookies {
+    use axum::Json;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode, header};
+    use axum::response::Response;
+    use axum::routing::{get, post};
+    use tower::ServiceExt;
+
+    /// A Nextcloud that trades any code for a token naming `allowed-user`.
+    async fn nextcloud() -> String {
+        let nc = axum::Router::new()
+            .route(
+                "/index.php/apps/oauth2/api/v1/token",
+                post(|| async { Json(serde_json::json!({ "access_token": "token" })) }),
+            )
+            .route(
+                "/ocs/v2.php/cloud/user",
+                get(|| async {
+                    Json(serde_json::json!({
+                        "ocs": { "data": { "id": "allowed-user", "displayname": "User" } }
+                    }))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, nc).await.unwrap() });
+        format!("http://{addr}")
+    }
+
+    async fn send(app: &axum::Router, req: Request<Body>) -> Response {
+        app.clone().oneshot(req).await.unwrap()
+    }
+
+    /// The `Set-Cookie` line for `name`, which a test expects to find.
+    fn cookie_line(res: &Response, name: &str) -> String {
+        res.headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .map(|v| v.to_str().unwrap().to_owned())
+            .find(|l| l.starts_with(&format!("{name}=")))
+            .unwrap_or_else(|| panic!("no Set-Cookie for {name}: {:?}", res.headers()))
+    }
+
+    fn assert_removed_at_root(res: &Response, name: &str) {
+        let dropped = cookie_line(res, name);
+        assert!(dropped.contains("Max-Age=0"), "{dropped}");
+        assert!(
+            dropped.contains("Path=/"),
+            "removed where it was set: {dropped}"
+        );
+    }
+
+    #[tokio::test]
+    async fn signing_in_and_out_removes_each_cookie_where_it_was_set() {
+        let app = super::retry::app_at(&nextcloud().await);
+        let (_, to, signin) = super::retry::get(&app, "/login", None).await;
+        let state = super::retry::state_in(&to);
+
+        let back = send(
+            &app,
+            Request::get(format!("/auth/callback?code=granted&state={state}"))
+                .header(header::COOKIE, format!("signin={signin}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert!(back.status().is_redirection(), "{}", back.status());
+        assert_removed_at_root(&back, "signin");
+        let session = cookie_line(&back, tasks::session::COOKIE_NAME);
+        let session = session.split(';').next().unwrap();
+
+        let out = send(
+            &app,
+            Request::post("/logout")
+                .header(header::COOKIE, session)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(out.status(), StatusCode::NO_CONTENT);
+        assert_removed_at_root(&out, tasks::session::COOKIE_NAME);
     }
 }

@@ -26,6 +26,12 @@ fn session_cookie(value: String) -> Cookie<'static> {
         .build()
 }
 
+/// Where the cookies were set: a removal without a path is scoped to the
+/// request's directory, `/auth` for the callback, and misses them.
+fn removal(name: &'static str) -> Cookie<'static> {
+    Cookie::build(name).path("/").build()
+}
+
 /// Same-site paths only, judged where a browser lands: the WHATWG parser drops
 /// tabs and newlines and folds `\` to `/`, so `/\t/host` is `//host`. Returns
 /// the path as that parser resolves it.
@@ -163,7 +169,7 @@ pub async fn callback(
         .get(PENDING_COOKIE)
         .map(|c| c.value().to_string())
         .unwrap_or_default();
-    let jar = jar.remove(Cookie::from(PENDING_COOKIE));
+    let jar = jar.remove(removal(PENDING_COOKIE));
 
     let from_url = q.state.unwrap_or_default();
     let (state, retry) = match state_to_consume(&from_url, &from_cookie) {
@@ -255,8 +261,5 @@ pub async fn logout(
     jar: CookieJar,
 ) -> Result<(CookieJar, StatusCode), AppError> {
     app.cfg.auth.as_ref().ok_or(AppError::NotFound)?;
-    Ok((
-        jar.remove(Cookie::from(COOKIE_NAME)),
-        StatusCode::NO_CONTENT,
-    ))
+    Ok((jar.remove(removal(COOKIE_NAME)), StatusCode::NO_CONTENT))
 }
