@@ -167,6 +167,7 @@ export interface Holder {
   total: number;
 }
 
+// dev-lint: allow-wire-unjudged an internally tagged enum in Rust; the `kind` union and optional `name` are its widening
 /** Who the caller is, as `/api/me` answers. */
 export interface Me {
   kind: 'person' | 'session';
