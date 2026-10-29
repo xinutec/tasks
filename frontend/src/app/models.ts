@@ -129,7 +129,7 @@ export interface TaskDetail extends Task {
   /** Whether there is a previous version, without fetching it. */
   restorable: boolean;
   /** What a model last said about this body, kept for whoever opens it. */
-  sprawl_said?: string | null;
+  sprawl_said?: string;
 }
 
 /** A task as it stood before its most recent edit — `GET /api/tasks/{id}/previous`. */
