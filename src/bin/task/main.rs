@@ -131,6 +131,12 @@ async fn main() -> Result<()> {
     let started = std::time::Instant::now();
     quiet_on_broken_pipe();
     let cli = Cli::parse();
+    // Before the client: a hook is not a command to time, and every prompt
+    // waits for it.
+    if matches!(cli.command, Command::Hook) {
+        hook(cli.url.clone()).await;
+        return Ok(());
+    }
     let session = cli.session.clone().or_else(session_id);
     let client = Client {
         http: reqwest::Client::builder()
@@ -156,6 +162,58 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }
     Ok(())
+}
+
+/// The prompt hook. Silent on every failure: a hook that errors on each prompt
+/// is worse than no tasks at all.
+async fn hook(url: Option<String>) {
+    let mut raw = String::new();
+    if std::io::stdin().read_to_string(&mut raw).is_err() {
+        return;
+    }
+    let Some(session) = serde_json::from_str::<Value>(&raw)
+        .ok()
+        .and_then(|p| p.get("session_id")?.as_str().map(str::to_string))
+        .filter(|s| !s.is_empty())
+    else {
+        return;
+    };
+    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
+        return;
+    };
+    let base = url
+        .or_else(|| std::env::var("TASKS_URL").ok())
+        .unwrap_or_else(|| DEFAULT_URL.to_string())
+        .trim_end_matches('/')
+        .to_string();
+    let body = match tasks::hook::fresh(&home, &session) {
+        Some(text) => text,
+        None => {
+            let fetched = fetch_digest(&base, &session).await;
+            tasks::hook::settle(&home, &session, fetched, &base)
+        }
+    };
+    if tasks::hook::worth_printing(&home, &session, &body) {
+        println!("{body}");
+    }
+}
+
+/// The service's digest, or `None` on anything at all. Measured at 56–139 ms,
+/// TLS-dominated; the ceiling is an order above, below what a person notices.
+async fn fetch_digest(base: &str, session: &str) -> Option<String> {
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let mut req = http
+        .get(format!("{base}/api/digest"))
+        .query(&[("session", session)])
+        .header("X-Session-Id", session);
+    if let Some(token) = token() {
+        req = req.bearer_auth(token);
+    }
+    let answer = req.send().await.ok()?.error_for_status().ok()?;
+    Some(answer.text().await.ok()?.trim().to_string())
 }
 
 /// Everything the CLI does, so `main` can time it.
@@ -200,6 +258,8 @@ async fn run(cli: Cli, client: &Client) -> Result<()> {
         Command::Wait(args) => waiting::wait(&client, args).await?,
         Command::Edit(args) => editing::edit(&client, cli.json, args).await?,
         Command::Focus(args) => waiting::focus(&client, cli.json, args).await?,
+        // Answered in `main`, before the client exists.
+        Command::Hook => {}
         Command::Digest => {
             let query: Vec<(String, String)> = Vec::new();
             let req = client

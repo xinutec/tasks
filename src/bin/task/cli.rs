@@ -192,6 +192,10 @@ pub(crate) enum Command {
     Edit(EditArgs),
     /// Exactly what a prompt receives: for checking the cost.
     Digest,
+    /// Claude Code's prompt hook: reads its payload on stdin and prints this
+    /// session's digest when it is news. For settings.json; it never fails.
+    #[command(hide = true)]
+    Hook,
     /// Who holds what, open/total: sessions, the person, the pile.
     Sessions {
         /// Every conversation ever, including those never given work: where to find a new one's id.
@@ -228,6 +232,7 @@ impl Command {
             Command::Wait { .. } => "wait",
             Command::Edit { .. } => "edit",
             Command::Digest => "digest",
+            Command::Hook => "hook",
             Command::Sessions { .. } => "sessions",
             Command::Rename { .. } => "rename",
             Command::Checks { .. } => "checks",

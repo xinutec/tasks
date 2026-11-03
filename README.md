@@ -329,8 +329,9 @@ forget to say who it is, nor mistype another conversation's id. There is no
 anonymous mode for reads either, and a token without a session id is refused by
 the CLI with a message naming the missing half.
 
-**A write drops the prompt hook's cached digest** (`src/hook.rs`, and
-`~/.cache/claude-tasks/<session>.txt` at the other end). The hook serves its last
+**A write drops the prompt hook's cached digest.** The hook is `task hook`
+(`src/hook.rs`), Claude Code's `UserPromptSubmit` command, and its cache is
+`~/.cache/claude-tasks/<session>.txt`. It serves its last
 answer for a short while, which is right for reading and wrong right after a
 write: a session shown a digest without the task it just filed has a reason to
 file it twice. Every non-`GET` clears it, centrally in `Client::send`, silently.
