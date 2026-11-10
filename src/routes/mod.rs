@@ -108,6 +108,12 @@ pub fn router(state: AppState) -> Router {
         app
     };
 
+    // A used session goes back re-minted, so it lasts a month from its last use.
+    let app = app.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        auth::renew_session,
+    ));
+
     // One line per request. Levels are explicit: TraceLayer's default DEBUG never
     // shows under an `info` filter.
     let trace = TraceLayer::new_for_http()
