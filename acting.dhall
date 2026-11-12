@@ -14,18 +14,14 @@ let Class = A.Class
 
 in  { ceilings =
         -- acts: each row names what it becomes (automation-model items 13-15)
-      { acts = 1
+      { acts = 0
       , bootstrap = 0
       , by_design = 0
       , observes = 0
       , observer_checks = 0
       }
     , subjects =
-      [ subject
-              "android/deploy.sh"
-              Class.Acts
-              "builds the APK and installs it on a phone over adb: the phone-shells plan's target (automation-model item 14)"
-          , subject "scripts/dev.sh" Class.OutOfScope ""
+      [ subject "scripts/dev.sh" Class.OutOfScope ""
           , subject "scripts/setup-hooks.sh" Class.OutOfScope ""
       ]
     }

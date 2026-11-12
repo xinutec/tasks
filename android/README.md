@@ -51,11 +51,14 @@ dev shell (JDK 17 + Android SDK; the Gradle wrapper pins Gradle). It also needs
 `~/Code/ui-harness` checked out beside this repo, which `app/build.gradle.kts`
 asserts in a sentence rather than a stacktrace.
 
+The Pixel 9 gets the committed build from xinutec-infra's android plan:
+
 ```sh
-nix develop ~/Code/recall#android --command ./deploy.sh
+cd ~/Code/xinutec-infra/plan && plan-run android-pixel9 --settings settings.json --apply
 ```
 
-`deploy.sh` builds and installs, and keys on the device **model** rather than an
-IP: DHCP drifts, and a bare `adb install` could hit whichever other device happens
-to be connected. Pass an `ip[:port]` if wireless debugging has rotated to a random
-port.
+It builds HEAD and installs each app whose `versionCode` on the phone is behind
+(the commits touching its Android tree and the shell's), on the phone that reports
+the model `Pixel 9` and no other. Work in progress never reaches it that way: to
+try an uncommitted change, `./gradlew assembleDebug` and `adb -s <ip:port> install
+-r` it by hand.
