@@ -38,6 +38,13 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByText('Stop walking every transcript').waitFor();
   await shot(page, 'list', true);
 
+  await page.getByRole('searchbox', { name: 'Search' }).fill('transcript');
+  await shot(page, 'list-search');
+
+  await page.goto('/?done=1');
+  await page.getByRole('heading', { name: '2 tasks' }).waitFor();
+  await shot(page, 'list-closed');
+
   await page.goto(`/t/${TASKS[1].id}`);
   // By role, not by text: every Material icon contributes its ligature to the
   // accessible tree, so a text query for a common word matches icons too.

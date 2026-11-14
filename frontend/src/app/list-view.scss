@@ -13,6 +13,15 @@
     font: var(--mat-sys-label-large);
     color: var(--mat-sys-primary);
   }
+
+  .state {
+    margin-left: auto;
+  }
+}
+
+.search {
+  width: 100%;
+  margin: 4px 0 8px;
 }
 
 .filters {
@@ -44,11 +53,14 @@
 }
 
 .task {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  // 48px everywhere a thumb lands (fleet convention). A task row is the most
-  // tapped thing in the app.
+  // Two lines: the subject has the whole width, and what is known about it goes
+  // underneath in words. Beside the subject, the details took half a phone and
+  // wrapped a subject to eight lines.
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  row-gap: 4px;
+  // 48px everywhere a thumb lands (fleet convention).
   min-height: 48px;
   padding: 10px 4px;
   color: inherit;
@@ -56,75 +68,58 @@
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 
   .status {
-    flex: 0 0 auto;
+    grid-row: span 2;
     margin-top: 1px;
     color: var(--mat-sys-outline);
     &.doing {
       color: var(--mat-sys-primary);
     }
-    &.done {
+    &.done,
+    &.dropped {
       color: var(--mat-sys-outline-variant);
     }
   }
 
   .subject {
-    flex: 1;
-    // Subjects are prose and wrap; the wrapping is what keeps a long one from
-    // pushing the meta column off the right edge.
     overflow-wrap: break-word;
     min-width: 0;
+
+    &.dropped {
+      color: var(--mat-sys-on-surface-variant);
+    }
   }
 
   .meta {
-    flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 10px;
+    min-width: 0;
     font: var(--mat-sys-label-small);
     color: var(--mat-sys-on-surface-variant);
+
+    mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      margin-right: 2px;
+    }
   }
 
   .id {
     font-variant-numeric: tabular-nums;
   }
 
-  // An icon rather than the ids, which would push a phone-width meta row past
-  // the edge. Which tasks they are is one tap away, on the task itself.
   // Overdue is the one state worth colouring, and it is a fact rather than a
-  // threshold — which is why there is no "due soon" shade between the two.
-  .due {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    opacity: 0.7;
-
-    &.overdue {
-      color: var(--mat-sys-error);
-      opacity: 1;
-    }
+  // threshold, which is why there is no "due soon" shade.
+  .due.overdue {
+    color: var(--mat-sys-error);
   }
 
-  .blocked {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    opacity: 0.7;
-  }
-
-  // The same 16px mark as the two above, so a row with all three still fits at
-  // phone width — that budget is what `ui-check` guards.
-  .sprawl {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    opacity: 0.7;
-  }
-
-  // Weight, not hue alone. P0 and P1 are the two that have to be spotted
-  // while scrolling; P3 and P4 are marked so they can be recognised and passed
-  // over, which is the opposite job and wants the opposite emphasis. Reading
-  // this by colour alone would fail anybody who cannot separate red from grey,
-  // so the letter is always there and the colour only reinforces it.
+  // Weight, not hue alone: the letter is always there and the colour only
+  // reinforces it. P0 and P1 must be spotted while scrolling; P3 and P4 are
+  // marked so they can be passed over.
   .priority {
     padding: 2px 6px;
     border-radius: 4px;
@@ -142,10 +137,7 @@
     &.P4 {
       opacity: 0.6;
     }
-    // A raised level must not look like a chosen one. The `!` says it in
-    // text; the outline says it at a glance, so a reader scanning the top of the
-    // list can tell "somebody decided this" from "a date did". Same treatment in
-    // both views, because the two are read minutes apart.
+    // A raised level must not look like a chosen one; same in both views.
     &.raised {
       background: transparent;
       outline: 1px dashed currentColor;
@@ -153,35 +145,29 @@
     }
   }
 
+  // A raw session id is 36 characters, so the chip is capped and ellipsised.
   .holder {
     padding: 2px 8px;
     border-radius: 999px;
     background: var(--mat-sys-surface-container-high);
-    // A session name can be long — a raw id is 36 characters — so the chip is
-    // capped and ellipsised. 12ch: any less and the padding truncates ordinary
-    // names like `memview`.
-    max-width: 12ch;
+    max-width: 20ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  // Deliberately NOT the holder's shape. A filled pill reads as somebody having
-  // the task, which is the one thing a pile row must not say — so this is plain
-  // text, dimmer, and capped the way a long name needs.
+  // Deliberately NOT the holder's shape: a filled pill says somebody has the
+  // task, which a pile row must not say.
   .filer {
     font-style: italic;
     opacity: 0.75;
-    max-width: 14ch;
+    max-width: 20ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .has-body {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
     opacity: 0.6;
   }
 }

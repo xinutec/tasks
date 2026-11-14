@@ -11,7 +11,7 @@ import {
 import { routesFrom, screens } from '@xinutec/ui-harness/routes';
 
 import type { Created, Updated } from '../src/app/models';
-import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
+import { CLOSED, DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 
 /**
  * Phone-width layout checks: real screens at a Pixel viewport, mocked backend,
@@ -22,10 +22,7 @@ import { DETAIL, DROPPED, SESSIONS, TASKS, mockApi } from './fixtures';
 // Fail if the device preset is lost and the suite runs at desktop width.
 
 /** Every screen in the route table (`routes.json`), not only those a test opens. */
-for (const { route, url } of screens(
-  routesFrom('e2e/routes.json'),
-  { id: String(TASKS[1].id) },
-)) {
+for (const { route, url } of screens(routesFrom('e2e/routes.json'), { id: String(TASKS[1].id) })) {
   test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
     await mockApi(page);
     await page.goto(url);
@@ -65,6 +62,49 @@ test('the list — filtered to one holder @ phone width', async ({ page }, testI
   await page.getByRole('radio', { name: 'with a session' }).click();
   await page.getByText('The console task reader').waitFor();
   await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
+});
+
+test('the list — the menu link to finished work shows closed tasks, newest first', async ({
+  page,
+}, testInfo) => {
+  await mockApi(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('menuitem', { name: 'Finished work' }).click();
+  await expect(page.getByRole('heading', { name: '2 tasks' })).toBeVisible();
+  await expect(page.locator('.subject')).toHaveText([CLOSED[1].subject, CLOSED[0].subject]);
+  await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
+
+  await page.getByRole('radio', { name: 'Open' }).click();
+  await expect(page.getByRole('heading', { name: `${TASKS.length} tasks` })).toBeVisible();
+});
+
+test('the list — search narrows by words and by #id @ phone width', async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto('/');
+  const search = page.getByRole('searchbox', { name: 'Search' });
+  await search.fill('boot DISK');
+  await expect(page.locator('.subject')).toHaveText([TASKS[3].subject]);
+  await expect(page.getByRole('heading', { name: '1 task' })).toBeVisible();
+  await expectCleanLayout(page, testInfo, { allow: FILTER_SCROLLERS });
+
+  await search.fill('#131');
+  await expect(page.locator('.subject')).toHaveText([TASKS[5].subject]);
+  // Kept in the URL, so back from a task returns to the same results.
+  await page.locator('.task').first().click();
+  await page.goBack();
+  await expect(search).toHaveValue('#131');
+
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(page.locator('.subject')).toHaveCount(TASKS.length);
+});
+
+test('the build stamp is under the content, not over it', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/t/92');
+  await page.getByRole('heading', { name: 'History' }).waitFor();
+  // Inside the scroller, it is seen at the end of a page rather than across it.
+  await expect(page.locator('main .build')).toHaveCount(1);
 });
 
 /** Code blocks and tables scroll sideways by design, named since the harness won't infer it. */

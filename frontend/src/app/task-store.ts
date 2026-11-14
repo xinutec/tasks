@@ -14,6 +14,9 @@ export class TaskStore {
   private api = inject(TasksApi);
 
   readonly tasks = signal<Task[]>([]);
+  /** Closed tasks, newest first; null until asked for, since most visits never are. */
+  readonly closed = signal<Task[] | null>(null);
+  readonly closedFailed = signal<string | null>(null);
   readonly sessions = signal<Session[]>([]);
   readonly holders = signal<Holder[]>([]);
   readonly me = signal<Me | null>(null);
@@ -49,6 +52,7 @@ export class TaskStore {
         this.loading.set(false);
       },
     });
+    if (this.closedAsked) this.loadClosed();
     this.api.holders().subscribe({
       next: (holders) => this.holders.set(holders),
       error: (err: unknown) => this.extrasFailed.set(reason(err)),
@@ -57,6 +61,28 @@ export class TaskStore {
       next: (sessions) => this.sessions.set(sessions),
       error: (err: unknown) => this.extrasFailed.set(reason(err)),
     });
+  }
+
+  /** `?done=true` sends open and closed together; only the closed are kept. */
+  private loadClosed(): void {
+    this.api.list({ done: true }).subscribe({
+      next: (tasks) => {
+        const closed = tasks.filter((t) => t.status === 'done' || t.status === 'dropped');
+        const at = (t: Task) => t.closed_at ?? t.updated_at;
+        this.closed.set(closed.sort((a, b) => at(b).localeCompare(at(a))));
+        this.closedFailed.set(null);
+      },
+      error: (err: unknown) => this.closedFailed.set(reason(err)),
+    });
+  }
+
+  private closedAsked = false;
+
+  /** Load the closed list once; `refresh` keeps it current after that. */
+  ensureClosed(): void {
+    if (this.closedAsked) return;
+    this.closedAsked = true;
+    this.loadClosed();
   }
 
   private loaded = false;

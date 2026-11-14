@@ -38,9 +38,12 @@
     }
   </mat-menu>
 
+  <!-- The stamp inside the scroller: below it, a page scrolled under it reads
+       as the stamp drawn over the page's last line. -->
   <main class="content">
     <router-outlet />
+    <footer class="build" [title]="'built ' + builtAt">
+      build {{ build.sha }} · {{ builtAt }}
+    </footer>
   </main>
-
-  <footer class="build" [title]="'built ' + builtAt">build {{ build.sha }} · {{ builtAt }}</footer>
 }

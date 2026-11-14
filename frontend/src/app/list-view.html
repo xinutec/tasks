@@ -4,18 +4,44 @@
   <p class="failed">{{ why }}</p>
 } @else {
   <header class="lede">
-    <h1>{{ shown().length }} open</h1>
-    @if (doing() > 0) {
+    <h1>{{ shown().length }} {{ shown().length === 1 ? 'task' : 'tasks' }}</h1>
+    @if (!closedView() && doing() > 0) {
       <span class="doing">{{ doing() }} in progress</span>
     }
+    <mat-button-toggle-group
+      class="state"
+      aria-label="Open or closed"
+      hideSingleSelectionIndicator
+      [value]="closedView()"
+      (change)="pickClosed($event.value)"
+    >
+      <mat-button-toggle [value]="false">Open</mat-button-toggle>
+      <mat-button-toggle [value]="true">Closed</mat-button-toggle>
+    </mat-button-toggle-group>
   </header>
 
+  <mat-form-field class="search" appearance="outline" subscriptSizing="dynamic">
+    <mat-icon matPrefix>search</mat-icon>
+    <input
+      matInput
+      type="search"
+      aria-label="Search"
+      placeholder="Words, a holder, or #id"
+      autocomplete="off"
+      [value]="query()"
+      (input)="search($any($event.target).value)"
+    />
+    @if (query()) {
+      <button matIconButton matSuffix aria-label="Clear search" (click)="search('')">
+        <mat-icon>close</mat-icon>
+      </button>
+    }
+  </mat-form-field>
+
   <nav class="filters" aria-label="Filters">
-    <!-- **Its own row, not a fifth chip.** One named holder, arrived at from
-         /who. It needs a chip or no bucket is lit and "Nothing here" reads as
-         no work at all. In the bucket row it lands past the right edge at phone
-         width, where the `overflow-x: auto` row hides it. First, because it is
-         the answer to what you are looking at. Tapping it clears. -->
+    <!-- Its own row, not a fifth chip: one named holder, arrived at from /who.
+         Without it no bucket is lit and "Nothing here" reads as no work at all.
+         Tapping it clears. -->
     @if (focused(); as holder) {
       <mat-chip-set aria-label="Showing one holder">
         <mat-chip (removed)="clearFocus()">
@@ -41,7 +67,7 @@
   </nav>
 
   @if (shown().length === 0) {
-    <p class="empty">Nothing here. That is allowed.</p>
+    <p class="empty">{{ query() ? 'Nothing matches.' : 'Nothing here. That is allowed.' }}</p>
   }
 
   @if (shown().length > 0) {
@@ -52,16 +78,13 @@
             <mat-icon class="status" [class]="row.task.status">{{
               statusIcon[row.task.status]
             }}</mat-icon>
-            <span class="subject">{{ row.task.subject }}</span>
+            <span class="subject" [class.dropped]="row.task.status === 'dropped'">{{
+              row.task.subject
+            }}</span>
             <span class="meta">
-              <!-- Only when somebody has ranked it. Absence is not a level, so
-                   there is nothing to draw for the tasks that have none — which
-                   is nearly all of them. The backend has already sorted these
-                   to the top; this says why they are there. -->
-              <!-- The raised rank when a deadline is near, else the one that
-                   was set. `!` marks a level nobody chose, so the order never
-                   reads as random. The rule lives in SQL — this only draws
-                   whichever value the list was sorted by. -->
+              <!-- Only when somebody ranked it: absence is not a level. The raised
+                   rank when a deadline is near, else the set one; `!` and the dashed
+                   outline mark a level nobody chose. The rule lives in SQL. -->
               @if (row.task.escalated_to) {
                 <span class="priority raised" [class]="row.task.escalated_to"
                   >{{ row.task.escalated_to }}!</span
@@ -69,43 +92,30 @@
               } @else if (row.task.priority) {
                 <span class="priority" [class]="row.task.priority">{{ row.task.priority }}</span>
               }
-              <!-- Only while a blocker is still OPEN — `blocked`, not the presence of
-                   `blocked_on`, which is kept after the blocker closes. -->
-              <!-- An icon, not the date, like `blocked`: a full date in this row wraps
-                   long subjects further at phone width. Whether there IS a
-                   deadline, and whether it has passed, is what a list needs;
-                   WHEN is on the task. -->
-              @if (row.task.due) {
-                <mat-icon
-                  class="due"
-                  [class.overdue]="row.task.overdue"
-                  [attr.aria-label]="row.task.overdue ? 'overdue' : 'has a deadline'"
-                  >event</mat-icon
-                >
-              }
-              @if (row.task.blocked) {
-                <mat-icon class="blocked" aria-label="blocked">block</mat-icon>
-              }
-              <!-- An icon for the same reason the deadline is one: a body that got away
-                   is a yes/no in a list, and the size and findings are on the
-                   task. Drawn only where a read spoke and no edit has since
-                   made the body smaller.
-                   **NOT `notes`, which is two icons down and means "has a
-                   body"** — one glyph with two meanings in one row. `compress`
-                   says what the remedy is. -->
-              @if (row.task.sprawl_chars) {
-                <mat-icon class="sprawl" aria-label="a model found this body sprawling"
-                  >compress</mat-icon
-                >
-              }
               <span class="id">#{{ row.task.id }}</span>
               @if (row.task.assignee.kind !== 'nobody') {
                 <span class="holder">{{ row.holder }}</span>
               } @else if (row.filer) {
-                <!-- Where a holder would be, because a pile row is the one that
-                     leaves that space empty. "from" is carrying real weight in
-                     one word: this is not who HAS it, it is who left it. -->
+                <!-- Where a holder would be: not who HAS it, who left it. -->
                 <span class="filer">from {{ row.filer }}</span>
+              }
+              @if (row.closed) {
+                <span>{{ statusLabel[row.task.status] }} {{ row.closed }}</span>
+              } @else {
+                @if (row.due) {
+                  <span class="due" [class.overdue]="row.task.overdue">
+                    <mat-icon aria-hidden="true">event</mat-icon>
+                    {{ row.task.overdue ? 'overdue' : 'due' }} {{ row.due }}
+                  </span>
+                }
+                <!-- `blocked`, not `blocked_on`, which is kept after a blocker closes. -->
+                @if (row.task.blocked) {
+                  <span><mat-icon aria-hidden="true">block</mat-icon>blocked</span>
+                }
+                <!-- Drawn only where a read spoke and no edit has since made the body smaller. -->
+                @if (row.task.sprawl_chars) {
+                  <span><mat-icon aria-hidden="true">compress</mat-icon>long body</span>
+                }
               }
               @if (row.task.detailed) {
                 <mat-icon class="has-body" aria-label="has notes">notes</mat-icon>

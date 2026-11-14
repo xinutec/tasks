@@ -7,8 +7,8 @@ import type { Holder, Me, Revision, Session, Task, TaskDetail } from '../src/app
  * what the harness measured. Deliberately busy; the hazards specific to this app:
  *   1. An unnamed session is drawn as its 36-character unbreakable id, in chips,
  *      menus and history.
- *   2. A subject may be 200 characters of prose wrapping beside the meta column.
- *   3. A holder chip may be a raw id, the widest thing in the meta column.
+ *   2. A subject may be 200 characters of prose.
+ *   3. A holder chip may be a raw id, the widest thing on the details line.
  */
 export const ME = { kind: 'person', id: 'user', name: 'User' } satisfies Me;
 
@@ -128,6 +128,34 @@ export const TASKS = [
   },
 ] satisfies Task[];
 
+/** Closed: one done, one dropped, out of closing order to show the list sorts them. */
+export const CLOSED = [
+  {
+    id: 41,
+    subject: 'The digest recites P4 work nobody is paying for',
+    status: 'done',
+    priority: 'P2',
+    assignee: { kind: 'session', id: SESSIONS[0].id, name: 'memview' },
+    detailed: true,
+    body_lines: 12,
+    created_at: '2026-07-01T09:00:00Z',
+    updated_at: '2026-07-20T09:00:00Z',
+    closed_at: '2026-07-20T09:00:00Z',
+  },
+  {
+    id: 57,
+    subject: 'Mirror the rail stops into a tile cache',
+    status: 'dropped',
+    assignee: { kind: 'nobody' },
+    filed_by: 'health',
+    detailed: false,
+    body_lines: 0,
+    created_at: '2026-07-02T09:00:00Z',
+    updated_at: '2026-08-02T09:00:00Z',
+    closed_at: '2026-08-02T09:00:00Z',
+  },
+] satisfies Task[];
+
 /** Long, like real bodies: are the panel's two buttons still reachable at phone height? */
 export const PREVIOUS = {
   at: '2026-08-13T09:06:12Z',
@@ -221,7 +249,12 @@ export const DROPPED = {
 export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/**', (r) => r.fulfill({ status: 204, body: '' }));
   await page.route('**/api/me', (r) => r.fulfill({ json: ME }));
-  await page.route('**/api/tasks**', (r) => r.fulfill({ json: TASKS }));
+  // `done=true` adds the closed ones to the open, as the server does.
+  await page.route('**/api/tasks**', (r) =>
+    r.fulfill({
+      json: new URL(r.request().url()).searchParams.get('done') ? [...TASKS, ...CLOSED] : TASKS,
+    }),
+  );
   await page.route('**/api/tasks/*', (r) => r.fulfill({ json: DETAIL }));
   await page.route('**/api/sessions', (r) => r.fulfill({ json: SESSIONS }));
   await page.route('**/api/holders', (r) => r.fulfill({ json: HOLDERS }));
