@@ -336,7 +336,7 @@ mod deadlines {
     use super::*;
     use chrono::{Duration, NaiveDate, Utc};
 
-    /// ⚠ **Relative, because a hardcoded future date is a test with an expiry
+    /// **Relative, because a hardcoded future date is a test with an expiry
     /// date.**
     fn day(days: i64) -> NaiveDate {
         (Utc::now() + Duration::days(days)).date_naive()

@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-/// ⚠ Only the tail is read: transcripts reach gigabytes and this runs before
+/// Only the tail is read: transcripts reach gigabytes and this runs before
 /// every command. Missing an older name just keeps the current one.
 pub const TAIL_WINDOW: u64 = 1 << 20;
 

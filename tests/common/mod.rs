@@ -1,7 +1,7 @@
 //! What the DB tests share: the database, or a failure. The queries are runtime
 //! strings, so running them is the only check on the SQL.
 //!
-//! ⚠ Unset means failure, not skip: an early return reports `ok` with none of
+//! Unset means failure, not skip: an early return reports `ok` with none of
 //! the SQL exercised.
 
 use sqlx::MySqlPool;
@@ -54,7 +54,7 @@ pub(crate) async fn fresh_db() -> MySqlPool {
             .await
             .unwrap_or_else(|e| panic!("running {statement}: {e}"));
     }
-    // ⚠ The id sequence is not reset, so no test can depend on the id it will get.
+    // The id sequence is not reset, so no test can depend on the id it will get.
     // (The DDL would also break dev-lint's schema reader.)
     pool
 }

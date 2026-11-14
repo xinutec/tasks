@@ -1,6 +1,6 @@
 // The layout harnesses and the Playwright configs, type-checked.
 //
-// ⚠ **Nothing else checked these files.** `tsconfig.app.json` reaches only what
+// **Nothing else checked these files.** `tsconfig.app.json` reaches only what
 // `src/main.ts` imports and `tsconfig.spec.json` only `src/**/*.spec.ts`, so the
 // e2e trees were in neither; eslint's flat config did not name them; and
 // Playwright compiles specs with esbuild, which strips types without checking

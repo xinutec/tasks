@@ -141,7 +141,7 @@ fn closing_a_task_takes_its_outcome_in_the_same_command() {
         .expect("task done --help");
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("--note"), "{text}");
-    // ⚠ Matched as an OPTION LINE, not as a substring: the flag's own help
+    // Matched as an OPTION LINE, not as a substring: the flag's own help
     // explains why `--body` is not an alias, so the word appears in the prose
     // and a `contains` check cannot tell the two apart.
     assert!(

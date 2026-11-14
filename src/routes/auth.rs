@@ -56,7 +56,7 @@ pub struct LoginQuery {
 
 /// The cookie saying this browser started this sign-in.
 ///
-/// ⚠ `Lax`, never `Strict`: the callback is a cross-site top-level navigation,
+/// `Lax`, never `Strict`: the callback is a cross-site top-level navigation,
 /// exactly the request a `Strict` cookie is withheld from.
 fn pending_cookie(state: String) -> Cookie<'static> {
     Cookie::build((PENDING_COOKIE, state))
@@ -100,7 +100,7 @@ pub enum Answer<'a> {
 
 /// What this callback may do.
 ///
-/// ⚠ Nextcloud loses `state` when a sign-in crosses its login page (it keeps it
+/// Nextcloud loses `state` when a sign-in crosses its login page (it keeps it
 /// in the PHP session) and returns `state=&code=…`. That is retried, never
 /// trusted (RFC 6749 §10.12): nothing ties that code to this browser. The retry
 /// finds Nextcloud signed in, so `state` survives. Both present must agree.

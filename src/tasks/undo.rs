@@ -1,6 +1,6 @@
 //! Whether `task undo` may restore without `--anyway`.
 //!
-//! ⚠ **It reverts the task's last edit, not yours.** One version is kept per
+//! **It reverts the task's last edit, not yours.** One version is kept per
 //! task, so with several conversations at work it may be somebody else's edit
 //! that comes back undone. That case is refused, not warned about: it is rare,
 //! so the flag still means something.

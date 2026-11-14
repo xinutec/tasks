@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Store a fieldless enum in a `VARCHAR` column.
 ///
-/// ⚠ Not `#[derive(sqlx::Type)]`: that declares `ENUM`, and against `VARCHAR` it
+/// Not `#[derive(sqlx::Type)]`: that declares `ENUM`, and against `VARCHAR` it
 /// compiles, passes tests that don't read the column, and fails every real row
 /// at runtime. These impls delegate to `str`, and `Decode` parses.
 macro_rules! varchar_enum {
@@ -120,7 +120,7 @@ macro_rules! due_soon {
 
 /// SQL for the body as a reader sees it, trimmed at both ends.
 ///
-/// ⚠ SQL `TRIM()` removes only spaces, so a body of newlines would count as
+/// SQL `TRIM()` removes only spaces, so a body of newlines would count as
 /// prose. `[[:space:]]`, not `\s`, which `NO_BACKSLASH_ESCAPES` would break
 /// silently.
 #[macro_export]
@@ -136,7 +136,7 @@ macro_rules! body_shown {
 
 /// SQL for "this task is still work", in one place.
 ///
-/// ⚠ The obvious `status <> 'done'` counts dropped tasks as open. A macro so it
+/// The obvious `status <> 'done'` counts dropped tasks as open. A macro so it
 /// expands inside `concat!` (sqlx wants `&'static str`); the column is an
 /// argument for joins. `tests/tasks_db.rs::a_dropped_task_is_not_open_anywhere`
 /// ties it to [`Status::is_open`].
@@ -232,7 +232,7 @@ impl Ranking {
 impl<'de> Deserialize<'de> for Ranking {
     /// `null` is unassessed, a string must be a level, and absent is an error.
     ///
-    /// ⚠ `deserialize_any`, not `Option::<Priority>::deserialize`: serde fills a
+    /// `deserialize_any`, not `Option::<Priority>::deserialize`: serde fills a
     /// missing field via `missing_field`, which answers `deserialize_option` with
     /// `None`, so the obvious spelling accepts a filing with no key. The test pins it.
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
@@ -402,7 +402,7 @@ pub struct Task {
     pub closed_at: Option<DateTime<Utc>>,
 }
 impl Task {
-    /// The rank it sorts and renders as. ⚠ `escalated_to` first: reversed, it still
+    /// The rank it sorts and renders as. `escalated_to` first: reversed, it still
     /// compiles and the list stops agreeing with itself.
     pub fn urgency(&self) -> Option<Priority> {
         self.escalated_to.or(self.priority)

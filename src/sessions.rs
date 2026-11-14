@@ -36,7 +36,7 @@ struct Row {
 /// Record that a session exists, and its name.
 ///
 /// An absent or empty name keeps the stored one (the prompt hook sends only
-/// the id). ⚠ A non-UUID id equal to another conversation's name is refused, or
+/// the id). A non-UUID id equal to another conversation's name is refused, or
 /// it would capture every `--to <name>` meant for that one.
 pub async fn touch(pool: &MySqlPool, id: &str, name: Option<&str>) -> Result<()> {
     let name = name.map(str::trim).filter(|n| !n.is_empty());

@@ -8,7 +8,7 @@ you change them.
 **Do not use the built-in task tool.** Whatever it stores is re-sent into the
 conversation every turn, full bodies and all, which is what this replaced.
 
-⚠ **You will be told otherwise every turn.** A system reminder suggests
+**You will be told otherwise every turn.** A system reminder suggests
 `TaskCreate`/`TaskUpdate` on every message. It is wrong here, and the digest at
 the top of your context says so every turn too — an instruction read once cannot
 outweigh one repeated every message. `task add` is how you file work.
@@ -18,12 +18,12 @@ outweigh one repeated every message. `task add` is how you file work.
 Neither is guessable from the commands, and getting them wrong produces
 confident, wrong tickets.
 
-⚠ **A session never ends.** Conversations go quiet and come back; there is no
+**A session never ends.** Conversations go quiet and come back; there is no
 terminal state. Nothing here goes stale because nobody is at that keyboard, and
 handing work to a conversation with no live process is **queueing** it, not
 stranding it. There is nothing to apologise for and nothing to check first.
 
-⚠ **A holder's open tasks are its FUTURE work, not its current work.** Thirty
+**A holder's open tasks are its FUTURE work, not its current work.** Thirty
 open against a session is a backlog addressed to that conversation, not thirty
 things in flight. `- [>]` is the mark for work actually in hand, and it is the
 only one that means that.
@@ -50,7 +50,7 @@ task list --to <holder>   # what one other holder is carrying
 `task list` answers the same question the digest does: your own, and the pile.
 `--all` is *what is going on*, and it is the expensive one on purpose.
 
-⚠ **Your prompt shows only the first few of the pile.** Past that it says how
+**Your prompt shows only the first few of the pile.** Past that it says how
 many more there are, and `task list --pile` is where you see them. Everything
 *you* hold is always there — the cap is the pile's alone, because an unheld task
 is in every conversation's prompt at once and yours are only in yours. So a short
@@ -58,7 +58,7 @@ pile in your context is not evidence that the pile is short. Do not count it by
 filtering `--all --json` yourself: the holder is `assignee`, an object, and a
 guessed `session` field matches every row.
 
-⚠ **`--handed-out` is the only question not about who is holding a task.** It
+**`--handed-out` is the only question not about who is holding a task.** It
 asks *what did I file that somebody else now has* — precisely the tasks you stop
 being able to see, since your prompt never shows another conversation's work.
 `--to memview` is not the same question: that is everything memview carries, from
@@ -80,7 +80,7 @@ anything in your shell.
 read out of your own transcript by the CLI and sent with every command. Rename the
 conversation and lists follow on the next command.
 
-⚠ **`task rename` refuses when Claude Code has a name for you**, because the
+**`task rename` refuses when Claude Code has a name for you**, because the
 derived one would replace it on your very next command. If it lets you through,
 you are a conversation with no name of its own, and then it is the only lever.
 
@@ -116,7 +116,7 @@ task close 42 / task update 42  # the same as `done` / `edit`, since sessions ty
 task checks                     # what the two model checks have been doing
 ```
 
-⚠ **`--body` replaces everything; `--prepend` is how you record an outcome.**
+**`--body` replaces everything; `--prepend` is how you record an outcome.**
 Closing a task usually means writing a paragraph and keeping the filing, and
 `--body` deletes the filing unless you read it out and paste it back first. That
 read gets skipped, and the guard on `--body` only catches a body cut to a
@@ -129,11 +129,11 @@ what is still true sinks to the bottom. The addition is resolved server-side
 against the row it locks, so two conversations adding to one task cannot lose
 each other's text — do NOT rebuild this by reading the body and sending it back.
 
-⚠ **`task undo` reverts THE last edit, not YOUR last edit** — one version is kept
+**`task undo` reverts THE last edit, not YOUR last edit** — one version is kept
 per task. When the last edit was somebody else's it refuses and says whose;
 `--anyway` is how to mean it.
 
-⚠ **A task you deal with is YOURS, without your having to say so.** Filing one
+**A task you deal with is YOURS, without your having to say so.** Filing one
 takes it on, `task start` claims it **out of the pile**, and `task done` or
 `task drop` puts your name on it. It never takes one off somebody else: if a task
 is already held, starting it moves the status and nothing else, and taking it on
@@ -141,34 +141,34 @@ properly is `task move <id> me`. If you want it in the pile instead, say
 `--to nobody` AND `--spare "<why>"` — filings to the pile were almost always
 corrected later, so a bare `--to nobody` is refused.
 
-⚠ **A pile line ending in `(from health)` is telling you where the work lives.**
+**A pile line ending in `(from health)` is telling you where the work lives.**
 That is the session that filed it, there so you can rule a task out without
 opening it. Treat it as a hint: it is silent when the user filed it or the filer
 has no name, and wrong when one conversation files work for another, which the
 subject usually gives away. It is in `task list` and deliberately not in your
 prompt.
 
-⚠ **Two parentheticals, and they are not the same thing.** `(from health)` is
+**Two parentheticals, and they are not the same thing.** `(from health)` is
 who *filed* it and appears only on a pile line; a bare `(coach)` is who *holds*
 it, and that one does reach your prompt. In your own digest the bare one is
 always your own name — the pile has no holder — so it is what tells your work
 apart from the work going spare.
 
-⚠ **A task in the pile can be `- [>]`, and it is yours to take.** Somebody
+**A task in the pile can be `- [>]`, and it is yours to take.** Somebody
 started it and handed it back without closing it — the question is still open,
 the approach is not — so the status says work happened, not that anybody is
 doing it now. Read the body before you begin: it is where the previous holder
 left what they found. `task start` takes it on.
 
-⚠ **`me` is you.** Handing work to the person is `human`. Nothing means them
+**`me` is you.** Handing work to the person is `human`. Nothing means them
 implicitly.
 
-⚠ **A subject is one line and at most 200 characters**, because the subject is
+**A subject is one line and at most 200 characters**, because the subject is
 the only part that reaches a prompt — every turn, for as long as the task is
 open. Everything else goes in the body, which is read only when somebody opens
 the task. The service refuses a subject that is really a body, and says so.
 
-⚠ **Put where it stands in the subject when it fits, and lead the body with it
+**Put where it stands in the subject when it fits, and lead the body with it
 when it does not.** A body is written in the order things happened, so the
 current conclusion ends up last — a verdict at the foot of a long ticket, or a
 plan in the closing paragraph of a ticket about something else. A subject like
@@ -178,12 +178,12 @@ read by everybody, every turn, without opening anything.
 So: **the present tense at the top, the history under it.** Whoever opens this
 next wants to know where it stands, not how it got here.
 
-⚠ **And the subject is MAINTAINED, not chosen once.** An edit that moves where
+**And the subject is MAINTAINED, not chosen once.** An edit that moves where
 the task stands rewrites the subject in the SAME edit. A `--prepend` that changes
 the body and leaves the subject asking a question the body has answered leaves
 the one line that reaches a prompt every turn saying the old thing.
 
-⚠ **Closing is a subject edit too.** A closed subject is what the duplicate check
+**Closing is a subject edit too.** A closed subject is what the duplicate check
 and every later search see first, and it is read by people who will never open
 the task.
 
@@ -210,7 +210,7 @@ Safe to cut:
   * **Measurement tables** where one line is the operative number. Keep that
     line.
 
-⚠ **NOT safe:**
+**NOT safe:**
 
   * **A rejected alternative.** Cutting the argument is right; cutting the FACT
     that it was on the table and lost means it gets re-proposed.
@@ -218,7 +218,7 @@ Safe to cut:
     policy, the FK cascades" reads as something you could work out, but it is a
     decision not to build one, and cutting it leaves scope unanswered.
 
-    ⚠ **The test is not *is this obvious*, it is *does this stop somebody doing
+    **The test is not *is this obvious*, it is *does this stop somebody doing
     a wrong thing*.** `// increment the counter` above `n += 1` stops nothing and
     goes. A sentence that forecloses work stays, however derivable it looks.
   * **Who a decision belongs to**, and whether it may be overruled.
@@ -227,12 +227,12 @@ Safe to cut:
   * **The open tail.** A body that settled something AND left something open
     loses the open half when the narrative is cut.
 
-⚠ **A layered body actively misleads, which is worse than being long.** A settled
+**A layered body actively misleads, which is worse than being long.** A settled
 answer on top of a superseded "still open" section below it makes readers of the
 full text conclude the dead question is live. The fix is not to hoist — it is to
 delete the stale layer.
 
-⚠ **`--prepend` is how bodies get that way, and it is the cheap thing to do.**
+**`--prepend` is how bodies get that way, and it is the cheap thing to do.**
 Putting the correction on top costs one command; deleting what it refutes costs
 reading the rest. Leading with the verdict does not fix a layered body — it is
 what produces one. When you prepend a correction, delete what it corrects in the
@@ -240,17 +240,17 @@ same edit.
 
 ### Closing it says how it came out
 
-⚠ **`task done` over a body that ends at "the fix, roughly" is a plan wearing a
+**`task done` over a body that ends at "the fix, roughly" is a plan wearing a
 finished status.** The outcome goes in before the close — what was done, and the
 sha, so nobody redoes shipped work: `task done <id> --note "DONE in <sha>. …"`.
 
-⚠ **A tail left open at close needs a ticket number, not a sentence.** "Still
+**A tail left open at close needs a ticket number, not a sentence.** "Still
 open: X" inside a closed body is invisible from every list there is — no prompt
 recites it, no `task list` shows it, and the duplicate check will not match it.
 Many closed bodies carry such a phrase, and some of them really are owed work
 with no ticket.
 
-⚠ **But read, do not grep.** A later section can answer an earlier one — a
+**But read, do not grep.** A later section can answer an earlier one — a
 "SIGNED OFF" section further down, or *"reopen this if that trade is worth
 taking"*, a deliberate park naming its own condition. The phrase is a place to
 look and the body is the evidence; getting this wrong invents work for somebody.
@@ -261,7 +261,7 @@ mean closed.
 
 ## When a body has grown without anyone rewriting it
 
-⚠ **`--prepend` is cheap and reading is not, so bodies accrete.** Once a task's
+**`--prepend` is cheap and reading is not, so bodies accrete.** Once a task's
 body has grown past a threshold since the last edit that made it smaller, your
 next `task edit` puts the whole thing to a model against three rules. It speaks
 only when the body contradicts itself or a rewrite would remove a third of it, so
@@ -283,7 +283,7 @@ The three rules, which are also under `task edit --help`:
 own later layers can lose most of its length and nothing of value; rewording saves
 a little.
 
-⚠ **Do NOT aim for "as few words as possible".** Cut to a word budget and the
+**Do NOT aim for "as few words as possible".** Cut to a word budget and the
 numbers go first, because prose reads like the argument — and a body is believed
 for its measurements. Aim for density and let the length follow.
 
@@ -294,13 +294,13 @@ Every row is a command somebody actually ran; nothing polls, so an empty table
 means the tool went unused rather than that a probe died. `task checks --days 7`
 is the same for the two model checks.
 
-⚠ **`edit` is the expensive one and it is not the service.** An edit that trips
+**`edit` is the expensive one and it is not the service.** An edit that trips
 the density read waits for a model, so its p90 is many times its median.
 `--no-density-check` skips it.
 
 ## Filing something that is already on the list
 
-⚠ **You cannot see the other conversations' lists, so you will file a duplicate
+**You cannot see the other conversations' lists, so you will file a duplicate
 eventually.** `task add` checks before it files: a subject identical to an open
 one is refused outright, and the local `claude` reads your subject against every
 open and closed task — except the ones you named in `--blocked-on` or
@@ -312,7 +312,7 @@ open and closed task — except the ones you named in `--blocked-on` or
 NOT FILED — a model reading the open titles says this is already #961 (Warn when a body has accreted since anyone rewrote it — a char sampler, then Haiku on density). `task show 961` to check, or re-run the same command with --not-duplicate-of 961 if this really is different work.
 ```
 
-⚠ **Read that last line rather than moving on.** Nothing was filed, so there is
+**Read that last line rather than moving on.** Nothing was filed, so there is
 no task to come back to and no `task drop` to do — if you treat this like a
 warning you have lost the filing. Two answers, both one command: `task show 961`
 and fold your text into that one, or re-run **the same command** with
@@ -329,7 +329,7 @@ overrules.** Each id is your judgment that that task is different work, so it
 must list every task the refusal named. Passed with no refusal behind it, the
 check simply runs. The task's history keeps what you filed past.
 
-⚠ **A CLOSED match stops you too, and the way past it is `task reopen`.** The
+**A CLOSED match stops you too, and the way past it is `task reopen`.** The
 remedy differs, so the message does:
 
 ```text
@@ -341,7 +341,7 @@ Nothing was filed here either. Two answers, both one command: `task reopen 689`
 and carry on in that task, or re-run **the same command** with
 `--not-duplicate-of 689` when it matched your topic and not your work.
 
-⚠ **`dropped` is not a verdict.** A drop records a status and no reason, so a
+**`dropped` is not a verdict.** A drop records a status and no reason, so a
 dropped twin does not mean the work was rejected — read the task and find out.
 
 **Ask what it WOULD say, without filing:** `task add "…" --priority P4
@@ -369,38 +369,38 @@ follow-up to finished work usually belongs in the old task.
 Five levels, and `task --help` glosses each one — read them there rather than
 guessing, because a level two conversations read differently ranks nothing.
 
-⚠ **FILING ONE MEANS SAYING.** `task add` takes `--priority`, or `--unassessed`
+**FILING ONE MEANS SAYING.** `task add` takes `--priority`, or `--unassessed`
 for work that is not yours to judge — filing into another session's domain is the
 ordinary case, and that is what the escape is for. Leaving both off is refused,
 by the CLI and by the service both. The user: *"I want everything to have a
 priority."*
 
-⚠ **Reach for `--unassessed` rather than a reflex `P2`.** They sort identically,
+**Reach for `--unassessed` rather than a reflex `P2`.** They sort identically,
 so nothing is lost by being honest; what differs is the claim. `P2` says *I read
 this and it is ordinary*. `--unassessed` says *I have not judged it*. A required
 field whose safe answer is obvious gets filled with that answer, and then the
 rank carries no information — the same failure as everything being `P0`.
 
-⚠ **UNASSESSED is not a sixth level.** An unassessed task sorts exactly where
+**UNASSESSED is not a sixth level.** An unassessed task sorts exactly where
 `P2` does. So `P0` and `P1` rise above the untriaged and `P3` and `P4` **sink
 below** it, and everything nobody has judged keeps its place — oldest first,
 which is what makes old work get fixed rather than buried.
 
-⚠ **`P4` leaves your prompt.** A task ranked `P4` is counted in the digest and
+**`P4` leaves your prompt.** A task ranked `P4` is counted in the digest and
 never listed, because nothing is being paid for it today. It is still open, still
 in `task list`, and a deadline brings it straight back. So `P4` is right for real
 work that costs nothing to defer, and wrong for work you simply are not doing
 this week — that is `P3`, which is still recited.
 
-⚠ **`P4` is not a shelf for decided questions.** A settled ticket is CLOSED —
+**`P4` is not a shelf for decided questions.** A settled ticket is CLOSED —
 `done` if it answered what it asked, `drop` if it was decided against — and
 `task list --done` still finds it. An open task is work.
 
-⚠ **Do not rank things to tidy up.** Most tasks are unranked, and that is the
+**Do not rank things to tidy up.** Most tasks are unranked, and that is the
 correct state — it is why the column is nullable rather than defaulted. Rank a
 task when you have actually decided its place, and leave the rest alone.
 
-⚠ **There is no way to unrank.** A task ranked wrongly is corrected by ranking it
+**There is no way to unrank.** A task ranked wrongly is corrected by ranking it
 again.
 
 It shows up wherever a task is drawn — `task list`, `task show`, your prompt, and
@@ -408,20 +408,20 @@ the app — and costs nothing on a task that has none.
 
 ## What it is waiting for
 
-⚠ **Say it as a ticket number, not in the body.** A blocker named in prose goes
+**Say it as a ticket number, not in the body.** A blocker named in prose goes
 stale when the blocker closes, and a reader who believes the body thinks the task
 is stuck when it is ready to start. `--blocked-on` joins to the live row and
 cannot go stale that way.
 
-⚠ **A task may not be ranked more urgently than what blocks it.** Equal is fine,
+**A task may not be ranked more urgently than what blocks it.** Equal is fine,
 higher is refused, and the refusal names the other task. With several blockers
 the bound is the LEAST urgent one still open — that is the one deciding when you
 can actually start. Ranking the BLOCKER down is refused for the same reason.
 
-⚠ **Nothing may block itself, and no loop is allowed** — not `A → B → A`, and not
+**Nothing may block itself, and no loop is allowed** — not `A → B → A`, and not
 `A → B → C → A`, which arrives as three edits that each look fine on their own.
 
-⚠ **An unranked task is never in violation.** It has claimed nothing, so
+**An unranked task is never in violation.** It has claimed nothing, so
 recording *"this waits for that"* never forces you to rank anything first.
 
 The link is kept when the blocker closes — it is a record of how the work went —
@@ -430,17 +430,17 @@ means *still waiting*; nothing there means nothing is in the way.
 
 ### When the blocker is not a ticket
 
-⚠ **Say it in the body, and that is correct rather than a workaround.** `hands on
+**Say it in the body, and that is correct rather than a workaround.** `hands on
 the hardware`, `the user present for device signing`, `an external image rebuild`,
 `sweep after some weeks` — none of these is a task row, so `--blocked-on` has
 nothing to join to. Write them in prose.
 
-⚠ **The rule above is about a blocker that IS a ticket, and does not transfer.**
+**The rule above is about a blocker that IS a ticket, and does not transfer.**
 That failure needs a row whose status can change behind the sentence's back.
 "The user present for device signing" has no row and no status; it stays true
 until it is done, and cannot be quietly contradicted.
 
-⚠ **This is why there is no free-text blocker field.** `blocked` is derived —
+**This is why there is no free-text blocker field.** `blocked` is derived —
 *any blocker still open* — so a free-text condition would either block for ever
 or need somebody to clear it by hand, and the `⛔` would stop meaning anything.
 
@@ -449,7 +449,7 @@ it could not, write it down and move on.**
 
 ### Waiting for it, rather than checking back
 
-⚠ **`⛔#697` is not a notification, and it cannot be one.** It is drawn when you
+**`⛔#697` is not a notification, and it cannot be one.** It is drawn when you
 take a turn, and a conversation that has stopped for a blocker is not taking
 turns. Nothing reaches a session that is not speaking.
 
@@ -464,13 +464,13 @@ the command returning is the wake. Nothing is delivered to you and no
 conversation addresses another; you simply have an unfinished job, and it
 finishes when somebody closes the task.
 
-⚠ **Read the exit before continuing.** `0` means the blockers were *done*.
+**Read the exit before continuing.** `0` means the blockers were *done*.
 Anything else means they were not, and the reason is on stderr — a blocker that
 was `drop`ped was overtaken, obsolete or decided against, so the thing you
 stopped for did not happen. Resuming as if it had is the one way this makes
 things worse than not waiting at all.
 
-⚠ **It gives up after a day** unless `--for` says otherwise, and giving up is not
+**It gives up after a day** unless `--for` says otherwise, and giving up is not
 failure: it wakes you, names what is still open, and you can wait again. There is
 no way to wait for ever, because a wait nobody finds out about is worse than a
 bounded one.
@@ -482,17 +482,17 @@ worry about that."*
 
 ## When it has to be done by
 
-⚠ **Inside the last week, a deadline RAISES the rank to `P0`.** The user's rule.
+**Inside the last week, a deadline RAISES the rank to `P0`.** The user's rule.
 The line reads `P0!` — the `!` says the level is not the one anybody set, and
 `task show` prints both. Nothing is written: the raise is recomputed from the
 date every time it is read, so it appears and goes away on its own.
 
-⚠ **Further out than a week it reorders NOTHING.** A deadline is evidence for a
+**Further out than a week it reorders NOTHING.** A deadline is evidence for a
 rank rather than a competing answer to what-next: how long the work takes is the
 term that would decide, and nothing records it. So a far date is an argument for
 ranking something up, and a person makes that call.
 
-⚠ **A task may not be due before something it is blocked on.** That is arithmetic
+**A task may not be due before something it is blocked on.** That is arithmetic
 rather than judgement, so it is refused, with the other task named. Equal is
 allowed.
 
@@ -512,13 +512,13 @@ same command if it should go somewhere else. `task drop` does the same, and that
 is deliberate: who decided a thing was not worth doing is as much a fact as who
 did it.
 
-⚠ **A task that has gone out of date is `drop`, not `done`.** Both close it and
+**A task that has gone out of date is `drop`, not `done`.** Both close it and
 take it out of every prompt; the difference is that `done` credits somebody with
 having done it, and a list that says that when nobody did is a list you stop
 trusting. Overtaken, obsolete, decided against, superseded by how the code
 actually went — all `drop`, and `--reason` says why.
 
-⚠ **Delete nothing to "tidy up".** A closed task is kept on purpose, and
+**Delete nothing to "tidy up".** A closed task is kept on purpose, and
 `task done` and `task drop` between them cover every reason a task should stop
 appearing.
 

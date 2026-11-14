@@ -39,7 +39,7 @@ fn parked(task: &Task) -> bool {
 /// Render the index for tasks already filtered to the open ones: one flat list
 /// in the order given (`repo::list`'s), no group headers.
 ///
-/// ⚠ A focus is applied as given; [`focus::current`] owns the clock. The digest
+/// A focus is applied as given; [`focus::current`] owns the clock. The digest
 /// is cached and read later, so it never compares against its own `now`.
 pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     if tasks.is_empty() {
@@ -121,7 +121,7 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // short list reads as an empty plate, and a session unsure P0 still shows runs
     // `task list` every turn.
     if let Some(focus) = focus {
-        let mut says = format!("⚠ focused until {} UTC", focus.until.format("%H:%M"));
+        let mut says = format!("focused until {} UTC", focus.until.format("%H:%M"));
         match (focus_hidden_own, focus_hidden_pile) {
             (0, 0) => says.push_str(": nothing else of yours is open."),
             (own, 0) => says.push_str(&format!(": {own} more of yours not shown.")),
@@ -140,15 +140,15 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // Separate notices, each with its own remedy; empty when there is nothing.
     if parked_hidden > 0 {
         out.push(format!(
-            "⚠ {parked_hidden} at P4 not shown — still open, just not recited; `task list`."
+            "{parked_hidden} at P4 not shown — still open, just not recited; `task list`."
         ));
     }
     if pile_hidden > 0 {
-        out.push(format!("⚠ {pile_hidden} more in the pile — `task list`."));
+        out.push(format!("{pile_hidden} more in the pile — `task list`."));
     }
     if omitted > 0 {
         out.push(format!(
-            "⚠ {omitted} more open task(s) not shown: this index is over its {MAX_BYTES}-byte \
+            "{omitted} more open task(s) not shown: this index is over its {MAX_BYTES}-byte \
              budget. Finish or delete something — an index that grows into content is the \
              thing this replaced."
         ));
@@ -157,7 +157,7 @@ pub fn render(tasks: &[Task], focus: Option<&Focus>) -> String {
     // Only `--help` mentioned `focus`, and it went unused.
     if focus.is_none() && own > FOCUS_HINT_LINES {
         out.push(format!(
-            "⚠ {own} of these are yours — `task focus <id>… --for 4h` recites only what you name."
+            "{own} of these are yours — `task focus <id>… --for 4h` recites only what you name."
         ));
     }
     out.join("\n")

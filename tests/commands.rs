@@ -26,7 +26,7 @@ fn ran_waiting(verb: &str, ms: u32, waited: bool) -> Ran {
 /// percentiles would report the tool fastest on the day it refuses everything.
 #[test]
 fn a_failed_run_is_counted_but_never_timed() {
-    // ⚠ Two refusals, not one: with a single 40 ms error among two successes the
+    // Two refusals, not one: with a single 40 ms error among two successes the
     // median is 9,000 either way, so the test passed with the guard deleted. Two
     // move the unfiltered median to 50 ms.
     let runs = vec![

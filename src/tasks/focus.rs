@@ -1,7 +1,7 @@
 //! What one conversation is working on right now: for a period, its digest
 //! recites the chosen tasks and only counts the rest.
 //!
-//! ⚠ The only thing that hides an open task, so three rules hold:
+//! The only thing that hides an open task, so three rules hold:
 //!
 //! 1. It always expires ([`MAX`]); there is no "until I say otherwise".
 //! 2. What is hidden is counted, with how to end the focus.
@@ -51,7 +51,7 @@ impl Focus {
 
 /// Whether a task shows whatever the focus.
 ///
-/// ⚠ By effective rank, not the stored one: a near deadline makes a task `P0`
+/// By effective rank, not the stored one: a near deadline makes a task `P0`
 /// without a write. Overdue is its own arm, since an overdue task may have no
 /// rank at all.
 pub fn breaks_through(task: &Task) -> bool {
@@ -184,7 +184,7 @@ pub fn spell(period: Duration) -> String {
     }
 }
 
-/// Read `4h`, `90m`, `2h30m` or `45`. ⚠ A bare number is minutes: both
+/// Read `4h`, `90m`, `2h30m` or `45`. A bare number is minutes: both
 /// readings of `--for 30` fit under [`MAX`], so the wrong one would pass.
 pub fn parse(text: &str) -> anyhow::Result<Duration> {
     let text = text.trim().to_ascii_lowercase();

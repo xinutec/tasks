@@ -29,7 +29,7 @@ COPY frontend/ .
 # from GIT_SHA — passed by CI, and 'dev' for a plain local build.
 ARG GIT_SHA=dev
 RUN GIT_SHA="$GIT_SHA" node scripts/stamp-version.mjs
-# ⚠ `ng build` directly, so npm's prebuild hook does not run — which is why the
+# `ng build` directly, so npm's prebuild hook does not run — which is why the
 # stamp is its own step above.
 RUN pnpm exec ng build --configuration production
 
@@ -63,7 +63,7 @@ RUN groupadd --gid 65532 tasks \
     && useradd --uid 65532 --gid tasks --no-create-home --shell /usr/sbin/nologin tasks
 WORKDIR /app
 COPY --from=backend /app/target/release/tasks /usr/local/bin/tasks
-# ⚠ **The `task` CLI is deliberately NOT copied in.** It authenticates with
+# **The `task` CLI is deliberately NOT copied in.** It authenticates with
 # `TASKS_TOKEN`, which this pod has no business holding — it is what the token
 # authenticates *to* — so an exec'd copy could only print the error saying so.
 COPY --from=frontend /fe/dist/tasks-web/browser ./public

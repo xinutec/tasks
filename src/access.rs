@@ -1,6 +1,6 @@
 //! Who is asking: the person in a browser, or a Claude session.
 //!
-//! ⚠ The actor comes from the credential, never the request body, so a
+//! The actor comes from the credential, never the request body, so a
 //! session cannot file history as the person.
 //!
 //! The person signs in through Nextcloud (an HMAC cookie, `session.rs`). A

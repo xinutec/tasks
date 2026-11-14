@@ -5,7 +5,7 @@
 //! arithmetic and only decides when to ask; a model judges, because
 //! supersession is semantic.
 //!
-//! ⚠ It never refuses: the edit has landed, and a gate on taste teaches
+//! It never refuses: the edit has landed, and a gate on taste teaches
 //! sessions to edit until it goes quiet. It speaks only for a contradiction or
 //! a rewrite that would remove a third, or it would speak on every body.
 //! [`RUBRIC`] asks for density, never brevity: told to compress, a model drops

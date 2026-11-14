@@ -14,7 +14,7 @@ async function shot(page: Page, name: string, whole = false): Promise<void> {
     await page.screenshot({ path, animations: 'disabled' });
     return;
   }
-  // ⚠ Not `fullPage: true`: `main` scrolls inside a fixed shell, so a full-page
+  // Not `fullPage: true`: `main` scrolls inside a fixed shell, so a full-page
   // shot cuts the scrolled part. The viewport grows to the content instead.
   const height = await page.evaluate(() => {
     const main = document.querySelector('main');
@@ -49,7 +49,7 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('button', { name: /what the last edit replaced/ }).click();
   await page.getByText('Before the last edit').waitFor();
   await shot(page, 'undo', true);
-  // ⚠ The viewport, scrolled where the tap left it: the top of the page shows none of the panel.
+  // The viewport, scrolled where the tap left it: the top of the page shows none of the panel.
   await page.locator('.previous').scrollIntoViewIfNeeded();
   await shot(page, 'undo-viewport');
 
@@ -71,7 +71,7 @@ test('every screen, at phone width', async ({ page }) => {
   await page.getByRole('menuitem', { name: /P0/ }).waitFor();
   await shot(page, 'rank');
 
-  // Both ways out of a task. ⚠ Reloaded, not Escape: the menu backdrop swallows the next click.
+  // Both ways out of a task. Reloaded, not Escape: the menu backdrop swallows the next click.
   await page.goto(`/t/${TASKS[1].id}`);
   await page.getByRole('button', { name: 'More actions' }).click();
   await page.locator('.mat-mdc-menu-panel').waitFor();

@@ -27,7 +27,7 @@ pub enum Kind {
     Collision,
 }
 
-/// What came of it. ⚠ `Quiet` and `Timeout` look alike from outside: one read
+/// What came of it. `Quiet` and `Timeout` look alike from outside: one read
 /// the input and found nothing, the other never answered. Counted together they
 /// report a well-behaved tool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,7 +149,7 @@ pub async fn record(pool: &MySqlPool, session: &str, run: &Run) -> Result<()> {
     Ok(())
 }
 
-/// Keep what a density read said on its task. ⚠ Only `spoke` and `quiet` touch
+/// Keep what a density read said on its task. Only `spoke` and `quiet` touch
 /// it: a timeout or error never judged the body, and clearing on one would let a
 /// slow model retire an unaddressed finding.
 async fn remember(conn: &mut MySqlConnection, run: &Run) -> Result<()> {

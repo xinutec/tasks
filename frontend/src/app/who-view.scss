@@ -30,7 +30,7 @@
     }
   }
 
-  // ⚠ **The row's layout lives on the anchor, not on the `li`.** An `<a>` is
+  // **The row's layout lives on the anchor, not on the `li`.** An `<a>` is
   // inline by default, so flex on the `li` alone would stack the icon, name and
   // count vertically. The whole row is the tap target on purpose: a count is
   // not a thing to aim at on a phone.
@@ -89,7 +89,7 @@
 }
 
 .who {
-  // ⚠ `min-width: 0` and nothing else. A flex item will not shrink below its
+  // `min-width: 0` and nothing else. A flex item will not shrink below its
   // content without it, so a 36-character uuid would push the count off a phone
   // instead of being clipped. `overflow-wrap: anywhere` is NOT the answer here:
   // it makes the column as narrow as one character when the parent measures.

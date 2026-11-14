@@ -36,7 +36,7 @@ pub struct Tally {
 
 /// Count it, in one pass.
 pub async fn standing(pool: &MySqlPool) -> Result<Tally> {
-    // ⚠ Every `SUM` is CAST to SIGNED: MariaDB types it DECIMAL, which sqlx
+    // Every `SUM` is CAST to SIGNED: MariaDB types it DECIMAL, which sqlx
     // refuses to decode into `i64`, at runtime, on real rows only.
     let row: (i64, i64, i64, i64, i64, i64) = sqlx::query_as(concat!(
         "SELECT COUNT(*), ",

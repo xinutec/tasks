@@ -34,30 +34,30 @@ result is not still small.
 
 ## What a prompt is shown
 
-⚠ **A session sees its own open tasks and the pile — never what another
+**A session sees its own open tasks and the pile — never what another
 conversation is holding.** Every session paying every turn for work it cannot act
 on is the cost this service exists to refuse. There is no repository to narrow
 by: a session spans checkouts, so *which repo* never had one answer.
 
-⚠ **The pile stays**, because it is how a task reaches whichever conversation is
+**The pile stays**, because it is how a task reaches whichever conversation is
 around rather than a named one. Strictly *mine* would make work the user left for
 anybody invisible to everybody. Looking across holders is something to ask for:
 `task list --all`, `task sessions`.
 
-⚠ **The pile is capped at `PILE_LINES`, because it has a different
+**The pile is capped at `PILE_LINES`, because it has a different
 denominator.** A held task is in one conversation's prompt; an unheld one is in
 *every* conversation's, every turn. `MAX_BYTES` is not that guard — it is a
 runaway stop per session. Past the cap the digest says how many more there are
 and names `task list`. What a session *holds* is never capped: growth there is a
 backlog to work off, not a charge on everybody else.
 
-⚠ **`P4` is counted and never recited.** The rank means *nothing is being paid
+**`P4` is counted and never recited.** The rank means *nothing is being paid
 for it today*, so it gains least from being carried every turn. It is still open
 work, and the head still counts it. `P3` is deliberately not trimmed: it means a
 workaround is in use, which is still a plan, and hiding it would push everything
 to `P2` to stay visible.
 
-⚠ **A session can narrow its own digest for a few hours** — `task focus 849 850
+**A session can narrow its own digest for a few hours** — `task focus 849 850
 --for 4h` recites those and counts the rest. `src/tasks/focus.rs` is the only
 thing that hides an **open** task, so three rules are not negotiable:
 
@@ -74,12 +74,12 @@ what `focus` does and stops there. Focus touches the digest and nothing else:
 `task list` still shows everything, because a list somebody typed is one they
 wanted.
 
-⚠ **Every trim is counted, never silent.** The head gives the full number, so a
+**Every trim is counted, never silent.** The head gives the full number, so a
 short list is explained where it appears.
 
 **The CLI's bare `task list` is the digest's selection**: your own, and the pile.
 `--mine` drops the pile, `--pile` is strictly the unheld, `--all` is everything.
-⚠ **`--handed-out` is the one selection not about the holder**: what *you* filed
+**`--handed-out` is the one selection not about the holder**: what *you* filed
 that somebody else now has. Narrowing every view to the caller makes a routing
 session blind to its own output, so this answers from the `created` event's
 actor rather than from `assignee`.
@@ -99,21 +99,21 @@ held by the **query** — nothing injected selects a closed row — not by delet
 | a **deadline** | a `DATE`, when something outside decides — usually none |
 | a **session** | a Claude Code conversation, identified by the CLI's session id |
 
-⚠ **Status and holder are independent**, which is why there are four states and
+**Status and holder are independent**, which is why there are four states and
 not seven. "New" is `open` with no holder; "assigned" is `open` with one;
 "accepted" is `doing`. One ladder would make handing a task back to the pile a
 *status* change that un-says that somebody started it — and work here moves
 between a person and a conversation repeatedly.
 
-⚠ **`dropped` is a closed task that was never done**: overtaken, out of date, or
+**`dropped` is a closed task that was never done**: overtaken, out of date, or
 decided against. Without it an obsolete task stays open for ever, or is closed as
 `done` and credits somebody with work nobody did. There is no *reason* field: a
 reason is prose, and `task drop --reason` writes it above the body.
 
-⚠ **A priority is absent by default, and absence is not a level.** A
+**A priority is absent by default, and absence is not a level.** A
 `DEFAULT 'P2'` would have every unranked task assert something nobody said.
 
-⚠ **It still has to order, and the whole feature is one `COALESCE`.** Lists sort
+**It still has to order, and the whole feature is one `COALESCE`.** Lists sort
 by `COALESCE(priority, 'P2'), id`, so an unranked task sorts where an ordinary one
 does: `P0` and `P1` rise above the untriaged, `P3` and `P4` **sink below** it,
 and everything untouched keeps its id order. "Ranked first, unranked after"
@@ -121,14 +121,14 @@ would lift *when there is room* above everything nobody has read.
 `Priority::rank` is the same rule in Rust, and `tests/priority.rs` compares the
 two against a real database, because a drift between them is silent.
 
-⚠ **`repo::list` is the only sort in the service.** `digest::render` preserves
+**`repo::list` is the only sort in the service.** `digest::render` preserves
 the order it is handed, so the prompt, the CLI and the app inherit one rule.
 
-⚠ **Nothing can clear a priority.** Absence means *leave it alone* for every
+**Nothing can clear a priority.** Absence means *leave it alone* for every
 field on `PATCH`, and a meaningful null (`Option<Option<Priority>>`) makes every
 client guess. Ranking again is the correction.
 
-⚠ **A deadline is a DATE, and it reorders nothing — except inside the last
+**A deadline is a DATE, and it reorders nothing — except inside the last
 week**, where it raises the task to `P0` (the user's rule). The raise is derived
 at read time and never written, drawn as `P0!` so it does not look chosen, and
 `task show` gives both levels. Further out, a date is evidence for a rank, not a
@@ -136,7 +136,7 @@ competing answer to *what next* — how long the work takes would decide, and
 nothing records it. Overdue is shown as a fact; there is no "due soon", which
 would need a threshold.
 
-⚠ **A blocked task names its blockers, and the link carries rules.** The user:
+**A blocked task names its blockers, and the link carries rules.** The user:
 *"It can be the same, but not higher priority than the thing it's blocked on."*
 Claiming *do this next* about work you cannot start is the move that inflates a
 scale, and one a machine can catch. Refused at both ends — ranking the blocked
@@ -154,14 +154,14 @@ blocker's is refused too: that is arithmetic, not judgement.
 * **Kept when the blocker closes**, as a record of how the work went; it stops
   constraining anything and stops being drawn.
 
-⚠ **A session's id is its identity and its name is an attribute.** A rename is an
+**A session's id is its identity and its name is an attribute.** A rename is an
 `UPDATE` of one column and no task moves. The name is not a self-report: the CLI
 reads what Claude Code calls the conversation out of its own transcript
 (`src/agent_name.rs`) and sends it with every request, so the column is a cache.
 `task rename` refuses when there is a name to derive, because the next command
 would overwrite it.
 
-⚠ **The id is global**, so `task show 4` needs nothing else to resolve it.
+**The id is global**, so `task show 4` needs nothing else to resolve it.
 
 ## Views
 
@@ -172,13 +172,13 @@ would overwrite it.
 | `/new` | file one |
 | `/who` | who holds what: `open/total` per session, for the person, and the pile |
 
-⚠ **`/who` and `task sessions` answer with *holders*, not every session row.** A
+**`/who` and `task sessions` answer with *holders*, not every session row.** A
 row exists for every conversation that ever asked for a digest, and nearly all
 of them never held anything. The predicate is *has ever been assigned a task*,
 not *has anything open*, so a cleared plate still says who cleared it.
 `task sessions --all` is every row — how a brand-new conversation's id is found.
 
-⚠ **There is deliberately no liveness anywhere here, and there must not be.** A
+**There is deliberately no liveness anywhere here, and there must not be.** A
 session never ends — conversations go quiet and come back — so a task addressed
 to one with no live process is *queued*, not stranded, and its open list is the
 work waiting for it. `- [>]` is the only mark that means in hand. A liveness
@@ -233,7 +233,7 @@ overruled (`overrode`), and `task checks` counts refusals and overrides per
 session: a session that files past every refusal is not judging them. The
 caller still holds the body, so overruling is one re-run.
 
-⚠ **Only a model that names something refuses.** A failed, slow or missing
+**Only a model that names something refuses.** A failed, slow or missing
 `claude`, or a list that could not be read, prints `duplicate check did not run:
 …` and **files the task** — a session that cannot write things down is worse than
 any duplicate.
@@ -356,15 +356,15 @@ renders a history — so a closed task must not read as done by nobody, and a
 closed task cannot be handed to the pile. An explicit assignee always wins, and
 reopening leaves the holder alone.
 
-⚠ **Nothing means the user implicitly.** `me` is whoever is running the command;
+**Nothing means the user implicitly.** `me` is whoever is running the command;
 handing work to the person is `human`.
 
-⚠ **The pile is argued for.** `--to nobody` needs `--spare "<why>"` beside it:
+**The pile is argued for.** `--to nobody` needs `--spare "<why>"` beside it:
 filings to the pile were almost always corrected later, so an unheld task is
 something stated rather than a way of not choosing. A reason WITHOUT the pile is
 refused too — it would say nothing true about a held task.
 
-⚠ **`doing` and `nobody` together is a real state, not a leftover.** A session
+**`doing` and `nobody` together is a real state, not a leftover.** A session
 that stops work hands the task back without closing it — the question is still
 open, the approach is not — so the status says work happened, and the body says
 how far. This is why the starting rule reads the holder and nothing else: a rule
@@ -380,7 +380,7 @@ always the place: one conversation files work for another.
 
 ### What a write answers
 
-⚠ **"Open" is `Status::is_open`, never `status <> 'done'`**, which counts a
+**"Open" is `Status::is_open`, never `status <> 'done'`**, which counts a
 dropped task as open, silently. `still_open!` is the only place the vocabulary
 appears in SQL, and `a_dropped_task_is_not_open_anywhere` holds the Rust and SQL
 halves together.
@@ -414,7 +414,7 @@ nix build .#task            # just the binary, here
 ```
 
 On the Mac it is installed through home-manager (`~/.config/home-manager`), pinned to
-this repo's committed HEAD. ⚠ **A commit here is not an installed CLI**:
+this repo's committed HEAD. **A commit here is not an installed CLI**:
 `~/.config/home-manager/switch.sh` re-locks and activates, and until it runs every
 session holds the previous build. The gate has a row for the package, so the
 flake cannot rot unnoticed between switches.
@@ -426,11 +426,11 @@ flake cannot rot unnoticed between switches.
 | Nextcloud session cookie | the person | everything but a focus, which belongs to a conversation |
 | `AGENT_TOKEN` + `X-Session-Id` | that session | everything, but it may rename and focus only itself |
 
-⚠ **The actor is derived from the credential, never from the request body.** A
+**The actor is derived from the credential, never from the request body.** A
 write says what to change, not who is changing it, so a session cannot file
 history as though the user had moved a task: there is no field to put it in.
 
-⚠ **`AGENT_TOKEN` authenticates the machine, not the conversation.** Every session
+**`AGENT_TOKEN` authenticates the machine, not the conversation.** Every session
 on the Mac reads the same file, so one can act as another by declaring a
 different id. No boundary is lost — they run as one user and can read each
 other's transcripts anyway — but it must never be relied on as per-session
@@ -478,7 +478,7 @@ hand-run cannot report green with none of the SQL exercised. `ui-check` renders
 every screen at Pixel width and asserts no text collides and nothing spills past
 the right edge.
 
-⚠ **Geometry is not sight.** A truncated chip label, or a hint drawn over a
+**Geometry is not sight.** A truncated chip label, or a hint drawn over a
 field's border rather than over text, passes every measurement. So `pnpm run
 shots` renders every screen to `ui-snapshots/` for a person to look at. It is
 deliberately **not** a gate row: it asserts nothing, and a check nobody reads is
@@ -491,6 +491,6 @@ sign-in wall. The manifests are generated from the Dhall model in the
 infrastructure repo (`kubes/dhall/apps/tasks.dhall` → `kubes/tasks/k8s/`); that
 repo's `tasks/README.md` is the authority on the deployment.
 
-⚠ **A push is not a deploy.** `:latest` is a fixed string and nothing watches it;
+**A push is not a deploy.** `:latest` is a fixed string and nothing watches it;
 `kubectl -n tasks rollout restart deploy/tasks` is required, and manifest changes
 need the yaml applying rather than a rollout.

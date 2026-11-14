@@ -1605,7 +1605,7 @@ mod unknown_holder {
         assert_eq!(moved.task.assignee.id.as_deref(), Some("sess-2"));
     }
 
-    /// ⚠ Keeps the mapping from masking: with the `ForeignKeyViolation` check forced
+    /// Keeps the mapping from masking: with the `ForeignKeyViolation` check forced
     /// true, everything else stays green and a lost connection would answer 400. An
     /// id past `VARCHAR(64)` gives a non-FK error on the same statement; it stays a
     /// 500 deliberately (the fix would be a length bound in `check_assignee`).

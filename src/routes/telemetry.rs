@@ -44,7 +44,7 @@ fn is_deceptive_format(c: char) -> bool {
 
 /// Flatten a client label to one harmless log field.
 ///
-/// ⚠ A newline in a label would forge whole log lines. Controls become spaces,
+/// A newline in a label would forge whole log lines. Controls become spaces,
 /// whitespace collapses (which also catches U+2028/2029, not controls), and the
 /// result is capped.
 pub fn one_line(label: &str, max: usize) -> String {

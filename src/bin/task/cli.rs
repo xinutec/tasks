@@ -58,14 +58,14 @@ pub(crate) fn edit_about() -> String {
     format!(
         "Change a task's words.
 
-⚠ **Rewriting is the moment to put the conclusion back on top.** A body grows in
+**Rewriting is the moment to put the conclusion back on top.** A body grows in
 the order things happened, so what is still true sinks to the bottom — a verdict
 can end up at the foot of a long ticket, or a plan in the last paragraph of a
 ticket about something else. Lead with where it stands; the history goes under
 it. Better still, put the state in `--subject`, which is the only part anybody
 reads without opening the task.
 
-⚠ **`--prepend` is how to do that in one command, and `--body` is not.** `--body`
+**`--prepend` is how to do that in one command, and `--body` is not.** `--body`
 replaces everything; recording an outcome with it deletes the filing unless the
 old text is read out and pasted back first. That read gets skipped, and the
 guard on `--body` only catches a body cut to a fraction of itself.
@@ -76,7 +76,7 @@ finds. It never refuses the write:
 
 {rubric}
 
-⚠ **Never write to \"as few words as possible\".** Told to compress, a model drops
+**Never write to \"as few words as possible\".** Told to compress, a model drops
 the numbers and keeps the prose, because prose reads like the argument — and a
 body is believed for its measurements. Density is the target and length is its
 consequence, which is why rule 2 is one-sided: it cuts restatement and never
@@ -107,7 +107,7 @@ pub(crate) struct Cli {
     /// `priority` are absent, not null. `--pile`, `--mine` and `--to` answer the
     /// usual questions without filtering JSON.
     ///
-    /// ⚠ `show --json` is bigger: it adds `body`, `body_html`, `events`,
+    /// `show --json` is bigger: it adds `body`, `body_html`, `events`,
     /// `restorable`. In a list, `detailed` is a boolean standing in for the prose;
     /// piped into `edit --body` it writes `True` over the body. `show <id> --body`
     /// prints the body alone.
@@ -135,7 +135,7 @@ pub(crate) enum Command {
     Show(ShowArgs),
     /// Put back the subject and body the latest edit replaced.
     ///
-    /// Undo is itself an edit, recorded and undoable. ⚠ It reverts the task's last
+    /// Undo is itself an edit, recorded and undoable. It reverts the task's last
     /// edit, not yours: if that was another conversation's it refuses, and
     /// `--anyway` insists. Check first with `task show <id> --previous`.
     Undo(UndoArgs),
@@ -178,7 +178,7 @@ pub(crate) enum Command {
     ///
     ///     task wait 1350
     ///
-    /// ⚠ Run it in the background. Blocked on someone else's task, file the edge
+    /// Run it in the background. Blocked on someone else's task, file the edge
     /// (`task edit <mine> --blocked-on <theirs>`), start this detached and go quiet:
     /// Claude Code wakes a session when a background command exits, and the digest
     /// can't, since a blocked session takes no turns.
@@ -215,7 +215,7 @@ pub(crate) enum Command {
 }
 
 impl Command {
-    /// The name a command is recorded under. ⚠ Exhaustive: a catch-all would merge two
+    /// The name a command is recorded under. Exhaustive: a catch-all would merge two
     /// commands' histories.
     pub(crate) fn verb(&self) -> &'static str {
         match self {

@@ -77,7 +77,7 @@ fn was_refused(why: &anyhow::Error) -> bool {
 
 /// What a caller reads when a command ends badly.
 ///
-/// ⚠ A refusal prints its sentence and nothing below it: sessions read the last
+/// A refusal prints its sentence and nothing below it: sessions read the last
 /// lines, and anyhow's chain would end with `Caused by: the tool declined`.
 /// Real failures keep the chain, which is how they are diagnosed.
 pub fn said(why: &anyhow::Error) -> String {

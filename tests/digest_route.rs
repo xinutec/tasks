@@ -559,7 +559,7 @@ mod pile {
             .collect()
     }
 
-    /// ⚠ **Ids are not predictable across the suite.** `fresh_db` does not reset
+    /// **Ids are not predictable across the suite.** `fresh_db` does not reset
     /// the counter, so the fourth task filed here is `#4` only in whichever test
     /// runs first.
     async fn pile_tasks(app: &axum::Router, query: &str) -> Vec<serde_json::Value> {

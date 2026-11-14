@@ -20,7 +20,7 @@ pub enum Verdict {
     Dropped(Vec<u64>),
 }
 
-/// ⚠ Uses [`Status::is_open`], not `== Status::Open`: a blocker in `doing` is
+/// Uses [`Status::is_open`], not `== Status::Open`: a blocker in `doing` is
 /// still a blocker, and the obvious comparison ends the wait when the fix starts.
 pub fn verdict(blockers: &[(u64, Status)]) -> Verdict {
     let open: Vec<u64> = blockers

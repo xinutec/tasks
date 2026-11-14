@@ -13,7 +13,7 @@ import org.xinutec.shell.WebShellActivity
  * escape from and no state of its own — the page the shell already remembers is
  * the whole of it.
  *
- * ⚠ **An installed, signed-in copy is a standing authenticated session** over
+ * **An installed, signed-in copy is a standing authenticated session** over
  * the list, which is a working surface rather than a document: from it a task
  * can be moved, finished or filed. Same posture as the other wrappers, and the
  * phone is the device this was designed for.

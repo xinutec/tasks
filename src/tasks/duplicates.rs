@@ -3,7 +3,7 @@
 //! no words, so a model is asked before filing. A refusal costs one re-run (the
 //! caller still holds the body); a duplicate costs attention twice.
 //!
-//! ⚠ A check that could not run (no `claude`, a timeout, an unreadable answer)
+//! A check that could not run (no `claude`, a timeout, an unreadable answer)
 //! files the task and says so: only a model that names something refuses.
 //! [`same_subject`] is exact; [`prompt`] is the guess. A closed match's remedy
 //! is `task reopen` ([`reopen_instead`]).
@@ -221,7 +221,7 @@ pub fn worth_reading(detailed: bool) -> bool {
 
 /// The closed corpus, the cached block before the question.
 ///
-/// ⚠ Nothing per-filing may be appended: a cache block ends where varying text
+/// Nothing per-filing may be appended: a cache block ends where varying text
 /// begins, and the whole corpus would be rewritten every call. The open list
 /// and subject go in [`prompt`].
 pub fn settled_block(corpus: &[Settled]) -> String {

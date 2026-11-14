@@ -180,7 +180,7 @@ impl Client {
 
     /// Refuse before the round trip when this CLI holds a token but no identity,
     /// a certain 401. Holding neither is the service's call. Called per request, not
-    /// in `main`, so a command that sends nothing needs no identity. ⚠ Tests clear
+    /// in `main`, so a command that sends nothing needs no identity. Tests clear
     /// both variables: passing `--session` to get past this tests nothing.
     pub(crate) fn identified(&self) -> Result<()> {
         if self.token.is_some() && self.session.is_none() {
@@ -223,7 +223,7 @@ impl Client {
 pub(crate) enum To {
     /// Back in the pile, for whoever picks it up.
     Nobody,
-    /// Whoever runs this. ⚠ For a session that is itself; the person is `human`.
+    /// Whoever runs this. For a session that is itself; the person is `human`.
     Me,
     /// The person; the service says which account.
     Human,

@@ -10,7 +10,7 @@ The site is **private** — its DNS points inside the WireGuard tunnel — and
 **one-time login**; the app needs only `INTERNET`, since the VPN is set up at the
 OS level and not by this app. A phone off the VPN cannot resolve the host at all.
 
-⚠ An installed, signed-in copy is a **standing authenticated session** over the
+An installed, signed-in copy is a **standing authenticated session** over the
 list — and unlike the memory viewer beside it, this list is a *working surface*:
 from it a task can be moved, finished or filed. That is the point of having it on
 a phone, and it is worth knowing before the phone leaves the house.
@@ -34,7 +34,7 @@ Runs on any Android 8+ (minSdk 26) device.
 
 ## The icon is blue on purpose
 
-⚠ **Not memview's `#5E35B1`.** The two apps sit side by side on the same
+**Not memview's `#5E35B1`.** The two apps sit side by side on the same
 launcher, and an icon that differs only by its mark is one you tap wrong at a
 glance. The launcher background, the web icon (`frontend/public/icon.svg`), the
 page's `theme-color` — which the shell paints the system bars from — and the

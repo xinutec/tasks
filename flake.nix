@@ -42,7 +42,7 @@
           };
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "--bin" "task" ];
-          # ⚠ The test suite is not the check here: the DB tests need a real
+          # The test suite is not the check here: the DB tests need a real
           # MariaDB, which the build sandbox cannot supply, and they fail rather
           # than skip on purpose. The gate's tests row supplies one.
           # dev-lint: allow-docheck-false tests/tasks_db.rs needs a real MariaDB

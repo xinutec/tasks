@@ -19,7 +19,7 @@ pub struct Config {
 
     /// The secret Claude sessions present. None closes the agent API.
     ///
-    /// ⚠ It authenticates the machine, not the session: every session reads the
+    /// It authenticates the machine, not the session: every session reads the
     /// same file and names itself with `X-Session-Id`. Never rely on it to tell
     /// sessions apart.
     pub agent_token: Option<String>,

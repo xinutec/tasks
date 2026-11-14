@@ -204,7 +204,7 @@ async fn additions_compose_one_after_another() {
 
 #[tokio::test]
 async fn adding_waits_for_whoever_is_already_writing_the_body() {
-    // ⚠ This needs a lock, not just a transaction: under REPEATABLE READ a plain
+    // This needs a lock, not just a transaction: under REPEATABLE READ a plain
     // `SELECT` doesn't lock, so both updates would read the old body and the second
     // commit would drop the first's text. `FOR UPDATE` makes the second wait.
     //

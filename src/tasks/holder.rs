@@ -16,7 +16,7 @@ pub enum Holder {
 
 /// Resolve `typed` against `(id, name)` pairs.
 ///
-/// ⚠ A word that is one conversation's id and another's name is ambiguous, not
+/// A word that is one conversation's id and another's name is ambiguous, not
 /// the id's: ids are not all UUIDs (`TASKS_SESSION=claude-sync`), and picking
 /// the id silently misroutes everything sent to the name.
 pub fn resolve<'a>(

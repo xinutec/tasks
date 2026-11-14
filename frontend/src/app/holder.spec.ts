@@ -107,7 +107,7 @@ describe('parseWho', () => {
   });
 
   it('falls back to everything rather than to nothing', () => {
-    // ⚠ A cast would type `?who=garbage` as valid and match no branch — an
+    // A cast would type `?who=garbage` as valid and match no branch — an
     // empty list, which reads as "no open work" rather than as a bad URL.
     for (const raw of [null, undefined, '', 'garbage', 'session', 'session:', 'person:']) {
       expect(parseWho(raw), `${raw}`).toEqual(EVERYTHING);

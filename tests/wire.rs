@@ -139,7 +139,7 @@ async fn a_change_may_still_leave_priority_out() {
         )
         .await
         .expect("the router answered");
-    // ⚠ 500 is the pass: the body got past extraction and the handler found no
+    // 500 is the pass: the body got past extraction and the handler found no
     // database. `assert_ne!(BAD_REQUEST)` would also pass on a 401.
     assert_eq!(
         res.status(),

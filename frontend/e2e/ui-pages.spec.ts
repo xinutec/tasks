@@ -92,7 +92,7 @@ test('a task — the move menu, with an unnamed session in it @ phone width', as
   await page.locator('.move').click();
   // The unnamed session's id has least room in this menu.
   await page.getByRole('menuitem', { name: SESSIONS[1].id }).waitFor();
-  // ⚠ Scoped to the overlay: an open menu covers the page by design. Asserted: it
+  // Scoped to the overlay: an open menu covers the page by design. Asserted: it
   // doesn't collide with itself, and a long id doesn't push it off screen.
   await expectCleanLayout(page, testInfo, { root: '.mat-mdc-menu-panel' });
   await expectNoHorizontalOverflow(page, testInfo, null, MD_SCROLLERS);

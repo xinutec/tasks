@@ -90,7 +90,7 @@ pub fn router(state: AppState) -> Router {
     // The built Angular bundle, falling back to index.html for deep links;
     // API-only without STATIC_DIR (dev, where `ng serve` proxies).
     //
-    // ⚠ A missing file must 404, not get the page, or a missing font renders as
+    // A missing file must 404, not get the page, or a missing font renders as
     // broken icons with no error. A dot in the last segment marks a file: `/t/1`
     // is a route, `/main-ABC123.js` a file.
     let app = if let Some(dir) = state.cfg.static_dir.clone() {

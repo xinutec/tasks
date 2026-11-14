@@ -34,7 +34,7 @@ pub struct Filter {
 }
 
 impl Filter {
-    /// A session's digest: its own open tasks and the pile. ⚠ Keep `or_unheld`:
+    /// A session's digest: its own open tasks and the pile. Keep `or_unheld`:
     /// without it a task left for whoever is around is invisible to everyone.
     pub fn digest_for(session: &str) -> Self {
         Self {
@@ -137,7 +137,7 @@ macro_rules! select {
             "t.assignee_kind, ",
             // Correlated, not joined: a join to `task_blocks` repeats the row per edge.
             //
-            // ⚠ GROUP_CONCAT stops at `group_concat_max_len` (~140 ids); the count beside
+            // GROUP_CONCAT stops at `group_concat_max_len` (~140 ids); the count beside
             // it is exact, so `blocked` stays right.
             "(SELECT GROUP_CONCAT(b.blocked_on ORDER BY b.blocked_on) FROM task_blocks b ",
             "WHERE b.task_id = t.id) AS blocked_on, ",
@@ -319,7 +319,7 @@ struct RevisionRow {
 
 /// The task before its latest edit, or `None` if nothing was overwritten.
 ///
-/// ⚠ Newest by `event_id`: `at` has one-second resolution, and a sweep writes
+/// Newest by `event_id`: `at` has one-second resolution, and a sweep writes
 /// several edits a second. Takes the asker, to answer [`Revision::mine`].
 pub async fn previous(pool: &MySqlPool, id: u64, who: &Actor) -> Result<Option<Revision>> {
     let row: Option<RevisionRow> = sqlx::query_as(
@@ -496,7 +496,7 @@ const KEEPS_AT_LEAST: usize = 4;
 /// Whether a new body keeps so little of the old that it is likely a mistake,
 /// like a session writing `--json`'s `detailed` boolean over the prose.
 ///
-/// ⚠ Don't tighten it: good conclusion-first rewrites keep as little as a third.
+/// Don't tighten it: good conclusion-first rewrites keep as little as a third.
 /// [`Change::prepend`] answers the middle ground.
 fn collapses(was: &str, now: &str) -> bool {
     let (was, now) = (was.chars().count(), now.chars().count());
@@ -956,7 +956,7 @@ pub async fn update(pool: &MySqlPool, id: u64, change: Change, actor: &Actor) ->
 
     // Read once, locked: the comparisons and the revision snapshot need it.
     //
-    // ⚠ `FOR UPDATE`; a transaction alone isn't enough. Under REPEATABLE READ a
+    // `FOR UPDATE`; a transaction alone isn't enough. Under REPEATABLE READ a
     // plain `SELECT` doesn't lock, and two concurrent additions would both build on
     // the old body. `tests/body_add.rs` drives that interleaving.
     let (was_subject, was_body): (String, String) =
